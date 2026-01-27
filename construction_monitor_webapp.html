@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Construction Monitor Uganda</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+        // Configure Tailwind for dark mode and custom colors
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'brand': '#00D2FF',
+                        'dark-bg': '#0A0A0B',
+                        'card-bg': '#1A1A1B',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --card: 222.2 84% 4.9%;
+            --card-foreground: 210 40% 98%;
+            --popover: 222.2 84% 4.9%;
+            --popover-foreground: 210 40% 98%;
+            --primary: 210 40% 98%;
+            --primary-foreground: 222.2 84% 4.9%;
+            --secondary: 217.2 32.6% 17.5%;
+            --secondary-foreground: 210 40% 98%;
+            --muted: 217.2 32.6% 17.5%;
+            --muted-foreground: 215 20.2% 65.1%;
+            --accent: 217.2 32.6% 17.5%;
+            --accent-foreground: 210 40% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 217.2 32.6% 17.5%;
+            --input: 217.2 32.6% 17.5%;
+            --ring: 212.7 26.8% 83.9%;
+            --chart-1: 220 70% 50%;
+            --chart-2: 160 60% 45%;
+            --chart-3: 30 80% 55%;
+            --chart-4: 280 65% 60%;
+            --chart-5: 340 75% 55%;
+        }
+        
+        body {
+            background-color: #0A0A0B;
+            color: white;
+            font-family: system-ui, sans-serif;
+        }
+
+        .btn {
+            @apply px-4 py-2 rounded-md font-medium transition-colors;
+        }
+
+        .btn-primary {
+            @apply bg-blue-600 hover:bg-blue-700 text-white;
+        }
+
+        .btn-secondary {
+            @apply bg-gray-600 hover:bg-gray-700 text-white;
+        }
+
+        .btn-success {
+            @apply bg-green-600 hover:bg-green-700 text-white;
+        }
+
+        .card {
+            @apply bg-white/5 border border-white/10 rounded-lg;
+        }
+
+        .input {
+            @apply bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white;
+        }
+
+        .select {
+            @apply bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white;
+        }
+
+        .textarea {
+            @apply bg-gray-800 border border-gray-600 rounded-md px-3 py-2 text-white resize-none;
+        }
+
+        .dialog-overlay {
+            @apply fixed inset-0 bg-black/80 z-50;
+        }
+
+        .dialog-content {
+            @apply fixed left-1/2 top-1/2 z-50 w-full max-w-lg transform -translate-x-1/2 -translate-y-1/2 bg-gray-900 border border-gray-700 rounded-lg shadow-lg p-6;
+        }
+
+        .toast {
+            @apply fixed bottom-4 right-4 bg-gray-800 border border-gray-600 rounded-lg p-4 text-white z-50;
+        }
+
+        .hidden { display: none; }
+        .block { display: block; }
+        .flex { display: flex; }
+        .grid { display: grid; }
+    </style>
+</head>
+<body class="bg-dark-bg text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // Mock data for demonstration
+        const mockProject = {
+            id: "demo-project-1",
+            name: "Kampala Office Building",
+            budget: 500000000,
+            startDate: "2025-01-01",
+            endDate: "2025-12-31",
+            status: "Active"
+        };
+
+        const mockUser = {
+            id: "user-1",
+            name: "John Manager",
+            email: "manager@example.com",
+            role: "Manager"
+        };
+
+        // Utility functions
+        const formatCurrency = (amount) => {
+            const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
+            return new Intl.NumberFormat('en-UG', {
+                style: 'currency',
+                currency: 'UGX',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0,
+            }).format(numAmount);
+        };
+
+        const formatDate = (dateString) => {
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        };
+
+        // Toast component
+        function Toast({ message, type = 'success', onClose }) {
+            useEffect(() => {
+                const timer = setTimeout(onClose, 3000);
+                return () => clearTimeout(timer);
+            }, [onClose]);
+
+            return (
+                <div className={`toast ${type === 'error' ? 'bg-red-800 border-red-600' : 'bg-green-800 border-green-600'}`}>
+                    <div className="font-medium">{type === 'error' ? 'Error' : 'Success'}</div>
+                    <div className="text-sm">{message}</div>
+                </div>
+            );
+        }
+
+        // Header component
+        function Header({ userRole, onRoleChange }) {
+            return (
+                <header className="bg-gray-900/90 backdrop-blur-sm border-b border-white/10 sticky top-0 z-40">
+                    <div className="px-4 py-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-xl font-bold text-brand">Construction Monitor</h1>
+                                <p className="text-sm text-gray-400">Uganda Project Management</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <select 
+                                    value={userRole} 
+                                    onChange={(e) => onRoleChange(e.target.value)}
+                                    className="select text-sm"
+                                >
+                                    <option value="Manager">Manager View</option>
+                                    <option value="Owner">Owner View</option>
+                                </select>
+                                <div className="text-right">
+                                    <p className="text-sm font-medium">{mockUser.name}</p>
+                                    <p className="text-xs text-gray-400">{userRole}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            );
+        }
+
+        // Modal Dialog component
+        function Dialog({ isOpen, onClose, title, children }) {
+            if (!isOpen) return null;
+
+            return (
+                <div className="dialog-overlay" onClick={onClose}>
+                    <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold text-white">{title}</h2>
+                            <button 
+                                onClick={onClose}
+                                className="text-gray-400 hover:text-white text-xl"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            );
+        }
+
+        // Daily Ledger System Component
+        function DailyLedgerSystem({ projectId, userRole }) {
+            const [ledgers, setLedgers] = useState([]);
+            const [cashDeposits, setCashDeposits] = useState([]);
+            const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+            const [isCashDepositDialogOpen, setIsCashDepositDialogOpen] = useState(false);
+            const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+            const [formData, setFormData] = useState({
+                date: new Date().toISOString().split('T')[0],
+                notes: '',
+                lines: [{ item: '', category: 'Materials', amount: '', paymentMethod: 'cash', note: '' }]
+            });
+            const [cashDepositForm, setCashDepositForm] = useState({
+                date: new Date().toISOString().split('T')[0],
+                amount: '',
+                method: 'Mobile Money',
+                reference: '',
+                note: ''
+            });
+
+            // Calculate opening balance
+            const getOpeningBalance = (date) => {
+                const previousDayLedger = ledgers
+                    .filter(l => new Date(l.date) < new Date(date))
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+
+                const cashDepositsTotal = cashDeposits
+                    .filter(d => new Date(d.date) <= new Date(date))
+                    .reduce((sum, d) => sum + parseFloat(d.amount), 0);
+
+                const lastClosingBalance = previousDayLedger ? parseFloat(previousDayLedger.closingCash) : 0;
+                return {
+                    openingBalance: lastClosingBalance + cashDepositsTotal,
+                    lastClosingBalance,
+                    cashDepositsTotal
+                };
+            };
+
+            const openingBalanceInfo = getOpeningBalance(selectedDate);
+
+            const addLineItem = () => {
+                setFormData({
+                    ...formData,
+                    lines: [...formData.lines, { item: '', category: 'Materials', amount: '', paymentMethod: 'cash', note: '' }]
+                });
+            };
+
+            const removeLineItem = (index) => {
+                setFormData({
+                    ...formData,
+                    lines: formData.lines.filter((_, i) => i !== index)
+                });
+            };
+
+            const updateLineItem = (index, field, value) => {
+                const newLines = [...formData.lines];
+                newLines[index] = { ...newLines[index], [field]: value };
+                setFormData({ ...formData, lines: newLines });
+            };
+
+            const handleSubmitLedger = (e) => {
+                e.preventDefault();
+                
+                const totalCashSpent = formData.lines
+                    .filter(line => line.paymentMethod === 'cash')
+                    .reduce((sum, line) => sum + parseFloat(line.amount || '0'), 0);
+                
+                const totalSupplierSpent = formData.lines
+                    .filter(line => line.paymentMethod === 'supplier')
+                    .reduce((sum, line) => sum + parseFloat(line.amount || '0'), 0);
+
+                const openingCash = openingBalanceInfo.openingBalance;
+                const closingCash = openingCash - totalCashSpent;
+
+                const newLedger = {
+                    id: `ledger-${Date.now()}`,
+                    projectId,
+                    date: formData.date,
+                    openingCash: openingCash.toString(),
+                    closingCash: closingCash.toString(),
+                    totalCashSpent: totalCashSpent.toString(),
+                    totalSupplierSpent: totalSupplierSpent.toString(),
+                    notes: formData.notes,
+                    submittedAt: new Date().toISOString(),
+                    lines: formData.lines.map(line => ({
+                        ...line,
+                        id: `line-${Date.now()}-${Math.random()}`,
+                        amount: line.amount
+                    }))
+                };
+
+                setLedgers([...ledgers, newLedger]);
+                setFormData({
+                    date: new Date().toISOString().split('T')[0],
+                    notes: '',
+                    lines: [{ item: '', category: 'Materials', amount: '', paymentMethod: 'cash', note: '' }]
+                });
+                setIsCreateDialogOpen(false);
+            };
+
+            const handleSubmitCashDeposit = (e) => {
+                e.preventDefault();
+                
+                const newDeposit = {
+                    id: `deposit-${Date.now()}`,
+                    projectId,
+                    ...cashDepositForm,
+                    amount: cashDepositForm.amount
+                };
+
+                setCashDeposits([...cashDeposits, newDeposit]);
+                setCashDepositForm({
+                    date: new Date().toISOString().split('T')[0],
+                    amount: '',
+                    method: 'Mobile Money',
+                    reference: '',
+                    note: ''
+                });
+                setIsCashDepositDialogOpen(false);
+            };
+
+            const getTodaysLedger = () => {
+                const today = new Date().toISOString().split('T')[0];
+                return ledgers.find(ledger => ledger.date === today);
+            };
+
+            const todaysLedger = getTodaysLedger();
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-xl font-semibold text-white">Daily Ledger System</h2>
+                            <p className="text-sm text-gray-400">Track daily expenses and cash flow</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {userRole === "Owner" && (
+                                <button
+                                    onClick={() => setIsCashDepositDialogOpen(true)}
+                                    className="btn btn-success"
+                                >
+                                    💰 Add Cash Deposit
+                                </button>
+                            )}
+                            {userRole === "Manager" && (
+                                <button
+                                    onClick={() => setIsCreateDialogOpen(true)}
+                                    className="btn btn-primary"
+                                >
+                                    📖 Create Daily Ledger
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Today's Status */}
+                    <div className="card p-4">
+                        <h3 className="font-medium text-white mb-3">Today's Status</h3>
+                        {todaysLedger ? (
+                            <div className="bg-green-600/20 border border-green-600/40 p-3 rounded-md">
+                                <div className="flex items-center gap-2 text-green-300">
+                                    ✓ Daily ledger completed
+                                </div>
+                                <div className="text-sm text-gray-300 mt-2">
+                                    Opening: {formatCurrency(todaysLedger.openingCash)} → 
+                                    Closing: {formatCurrency(todaysLedger.closingCash)}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-yellow-600/20 border border-yellow-600/40 p-3 rounded-md">
+                                <div className="flex items-center gap-2 text-yellow-300">
+                                    ⏰ No ledger entry for today
+                                </div>
+                                <div className="text-sm text-gray-300 mt-2">
+                                    Expected opening balance: {formatCurrency(openingBalanceInfo.openingBalance)}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Recent Ledgers */}
+                    <div className="card p-4">
+                        <h3 className="font-medium text-white mb-3">Recent Ledgers</h3>
+                        {ledgers.length === 0 ? (
+                            <p className="text-gray-400">No ledger entries yet</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {ledgers.slice(-5).reverse().map(ledger => (
+                                    <div key={ledger.id} className="bg-white/5 p-3 rounded-md">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="font-medium text-white">{formatDate(ledger.date)}</div>
+                                                <div className="text-sm text-gray-400">
+                                                    {ledger.lines?.length || 0} items • Total spent: {formatCurrency(ledger.totalCashSpent)}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-sm text-gray-400">Closing Cash</div>
+                                                <div className="font-medium text-brand">{formatCurrency(ledger.closingCash)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Cash Deposits */}
+                    <div className="card p-4">
+                        <h3 className="font-medium text-white mb-3">Cash Deposits</h3>
+                        {cashDeposits.length === 0 ? (
+                            <p className="text-gray-400">No cash deposits recorded</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {cashDeposits.slice(-5).reverse().map(deposit => (
+                                    <div key={deposit.id} className="bg-white/5 p-3 rounded-md">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <div className="font-medium text-white">{formatDate(deposit.date)}</div>
+                                                <div className="text-sm text-gray-400">{deposit.method}</div>
+                                                {deposit.reference && (
+                                                    <div className="text-xs text-gray-500">Ref: {deposit.reference}</div>
+                                                )}
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="font-medium text-green-400">+{formatCurrency(deposit.amount)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Create Daily Ledger Dialog */}
+                    <Dialog 
+                        isOpen={isCreateDialogOpen} 
+                        onClose={() => setIsCreateDialogOpen(false)}
+                        title="Create Daily Ledger"
+                    >
+                        <form onSubmit={handleSubmitLedger} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Date</label>
+                                <input
+                                    type="date"
+                                    value={formData.date}
+                                    onChange={(e) => setFormData({...formData, date: e.target.value})}
+                                    className="input w-full"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Opening Cash Balance</label>
+                                <div className="bg-brand/10 border border-brand/20 p-3 rounded-md">
+                                    <div className="text-brand font-semibold text-lg">
+                                        {formatCurrency(openingBalanceInfo.openingBalance)}
+                                    </div>
+                                    <div className="text-xs text-gray-400 mt-1">
+                                        Last closing: {openingBalanceInfo.lastClosingBalance ? formatCurrency(openingBalanceInfo.lastClosingBalance) : 'None'} 
+                                        {openingBalanceInfo.cashDepositsTotal > 0 && 
+                                            ` + Deposits: ${formatCurrency(openingBalanceInfo.cashDepositsTotal)}`
+                                        }
+                                    </div>
+                                </div>
+                                <p className="text-xs text-green-400 mt-1">
+                                    ✓ Automatically calculated - cannot be edited
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <label className="block text-sm font-medium text-white">Daily Items</label>
+                                    <button
+                                        type="button"
+                                        onClick={addLineItem}
+                                        className="btn btn-success text-xs"
+                                    >
+                                        + Add Item
+                                    </button>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {formData.lines.map((line, index) => (
+                                        <div key={index} className="card p-3">
+                                            <div className="grid grid-cols-12 gap-2 items-end">
+                                                <div className="col-span-3">
+                                                    <label className="block text-xs text-white mb-1">Item</label>
+                                                    <input
+                                                        type="text"
+                                                        value={line.item}
+                                                        onChange={(e) => updateLineItem(index, 'item', e.target.value)}
+                                                        className="input text-sm w-full"
+                                                        placeholder="e.g., Cement"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs text-white mb-1">Category</label>
+                                                    <select
+                                                        value={line.category}
+                                                        onChange={(e) => updateLineItem(index, 'category', e.target.value)}
+                                                        className="select text-sm w-full"
+                                                    >
+                                                        <option value="Materials">Materials</option>
+                                                        <option value="Labor">Labor</option>
+                                                        <option value="Equipment">Equipment</option>
+                                                        <option value="Transport">Transport</option>
+                                                        <option value="Food">Food</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs text-white mb-1">Amount (UGX)</label>
+                                                    <input
+                                                        type="number"
+                                                        value={line.amount}
+                                                        onChange={(e) => updateLineItem(index, 'amount', e.target.value)}
+                                                        className="input text-sm w-full"
+                                                        placeholder="50000"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs text-white mb-1">Payment</label>
+                                                    <select
+                                                        value={line.paymentMethod}
+                                                        onChange={(e) => updateLineItem(index, 'paymentMethod', e.target.value)}
+                                                        className="select text-sm w-full"
+                                                    >
+                                                        <option value="cash">Cash</option>
+                                                        <option value="supplier">Supplier Credit</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-span-2">
+                                                    <label className="block text-xs text-white mb-1">Note</label>
+                                                    <input
+                                                        type="text"
+                                                        value={line.note}
+                                                        onChange={(e) => updateLineItem(index, 'note', e.target.value)}
+                                                        className="input text-sm w-full"
+                                                        placeholder="Optional"
+                                                    />
+                                                </div>
+                                                <div className="col-span-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeLineItem(index)}
+                                                        className="btn bg-red-600 hover:bg-red-700 text-white text-xs p-1"
+                                                        disabled={formData.lines.length === 1}
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Notes (Optional)</label>
+                                <textarea
+                                    value={formData.notes}
+                                    onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                                    className="textarea w-full"
+                                    rows={3}
+                                    placeholder="Any additional notes about today's work..."
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button type="submit" className="btn btn-primary flex-1">
+                                    Create Ledger
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsCreateDialogOpen(false)}
+                                    className="btn btn-secondary"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </Dialog>
+
+                    {/* Cash Deposit Dialog */}
+                    <Dialog 
+                        isOpen={isCashDepositDialogOpen} 
+                        onClose={() => setIsCashDepositDialogOpen(false)}
+                        title="Record Cash Deposit"
+                    >
+                        <form onSubmit={handleSubmitCashDeposit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Date</label>
+                                <input
+                                    type="date"
+                                    value={cashDepositForm.date}
+                                    onChange={(e) => setCashDepositForm({...cashDepositForm, date: e.target.value})}
+                                    className="input w-full"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Amount (UGX)</label>
+                                <input
+                                    type="number"
+                                    value={cashDepositForm.amount}
+                                    onChange={(e) => setCashDepositForm({...cashDepositForm, amount: e.target.value})}
+                                    className="input w-full"
+                                    placeholder="1000000"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Method</label>
+                                <select
+                                    value={cashDepositForm.method}
+                                    onChange={(e) => setCashDepositForm({...cashDepositForm, method: e.target.value})}
+                                    className="select w-full"
+                                >
+                                    <option value="Mobile Money">Mobile Money</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Cash Handover">Cash Handover</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Reference/Receipt (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={cashDepositForm.reference}
+                                    onChange={(e) => setCashDepositForm({...cashDepositForm, reference: e.target.value})}
+                                    className="input w-full"
+                                    placeholder="Transaction ID or receipt number"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-1">Note (Optional)</label>
+                                <textarea
+                                    value={cashDepositForm.note}
+                                    onChange={(e) => setCashDepositForm({...cashDepositForm, note: e.target.value})}
+                                    className="textarea w-full"
+                                    rows={2}
+                                    placeholder="Additional notes..."
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button type="submit" className="btn btn-success flex-1">
+                                    Record Deposit
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setIsCashDepositDialogOpen(false)}
+                                    className="btn btn-secondary"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </Dialog>
+                </div>
+            );
+        }
+
+        // Main App Component
+        function App() {
+            const [userRole, setUserRole] = useState("Manager");
+            const [toast, setToast] = useState(null);
+
+            const showToast = (message, type = 'success') => {
+                setToast({ message, type });
+            };
+
+            return (
+                <div className="min-h-screen bg-dark-bg">
+                    <Header userRole={userRole} onRoleChange={setUserRole} />
+                    
+                    <main className="p-4 max-w-7xl mx-auto">
+                        <div className="mb-6">
+                            <h1 className="text-2xl font-bold text-white mb-2">{mockProject.name}</h1>
+                            <div className="flex gap-6 text-sm text-gray-400">
+                                <span>Budget: {formatCurrency(mockProject.budget)}</span>
+                                <span>Start: {formatDate(mockProject.startDate)}</span>
+                                <span>End: {formatDate(mockProject.endDate)}</span>
+                                <span className="text-green-400">● {mockProject.status}</span>
+                            </div>
+                        </div>
+
+                        <DailyLedgerSystem 
+                            projectId={mockProject.id} 
+                            userRole={userRole}
+                        />
+                    </main>
+
+                    {toast && (
+                        <Toast 
+                            message={toast.message} 
+                            type={toast.type}
+                            onClose={() => setToast(null)}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
