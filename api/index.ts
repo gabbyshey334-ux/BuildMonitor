@@ -126,7 +126,6 @@ app.get('/health', async (req: Request, res: Response) => {
     healthCheck.database = {
       status: 'disconnected',
       connected: false,
-      error: error.message,
     };
     healthCheck.status = 'degraded';
     

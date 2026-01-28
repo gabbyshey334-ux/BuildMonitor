@@ -14,7 +14,7 @@ import {
   getUserDefaultProject, 
   logWhatsAppMessage 
 } from '../lib/supabase';
-import { twilioClient, twilioWhatsAppNumber, sendWhatsAppMessage } from '../twilio';
+import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage } from '../twilio';
 import { parseIntent, isValidIntent, meetsConfidenceThreshold } from '../services/intentParser';
 import { 
   profiles,
