@@ -168,20 +168,24 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
 /**
  * POST /api/auth/register
- * Create a new user profile and project
+ * Create a new user with Supabase Auth + profile
  */
 router.post('/auth/register', async (req: Request, res: Response) => {
   try {
     const { fullName, username, password, whatsappNumber } = registerSchema.parse(req.body);
 
+    // Use Supabase client for auth
+    const { supabase } = await import('../db');
+    
     // Check if user already exists by WhatsApp number
-    const [existingUser] = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.whatsappNumber, whatsappNumber))
-      .limit(1);
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('whatsapp_number', whatsappNumber)
+      .is('deleted_at', null)
+      .single();
 
-    if (existingUser) {
+    if (existingProfile) {
       return res.status(400).json({
         success: false,
         error: 'User already exists',
@@ -189,62 +193,109 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       });
     }
 
-    // In a real app, we would create a Supabase Auth user here
-    // For MVP, we'll generate a UUID and create a profile directly
-    const userId = crypto.randomUUID();
+    // Create a temporary email for auth (since we don't collect emails yet)
+    // Using WhatsApp number as unique identifier
+    const tempEmail = `${whatsappNumber.replace(/[^0-9]/g, '')}@buildmonitor.local`;
 
-    // 1. Create Profile
-    const [profile] = await db.insert(profiles).values({
-      id: userId,
-      fullName,
-      whatsappNumber,
-      defaultCurrency: 'UGX',
-      preferredLanguage: 'en',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    // 1. Create Supabase Auth user
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email: tempEmail,
+      password: password,
+      email_confirm: true, // Auto-confirm since we're using temp email
+    });
 
-    // 2. Create Default Project
-    const [project] = await db.insert(projects).values({
-      userId: profile.id,
-      name: 'My First Project',
-      description: 'Automatically created during signup',
-      budgetAmount: '1000000',
-      status: 'active',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }).returning();
+    if (authError || !authData.user) {
+      console.error('[Register] Auth user creation error:', authError);
+      return res.status(500).json({
+        success: false,
+        error: 'Registration failed',
+        message: authError?.message || 'Failed to create authentication account',
+      });
+    }
 
-    // 3. Create Default Categories
+    const userId = authData.user.id;
+
+    // 2. Create Profile using the Auth user's ID
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .insert({
+        id: userId, // Use the auth user's ID
+        full_name: fullName,
+        whatsapp_number: whatsappNumber,
+        default_currency: 'UGX',
+        preferred_language: 'en',
+      })
+      .select()
+      .single();
+
+    if (profileError) {
+      console.error('[Register] Profile creation error:', profileError);
+      // Cleanup: delete the auth user if profile creation failed
+      await supabase.auth.admin.deleteUser(userId);
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Registration failed',
+        message: 'Failed to create user profile',
+      });
+    }
+
+    // 3. Create Default Project
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .insert({
+        user_id: profile.id,
+        name: 'My First Project',
+        description: 'Automatically created during signup',
+        budget_amount: '1000000',
+        status: 'active',
+      })
+      .select()
+      .single();
+
+    if (projectError) {
+      console.error('[Register] Project creation error:', projectError);
+      // Continue even if project creation fails
+    }
+
+    // 4. Create Default Categories
     const defaultCategories = [
-      { name: 'Materials', colorHex: '#EF4444' },
-      { name: 'Labor', colorHex: '#3B82F6' },
-      { name: 'Transport', colorHex: '#10B981' },
-      { name: 'Equipment', colorHex: '#F59E0B' },
-      { name: 'Permits', colorHex: '#8B5CF6' },
+      { name: 'Materials', color_hex: '#EF4444' },
+      { name: 'Labor', color_hex: '#3B82F6' },
+      { name: 'Transport', color_hex: '#10B981' },
+      { name: 'Equipment', color_hex: '#F59E0B' },
+      { name: 'Permits', color_hex: '#8B5CF6' },
     ];
 
-    await db.insert(expenseCategories).values(
-      defaultCategories.map(cat => ({
-        ...cat,
-        userId: profile.id,
-        createdAt: new Date(),
-      }))
-    );
+    const { error: categoriesError } = await supabase
+      .from('expense_categories')
+      .insert(
+        defaultCategories.map(cat => ({
+          ...cat,
+          user_id: profile.id,
+        }))
+      );
+
+    if (categoriesError) {
+      console.error('[Register] Categories creation error:', categoriesError);
+      // Continue even if categories creation fails
+    }
 
     // Create session
     req.session.userId = profile.id;
-    req.session.whatsappNumber = profile.whatsappNumber;
+    req.session.whatsappNumber = profile.whatsapp_number;
+
+    console.log(`[Register] ✅ User registered successfully: ${profile.full_name} (${profile.id})`);
 
     res.status(201).json({
       success: true,
       message: 'Registration successful',
       user: {
         id: profile.id,
-        whatsappNumber: profile.whatsappNumber,
-        fullName: profile.fullName,
-        defaultCurrency: profile.defaultCurrency,
-        preferredLanguage: profile.preferredLanguage,
+        whatsappNumber: profile.whatsapp_number,
+        fullName: profile.full_name,
+        defaultCurrency: profile.default_currency || 'UGX',
+        preferredLanguage: profile.preferred_language || 'en',
       },
     });
   } catch (error: any) {
@@ -261,7 +312,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Registration failed',
-      message: 'An error occurred while creating your account',
+      message: error.message || 'An error occurred while creating your account',
     });
   }
 });
