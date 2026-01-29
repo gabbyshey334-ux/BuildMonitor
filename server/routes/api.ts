@@ -468,6 +468,78 @@ router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// PROJECT ROUTES
+// ============================================================================
+
+/**
+ * GET /api/projects
+ * Get user's projects
+ */
+router.get('/projects', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+
+    // Fetch projects
+    const projectList = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.userId, userId), isNull(projects.deletedAt)))
+      .orderBy(desc(projects.updatedAt));
+
+    res.json({
+      success: true,
+      projects: projectList,
+    });
+  } catch (error) {
+    console.error('[Get Projects] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch projects',
+    });
+  }
+});
+
+/**
+ * POST /api/projects
+ * Create a new project
+ */
+router.post('/projects', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { name, description, budgetAmount } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Project name is required',
+      });
+    }
+
+    const [project] = await db.insert(projects).values({
+      userId,
+      name,
+      description: description || null,
+      budgetAmount: budgetAmount || '0',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+
+    res.status(201).json({
+      success: true,
+      message: 'Project created successfully',
+      project,
+    });
+  } catch (error) {
+    console.error('[Create Project] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create project',
+    });
+  }
+});
+
+// ============================================================================
 // DASHBOARD ROUTES
 // ============================================================================
 

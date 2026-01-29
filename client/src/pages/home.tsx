@@ -46,10 +46,12 @@ export default function Home() {
     }
   }, [user?.role]);
 
-  const { data: projects, isLoading: projectsLoading, error: projectsError } = useQuery<Project[]>({
+  const { data: projectsResponse, isLoading: projectsLoading, error: projectsError } = useQuery<{success: boolean, projects: Project[]}>({
     queryKey: ['/api/projects'],
     retry: false,
   });
+
+  const projects = projectsResponse?.projects || [];
 
   // Set first project as selected if none is selected
   useEffect(() => {
