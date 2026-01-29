@@ -51,15 +51,15 @@ export default function CreateProjectDialog({
       const projectData = {
         name: data.name,
         description: data.description || '',
-        budget: data.budget.toString(),
+        budgetAmount: data.budget?.toString() || '0', // Changed from 'budget' to 'budgetAmount'
         status: data.status || 'Active',
         startDate: data.startDate || undefined,
         endDate: data.endDate || undefined,
       };
-      const response: any = await apiRequest('POST', '/api/projects', projectData);
-      return response;
+      const response = await apiRequest('POST', '/api/projects', projectData);
+      return await response.json();
     },
-    onSuccess: (newProject: any) => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
       toast({
         title: "Success",
@@ -67,8 +67,8 @@ export default function CreateProjectDialog({
       });
       form.reset();
       onOpenChange(false);
-      if (onProjectCreated && newProject?.id) {
-        onProjectCreated(newProject.id);
+      if (onProjectCreated && result?.project?.id) {
+        onProjectCreated(result.project.id);
       }
     },
     onError: (error: any) => {
