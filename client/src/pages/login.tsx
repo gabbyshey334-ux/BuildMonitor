@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
-import { LogIn, UserPlus, Lock, User, Eye, EyeOff } from "lucide-react";
+import { LogIn, UserPlus, Lock, Mail, Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const { login, isLoading } = useAuth();
@@ -17,7 +17,7 @@ export default function Login() {
     e.preventDefault();
     
     try {
-      await login(username, password);
+      await login(email, password);
     } catch (error) {
       console.error("Login error:", error);
     }
@@ -51,15 +51,15 @@ export default function Login() {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="username" className="text-slate-300 text-xs uppercase tracking-wider font-bold">Username</Label>
+                <Label htmlFor="email" className="text-slate-300 text-xs uppercase tracking-wider font-bold">Email Address</Label>
                 <div className="relative group">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
                   <Input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="your_username"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="your@email.com"
                     required
                     className="bg-[#0a0c14]/50 border-white/5 text-white placeholder:text-slate-600 pl-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
                   />

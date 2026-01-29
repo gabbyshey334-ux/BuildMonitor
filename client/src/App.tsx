@@ -8,6 +8,8 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
 import Signup from "@/pages/signup";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
 
@@ -32,6 +34,8 @@ function Router() {
           <Route path="/" component={Landing} />
           <Route path="/login" component={Login} />
           <Route path="/signup" component={Signup} />
+          <Route path="/forgot-password" component={ForgotPassword} />
+          <Route path="/reset-password" component={ResetPassword} />
         </>
       ) : (
         <>

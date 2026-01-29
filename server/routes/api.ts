@@ -61,13 +61,13 @@ interface DashboardSummary {
 // ============================================================================
 
 const loginSchema = z.object({
-  username: z.string().min(1, 'Username is required'),
+  email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
 });
 
 const registerSchema = z.object({
   fullName: z.string().min(2, 'Full name is required'),
-  username: z.string().min(3, 'Username must be at least 3 characters'),
+  email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   whatsappNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid WhatsApp number (e.g., +256770000000)'),
 });
@@ -172,7 +172,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
  */
 router.post('/auth/register', async (req: Request, res: Response) => {
   try {
-    const { fullName, username, password, whatsappNumber } = registerSchema.parse(req.body);
+    const { fullName, email, password, whatsappNumber } = registerSchema.parse(req.body);
 
     // Use Supabase client for auth
     const { supabase } = await import('../db');
@@ -193,15 +193,11 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       });
     }
 
-    // Create a temporary email for auth (since we don't collect emails yet)
-    // Using WhatsApp number as unique identifier
-    const tempEmail = `${whatsappNumber.replace(/[^0-9]/g, '')}@buildmonitor.local`;
-
     // 1. Create Supabase Auth user
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: tempEmail,
+      email: email,
       password: password,
-      email_confirm: true, // Auto-confirm since we're using temp email
+      email_confirm: true,
     });
 
     if (authError || !authData.user) {
@@ -219,7 +215,8 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({
-        id: userId, // Use the auth user's ID
+        id: userId,
+        email: email,
         full_name: fullName,
         whatsapp_number: whatsappNumber,
         default_currency: 'UGX',
@@ -236,50 +233,13 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       return res.status(500).json({
         success: false,
         error: 'Registration failed',
-        message: 'Failed to create user profile',
+        message: profileError.message || 'Failed to create user profile',
       });
     }
 
-    // 3. Create Default Project
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .insert({
-        user_id: profile.id,
-        name: 'My First Project',
-        description: 'Automatically created during signup',
-        budget_amount: '1000000',
-        status: 'active',
-      })
-      .select()
-      .single();
-
-    if (projectError) {
-      console.error('[Register] Project creation error:', projectError);
-      // Continue even if project creation fails
-    }
-
-    // 4. Create Default Categories
-    const defaultCategories = [
-      { name: 'Materials', color_hex: '#EF4444' },
-      { name: 'Labor', color_hex: '#3B82F6' },
-      { name: 'Transport', color_hex: '#10B981' },
-      { name: 'Equipment', color_hex: '#F59E0B' },
-      { name: 'Permits', color_hex: '#8B5CF6' },
-    ];
-
-    const { error: categoriesError } = await supabase
-      .from('expense_categories')
-      .insert(
-        defaultCategories.map(cat => ({
-          ...cat,
-          user_id: profile.id,
-        }))
-      );
-
-    if (categoriesError) {
-      console.error('[Register] Categories creation error:', categoriesError);
-      // Continue even if categories creation fails
-    }
+    // NOTE: We don't manually create default project or categories here 
+    // because project.sql has a database trigger (create_user_defaults) 
+    // that automatically handles this when a new profile is inserted.
 
     // Create session
     req.session.userId = profile.id;
@@ -292,6 +252,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       message: 'Registration successful',
       user: {
         id: profile.id,
+        email: profile.email,
         whatsappNumber: profile.whatsapp_number,
         fullName: profile.full_name,
         defaultCurrency: profile.default_currency || 'UGX',
@@ -323,34 +284,36 @@ router.post('/auth/register', async (req: Request, res: Response) => {
  */
 router.post('/auth/login', async (req: Request, res: Response) => {
   try {
-    const { username, password } = loginSchema.parse(req.body);
+    const { email, password } = loginSchema.parse(req.body);
 
-    // MVP: Hardcoded credentials
-    // TODO: Replace with proper password hashing and database lookup
-    const VALID_CREDENTIALS = {
-      username: 'owner',
-      password: 'owner123',
-    };
+    const { supabase } = await import('../db');
 
-    if (username !== VALID_CREDENTIALS.username || password !== VALID_CREDENTIALS.password) {
+    // Sign in with Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials',
-        message: 'Incorrect username or password',
+        message: authError?.message || 'Incorrect email or password',
       });
     }
 
-    // For MVP, use a hardcoded WhatsApp number to find the user
-    // TODO: Link credentials to actual user accounts
-    const OWNER_WHATSAPP = process.env.OWNER_WHATSAPP_NUMBER || '+256770000000';
-    
-    const profile = await getUserByWhatsApp(OWNER_WHATSAPP);
+    // Fetch profile from database
+    const [profile] = await db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.id, authData.user.id), isNull(profiles.deletedAt)))
+      .limit(1);
 
     if (!profile) {
       return res.status(404).json({
         success: false,
         error: 'User not found',
-        message: 'No profile found for this account. Please register first.',
+        message: 'No profile found for this account.',
       });
     }
 
@@ -364,6 +327,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       message: 'Login successful',
       user: {
         id: profile.id,
+        email: profile.email,
         whatsappNumber: profile.whatsappNumber,
         fullName: profile.fullName,
         defaultCurrency: profile.defaultCurrency || 'UGX',
@@ -385,6 +349,78 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       success: false,
       error: 'Login failed',
       message: 'An error occurred while logging in',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/forgot-password
+ * Send password reset email
+ */
+router.post('/auth/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    const { supabase } = await import('../db');
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password`,
+    });
+
+    if (error) {
+      console.error('[Forgot Password] Error:', error);
+      return res.status(400).json({
+        success: false,
+        error: 'Reset failed',
+        message: error.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Password reset link has been sent to your email.',
+    });
+  } catch (error: any) {
+    console.error('[Forgot Password] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send reset link',
+      message: 'An error occurred while processing your request.',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Set new password after clicking reset link
+ */
+router.post('/auth/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
+    const { supabase } = await import('../db');
+
+    // This requires the user to be authenticated via the token in the URL
+    // The client should have handled the exchange of code for session
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      console.error('[Reset Password] Error:', error);
+      return res.status(400).json({
+        success: false,
+        error: 'Reset failed',
+        message: error.message,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Your password has been reset successfully.',
+    });
+  } catch (error: any) {
+    console.error('[Reset Password] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset password',
+      message: 'An error occurred while resetting your password.',
     });
   }
 });

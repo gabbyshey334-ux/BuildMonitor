@@ -48,6 +48,7 @@ export const sessions = pgTable(
 // ============================================================================
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(), // This IS the auth.users.id
+  email: varchar("email", { length: 255 }).unique().notNull(),
   whatsappNumber: varchar("whatsapp_number", { length: 20 }).unique().notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   defaultCurrency: varchar("default_currency", { length: 3 }).default('UGX'),

@@ -51,8 +51,11 @@ class WebSocketManager {
     
     try {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      // Use window.location.host which includes the port (e.g., localhost:5000)
+      const host = window.location.host;
+      const wsUrl = `${protocol}//${host}/ws`;
       
+      console.log('Connecting to WebSocket:', wsUrl);
       this.ws = new WebSocket(wsUrl);
       
       this.ws.onopen = () => {
