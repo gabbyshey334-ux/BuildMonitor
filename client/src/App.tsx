@@ -7,6 +7,7 @@ import { useAuth, AuthProvider } from "@/hooks/useAuth";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
+import Signup from "@/pages/signup";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
 
@@ -30,6 +31,7 @@ function Router() {
         <>
           <Route path="/" component={Landing} />
           <Route path="/login" component={Login} />
+          <Route path="/signup" component={Signup} />
         </>
       ) : (
         <>

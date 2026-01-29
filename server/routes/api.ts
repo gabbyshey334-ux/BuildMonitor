@@ -8,6 +8,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, and, isNull, sql, desc, gte, lte } from 'drizzle-orm';
+import crypto from 'crypto';
 import { db } from '../db';
 import { getUserByWhatsApp, getUserDefaultProject } from '../lib/supabase';
 import {
@@ -62,6 +63,13 @@ interface DashboardSummary {
 const loginSchema = z.object({
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
+});
+
+const registerSchema = z.object({
+  fullName: z.string().min(2, 'Full name is required'),
+  username: z.string().min(3, 'Username must be at least 3 characters'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  whatsappNumber: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'Invalid WhatsApp number (e.g., +256770000000)'),
 });
 
 const createExpenseSchema = z.object({
@@ -157,6 +165,106 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 // ============================================================================
 // AUTHENTICATION ROUTES
 // ============================================================================
+
+/**
+ * POST /api/auth/register
+ * Create a new user profile and project
+ */
+router.post('/auth/register', async (req: Request, res: Response) => {
+  try {
+    const { fullName, username, password, whatsappNumber } = registerSchema.parse(req.body);
+
+    // Check if user already exists by WhatsApp number
+    const [existingUser] = await db
+      .select()
+      .from(profiles)
+      .where(eq(profiles.whatsappNumber, whatsappNumber))
+      .limit(1);
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'User already exists',
+        message: 'A user with this WhatsApp number is already registered.',
+      });
+    }
+
+    // In a real app, we would create a Supabase Auth user here
+    // For MVP, we'll generate a UUID and create a profile directly
+    const userId = crypto.randomUUID();
+
+    // 1. Create Profile
+    const [profile] = await db.insert(profiles).values({
+      id: userId,
+      fullName,
+      whatsappNumber,
+      defaultCurrency: 'UGX',
+      preferredLanguage: 'en',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+
+    // 2. Create Default Project
+    const [project] = await db.insert(projects).values({
+      userId: profile.id,
+      name: 'My First Project',
+      description: 'Automatically created during signup',
+      budgetAmount: '1000000',
+      status: 'active',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+
+    // 3. Create Default Categories
+    const defaultCategories = [
+      { name: 'Materials', colorHex: '#EF4444' },
+      { name: 'Labor', colorHex: '#3B82F6' },
+      { name: 'Transport', colorHex: '#10B981' },
+      { name: 'Equipment', colorHex: '#F59E0B' },
+      { name: 'Permits', colorHex: '#8B5CF6' },
+    ];
+
+    await db.insert(expenseCategories).values(
+      defaultCategories.map(cat => ({
+        ...cat,
+        userId: profile.id,
+        createdAt: new Date(),
+      }))
+    );
+
+    // Create session
+    req.session.userId = profile.id;
+    req.session.whatsappNumber = profile.whatsappNumber;
+
+    res.status(201).json({
+      success: true,
+      message: 'Registration successful',
+      user: {
+        id: profile.id,
+        whatsappNumber: profile.whatsappNumber,
+        fullName: profile.fullName,
+        defaultCurrency: profile.defaultCurrency,
+        preferredLanguage: profile.preferredLanguage,
+      },
+    });
+  } catch (error: any) {
+    console.error('[Register] Error:', error);
+    
+    if (error.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        details: error.errors,
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Registration failed',
+      message: 'An error occurred while creating your account',
+    });
+  }
+});
 
 /**
  * POST /api/auth/login

@@ -18,6 +18,7 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<void>;
+  register: (data: any) => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => void;
 }
@@ -122,6 +123,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  // Register mutation
+  const registerMutation = useMutation({
+    mutationFn: async (userData: any) => {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(userData),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Registration failed");
+      }
+
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      console.log("[Auth] Registration successful:", data.user?.fullName);
+      
+      queryClient.setQueryData(["/api/auth/me"], data.user);
+      
+      toast({
+        title: "Account created",
+        description: `Welcome, ${data.user?.fullName}! Your project is ready.`,
+      });
+      
+      setLocation("/");
+    },
+    onError: (error: Error) => {
+      console.error("[Auth] Registration error:", error);
+      toast({
+        title: "Registration failed",
+        description: error.message || "Could not create account. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -188,9 +230,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     user: user,
-    isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending,
+    isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending || registerMutation.isPending,
     isAuthenticated: !!user,
     login,
+    register: (userData: any) => registerMutation.mutateAsync(userData),
     logout,
     refetch: () => refetch(),
   };
