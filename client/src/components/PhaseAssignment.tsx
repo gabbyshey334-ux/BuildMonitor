@@ -251,12 +251,12 @@ export default function PhaseAssignment({ projectId, isOpen, onClose }: PhaseAss
               const selectedPhase = phases.find(p => p.id === selectedPhaseId);
 
               return (
-                <Card key={expense.id} className="card-glass">
+                <Card key={expense.id} className="bg-card border-border">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h4 className="font-medium text-white">{expense.description}</h4>
+                          <h4 className="font-medium text-card-foreground">{expense.description}</h4>
                           <Badge variant="secondary" className="text-xs">
                             {expense.category}
                           </Badge>

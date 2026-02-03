@@ -54,9 +54,9 @@ export default function PhaseProgressChart({ projectId }: PhaseProgressChartProp
   };
 
   return (
-    <Card className="card-glass">
+    <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+        <CardTitle className="text-lg font-bold text-card-foreground flex items-center gap-2">
           <HardHat className="w-5 h-5" />
           Construction Phase Progress
         </CardTitle>
@@ -80,10 +80,10 @@ export default function PhaseProgressChart({ projectId }: PhaseProgressChartProp
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: phase.color }}
                     />
-                    <span className="text-sm font-medium text-white">{phase.name}</span>
+                    <span className="text-sm font-medium text-foreground">{phase.name}</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-sm font-medium text-white">
+                    <span className="text-sm font-medium text-foreground">
                       {formatCurrency(phase.totalAmount)}
                     </span>
                     <span className="text-xs text-muted-foreground ml-2">
@@ -106,10 +106,10 @@ export default function PhaseProgressChart({ projectId }: PhaseProgressChartProp
             ))}
             
             {totalExpenses > 0 && (
-              <div className="mt-6 pt-4 border-t border-white/10">
+              <div className="mt-6 pt-4 border-t border-border">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-white">Total Phase Expenses</span>
-                  <span className="text-lg font-bold text-green-400">
+                  <span className="text-sm font-medium text-foreground">Total Phase Expenses</span>
+                  <span className="text-lg font-bold text-primary">
                     {formatCurrency(totalExpenses)}
                   </span>
                 </div>
