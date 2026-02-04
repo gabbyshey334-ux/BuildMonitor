@@ -17,6 +17,7 @@
     "test:env": "tsx scripts/test-env.ts",
     "test:health": "tsx scripts/test-health.ts",
     "seed": "tsx scripts/seed.ts",
+    "seed:test": "tsx server/scripts/seedTestUser.ts",
     "test:all": "npm run test:env && npm run test:db && npm run test:health"
   },
   "dependencies": {
