@@ -217,5 +217,14 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     log(`🔐 Session store: PostgreSQL`);
     log(`💬 WhatsApp webhook: /webhook/webhook`);
     log(`🌐 API endpoint: /api`);
+    log(`\n✅ Environment Variables Check:`);
+    log(`   DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
+    log(`   SESSION_SECRET: ${process.env.SESSION_SECRET ? '✅ Set' : '❌ NOT SET'}`);
+    log(`   SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
+    log(`   SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ NOT SET'}`);
+    log(`   SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ NOT SET'}`);
+    if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+      log(`\n⚠️  WARNING: SESSION_SECRET is required in production!`);
+    }
   });
 })();

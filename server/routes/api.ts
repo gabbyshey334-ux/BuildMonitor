@@ -171,10 +171,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
  * Create a new user with Supabase Auth + profile
  */
 router.post('/auth/register', async (req: Request, res: Response) => {
+  console.log('[AUTH SIGNUP] ========================================');
+  console.log('[AUTH SIGNUP] Request received');
+  
   try {
     const { fullName, email, password, whatsappNumber } = registerSchema.parse(req.body);
 
-    console.log('[Register] Starting registration for:', { email, whatsappNumber });
+    console.log('[AUTH SIGNUP] Attempting signup for:', email);
 
     // Use Supabase client for auth (needs service role key for admin operations)
     const { supabase } = await import('../db');
@@ -193,7 +196,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       .limit(1);
 
     if (existingByEmail.length > 0) {
-      console.error('[Register] User already exists with email:', email);
+      console.error('[AUTH SIGNUP] ❌ User already exists with email:', email);
       return res.status(400).json({
         success: false,
         error: 'User already exists',
@@ -202,7 +205,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     if (existingByWhatsApp.length > 0) {
-      console.error('[Register] User already exists with WhatsApp:', whatsappNumber);
+      console.error('[AUTH SIGNUP] ❌ User already exists with WhatsApp:', whatsappNumber);
       return res.status(400).json({
         success: false,
         error: 'User already exists',
@@ -211,7 +214,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     // 1. Create Supabase Auth user
-    console.log('[Register] Creating Supabase auth user...');
+    console.log('[AUTH SIGNUP] Creating Supabase auth user...');
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email,
       password: password,
@@ -219,7 +222,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     });
 
     if (authError || !authData.user) {
-      console.error('[Register] Auth user creation error:', {
+      console.error('[AUTH SIGNUP] ❌ Auth user creation error:', {
         error: authError,
         message: authError?.message,
         status: authError?.status,
@@ -232,7 +235,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     const userId = authData.user.id;
-    console.log('[Register] Auth user created:', userId);
+    console.log('[AUTH SIGNUP] ✅ Supabase user created:', userId);
 
     // 2. Create Profile using Drizzle ORM (consistent with login endpoint)
     console.log('[Register] Creating user profile...');
@@ -264,15 +267,24 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       req.session.whatsappNumber = profile.whatsappNumber;
 
       // Save session explicitly
-      req.session.save((err) => {
-        if (err) {
-          console.error('[Register] Error saving session:', err);
-        } else {
-          console.log('[Register] Session saved successfully');
-        }
+      await new Promise<void>((resolve, reject) => {
+        req.session!.save((err) => {
+          if (err) {
+            console.error('[AUTH SIGNUP] ❌ Session save error:', {
+              error: err,
+              message: err?.message,
+              stack: err?.stack,
+            });
+            reject(err);
+          } else {
+            console.log('[AUTH SIGNUP] ✅ Session saved');
+            resolve();
+          }
+        });
       });
 
-      console.log(`[Register] ✅ User registered successfully: ${profile.fullName} (${profile.id})`);
+      console.log('[AUTH SIGNUP] ✅ Signup successful');
+      console.log('[AUTH SIGNUP] ========================================');
 
     res.status(201).json({
       success: true,
@@ -287,32 +299,35 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       },
     });
     } catch (profileError: any) {
-      console.error('[Register] Profile creation error:', {
+      console.error('[AUTH SIGNUP] ❌ Profile creation error:', {
         error: profileError,
         message: profileError?.message,
         code: profileError?.code,
+        stack: profileError?.stack,
       });
       
       // Cleanup: delete the auth user if profile creation failed
       try {
         await supabase.auth.admin.deleteUser(userId);
-        console.log('[Register] Cleaned up auth user after profile creation failure');
+        console.log('[AUTH SIGNUP] Cleaned up auth user after profile creation failure');
       } catch (cleanupError) {
-        console.error('[Register] Error cleaning up auth user:', cleanupError);
+        console.error('[AUTH SIGNUP] Error cleaning up auth user:', cleanupError);
       }
       
       return res.status(500).json({
         success: false,
         error: 'Registration failed',
         message: profileError?.message || 'Failed to create user profile. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? profileError.message : undefined,
       });
     }
   } catch (error: any) {
-    console.error('[Register] Unexpected error:', {
+    console.error('[AUTH SIGNUP] ❌ Unexpected error:', {
       name: error?.name,
       message: error?.message,
       stack: error?.stack,
     });
+    console.error('[AUTH SIGNUP] ========================================');
     
     if (error.name === 'ZodError') {
       return res.status(400).json({
@@ -326,6 +341,8 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       success: false,
       error: 'Registration failed',
       message: error.message || 'An error occurred while creating your account. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -335,14 +352,60 @@ router.post('/auth/register', async (req: Request, res: Response) => {
  * Authenticate user and create session
  */
 router.post('/auth/login', async (req: Request, res: Response) => {
+  console.log('[AUTH LOGIN] ========================================');
+  console.log('[AUTH LOGIN] Request received:', {
+    body: { email: req.body?.email, password: '[REDACTED]' },
+    hasSession: !!req.session,
+    sessionID: req.sessionID,
+    headers: {
+      'content-type': req.headers['content-type'],
+      'user-agent': req.headers['user-agent'],
+    },
+  });
+
   try {
     const { email, password } = loginSchema.parse(req.body);
+
+    console.log('[AUTH LOGIN] Attempting login for:', email);
+
+    if (!email || !password) {
+      console.log('[AUTH LOGIN] Missing credentials');
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required',
+      });
+    }
+
+    // Check database connection first
+    try {
+      console.log('[AUTH LOGIN] Testing database connection...');
+      await db.select().from(profiles).limit(1);
+      console.log('[AUTH LOGIN] ✅ Database connection OK');
+    } catch (dbError: any) {
+      console.error('[AUTH LOGIN] ❌ Database connection failed:', {
+        error: dbError,
+        message: dbError?.message,
+        stack: dbError?.stack,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection failed',
+        details: dbError.message,
+      });
+    }
 
     const { createClient } = await import('@supabase/supabase-js');
     
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
     const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    console.log('[AUTH LOGIN] Environment check:', {
+      hasSupabaseUrl: !!SUPABASE_URL,
+      hasAnonKey: !!SUPABASE_ANON_KEY,
+      hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY,
+      hasSessionSecret: !!process.env.SESSION_SECRET,
+    });
 
     if (!SUPABASE_URL) {
       console.error('[Login] Missing SUPABASE_URL');
@@ -370,6 +433,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     // Create auth client with anon key for user authentication
+    console.log('[AUTH LOGIN] Creating Supabase auth client...');
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         autoRefreshToken: false,
@@ -377,16 +441,24 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       },
     });
 
+    // Sign in with Supabase Auth
+    console.log('[AUTH LOGIN] Attempting Supabase sign in...');
     let authData, authError;
     try {
       const result = await authClient.auth.signInWithPassword({
-        email,
-        password,
-      });
+      email,
+      password,
+    });
       authData = result.data;
       authError = result.error;
+      console.log('[AUTH LOGIN] Supabase sign in result:', {
+        hasData: !!authData,
+        hasUser: !!authData?.user,
+        hasError: !!authError,
+        errorMessage: authError?.message,
+      });
     } catch (err: any) {
-      console.error('[Login] SignInWithPassword exception:', {
+      console.error('[AUTH LOGIN] ❌ SignInWithPassword exception:', {
         name: err?.name,
         message: err?.message,
         stack: err?.stack,
@@ -396,7 +468,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     if (authError || !authData?.user) {
-      console.error('[Login] Auth error:', {
+      console.error('[AUTH LOGIN] ❌ Auth error:', {
         message: authError?.message,
         status: authError?.status,
         name: authError?.name,
@@ -411,33 +483,41 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     }
 
     const userId = authData.user.id;
-    console.log(`[Login] Auth successful for user: ${userId}`);
+    console.log('[AUTH LOGIN] ✅ User authenticated:', userId);
 
-    // Fetch profile from database using Drizzle
+    // Get user profile
+    console.log('[AUTH LOGIN] Fetching user profile...');
     let profile;
     try {
       const profileResult = await db
-        .select()
-        .from(profiles)
+      .select()
+      .from(profiles)
         .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
-        .limit(1);
+      .limit(1);
 
       profile = profileResult[0];
+      console.log('[AUTH LOGIN] Profile query result:', {
+        found: !!profile,
+        profileId: profile?.id,
+        profileName: profile?.fullName,
+      });
     } catch (dbError: any) {
-      console.error('[Login] Database error fetching profile:', {
+      console.error('[AUTH LOGIN] ❌ Database error fetching profile:', {
         error: dbError,
         message: dbError?.message,
+        stack: dbError?.stack,
         userId,
       });
       return res.status(500).json({
         success: false,
         error: 'Database error',
         message: 'Failed to fetch user profile. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
       });
     }
 
     if (!profile) {
-      console.error(`[Login] Profile not found for user: ${userId}`);
+      console.error('[AUTH LOGIN] ❌ Profile not found for user:', userId);
       return res.status(404).json({
         success: false,
         error: 'User not found',
@@ -445,58 +525,73 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       });
     }
 
-    console.log(`[Login] Profile found: ${profile.fullName} (${profile.id})`);
+    console.log('[AUTH LOGIN] ✅ Profile found:', profile.fullName, `(${profile.id})`);
 
-    // Create session
+    // Update last active
     try {
-      req.session.userId = profile.id;
-      req.session.whatsappNumber = profile.whatsappNumber;
+      await db
+        .update(profiles)
+        .set({ lastActiveAt: new Date() })
+        .where(eq(profiles.id, profile.id));
+      console.log('[AUTH LOGIN] Last active timestamp updated');
+    } catch (updateError) {
+      console.error('[AUTH LOGIN] Warning: Failed to update lastActiveAt:', updateError);
+      // Don't fail the request if this update fails
+    }
 
-      // Save session explicitly to ensure it's persisted
-      req.session.save((err) => {
-        if (err) {
-          console.error('[Login] Error saving session:', {
-            error: err,
-            message: err?.message,
-          });
-          return res.status(500).json({
-            success: false,
-            error: 'Session error',
-            message: 'Failed to create session. Please try again.',
-          });
-        }
-
-        // Return user profile
-        res.json({
-          success: true,
-          message: 'Login successful',
-          user: {
-            id: profile.id,
-            email: profile.email,
-            whatsappNumber: profile.whatsappNumber,
-            fullName: profile.fullName,
-            defaultCurrency: profile.defaultCurrency || 'UGX',
-            preferredLanguage: profile.preferredLanguage || 'en',
-          },
-        });
-      });
-    } catch (sessionError: any) {
-      console.error('[Login] Session creation error:', {
-        error: sessionError,
-        message: sessionError?.message,
-      });
+    // Set session
+    if (!req.session) {
+      console.error('[AUTH LOGIN] ❌ No session object available!');
       return res.status(500).json({
         success: false,
-        error: 'Session error',
-        message: 'Failed to create session. Please try again.',
+        error: 'Session initialization failed',
+        message: 'Session middleware not properly configured.',
       });
     }
+
+    console.log('[AUTH LOGIN] Setting session data...');
+    req.session.userId = profile.id;
+    req.session.whatsappNumber = profile.whatsappNumber;
+
+    // Save session explicitly
+    await new Promise<void>((resolve, reject) => {
+      req.session!.save((err) => {
+        if (err) {
+          console.error('[AUTH LOGIN] ❌ Session save error:', {
+            error: err,
+            message: err?.message,
+            stack: err?.stack,
+          });
+          reject(err);
+        } else {
+          console.log('[AUTH LOGIN] ✅ Session saved successfully');
+          resolve();
+        }
+      });
+    });
+
+    console.log('[AUTH LOGIN] ✅ Login successful for:', authData.user.email);
+    console.log('[AUTH LOGIN] ========================================');
+
+    return res.json({
+      success: true,
+      message: 'Login successful',
+      user: {
+        id: profile.id,
+        email: profile.email,
+        whatsappNumber: profile.whatsappNumber,
+        fullName: profile.fullName,
+        defaultCurrency: profile.defaultCurrency || 'UGX',
+        preferredLanguage: profile.preferredLanguage || 'en',
+      },
+    });
   } catch (error: any) {
-    console.error('[Login] Unexpected error:', {
+    console.error('[AUTH LOGIN] ❌ Unexpected error:', {
       name: error?.name,
       message: error?.message,
       stack: error?.stack,
     });
+    console.error('[AUTH LOGIN] ========================================');
     
     if (error.name === 'ZodError') {
       return res.status(400).json({
@@ -510,6 +605,8 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       success: false,
       error: 'Login failed',
       message: error.message || 'An error occurred while logging in. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -650,9 +747,19 @@ router.get('/auth/check', async (req: Request, res: Response) => {
  * NOTE: Don't use requireAuth middleware here to avoid circular errors
  */
 router.get('/auth/me', async (req: Request, res: Response) => {
+  console.log('[AUTH ME] ========================================');
+  console.log('[AUTH ME] Request received');
+  console.log('[AUTH ME] Session:', {
+    sessionID: req.sessionID,
+    hasSession: !!req.session,
+    userId: req.session?.userId,
+    whatsappNumber: req.session?.whatsappNumber,
+  });
+
   try {
     // Check session directly (don't use req.user from requireAuth)
     if (!req.session || !req.session.userId) {
+      console.log('[AUTH ME] ❌ No session userId found');
       return res.status(401).json({
         success: false,
         error: 'Not authenticated',
@@ -661,34 +768,61 @@ router.get('/auth/me', async (req: Request, res: Response) => {
     }
 
     const userId = req.session.userId;
+    console.log('[AUTH ME] Fetching profile for userId:', userId);
+
+    // Check database connection
+    try {
+      console.log('[AUTH ME] Testing database connection...');
+      await db.select().from(profiles).limit(1);
+      console.log('[AUTH ME] ✅ Database connection OK');
+    } catch (dbError: any) {
+      console.error('[AUTH ME] ❌ Database connection failed:', {
+        error: dbError,
+        message: dbError?.message,
+        stack: dbError?.stack,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection failed',
+        details: dbError.message,
+      });
+    }
 
     // Fetch full profile from database
     let profile;
     try {
       const profileResult = await db
-        .select()
-        .from(profiles)
+      .select()
+      .from(profiles)
         .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
-        .limit(1);
+      .limit(1);
       
       profile = profileResult[0];
+      console.log('[AUTH ME] Profile query result:', {
+        found: !!profile,
+        profileId: profile?.id,
+        profileName: profile?.fullName,
+      });
     } catch (dbError: any) {
-      console.error('[Auth Me] Database error:', {
+      console.error('[AUTH ME] ❌ Database error:', {
         error: dbError,
         message: dbError?.message,
+        stack: dbError?.stack,
         userId,
       });
       return res.status(500).json({
         success: false,
         error: 'Database error',
         message: 'Failed to fetch user profile. Please try again.',
+        details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
       });
     }
 
     if (!profile) {
+      console.error('[AUTH ME] ❌ Profile not found for userId:', userId);
       // Session exists but user not found - clear invalid session
       req.session.destroy((err) => {
-        if (err) console.error('[Auth Me] Error destroying invalid session:', err);
+        if (err) console.error('[AUTH ME] Error destroying invalid session:', err);
       });
       
       return res.status(401).json({
@@ -698,13 +832,17 @@ router.get('/auth/me', async (req: Request, res: Response) => {
       });
     }
 
+    console.log('[AUTH ME] ✅ Profile found:', profile.fullName, `(${profile.id})`);
+
     // Update last active timestamp (non-blocking)
     db.update(profiles)
       .set({ lastActiveAt: new Date() })
       .where(eq(profiles.id, profile.id))
       .catch((err) => {
-        console.error('[Auth Me] Error updating lastActiveAt:', err);
+        console.error('[AUTH ME] Warning: Error updating lastActiveAt:', err);
       });
+
+    console.log('[AUTH ME] ========================================');
 
     res.json({
       success: true,
@@ -718,16 +856,19 @@ router.get('/auth/me', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Auth Me] Unexpected error:', {
+    console.error('[AUTH ME] ❌ Unexpected error:', {
       name: error?.name,
       message: error?.message,
       stack: error?.stack,
     });
+    console.error('[AUTH ME] ========================================');
     
     res.status(500).json({
       success: false,
       error: 'Failed to fetch user',
       message: error.message || 'An error occurred while fetching your profile',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -1660,6 +1801,80 @@ router.post('/images', requireAuth, async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Failed to upload image',
+    });
+  }
+});
+
+// ============================================================================
+// DEBUG ROUTES
+// ============================================================================
+
+/**
+ * GET /api/debug/db
+ * Debug endpoint - check database connection
+ */
+router.get('/debug/db', async (req: Request, res: Response) => {
+  try {
+    console.log('[DEBUG DB] Testing database connection...');
+    
+    // Test query
+    const result = await db.select().from(profiles).limit(1);
+    
+    console.log('[DEBUG DB] ✅ Database query successful');
+    
+    return res.json({
+      success: true,
+      message: 'Database connection working',
+      sampleData: result.length > 0 ? 'Found profiles' : 'No profiles yet',
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        DATABASE_URL_SET: !!process.env.DATABASE_URL,
+        SUPABASE_URL_SET: !!process.env.SUPABASE_URL,
+        SUPABASE_ANON_KEY_SET: !!process.env.SUPABASE_ANON_KEY,
+        SUPABASE_SERVICE_ROLE_KEY_SET: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
+      },
+    });
+  } catch (error: any) {
+    console.error('[DEBUG DB] ❌ Database connection failed:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Database connection failed',
+      details: error.message,
+      stack: error.stack,
+      env: {
+        NODE_ENV: process.env.NODE_ENV,
+        DATABASE_URL_SET: !!process.env.DATABASE_URL,
+        DATABASE_URL_PREVIEW: process.env.DATABASE_URL ? `${process.env.DATABASE_URL.substring(0, 20)}...` : 'NOT SET',
+      },
+    });
+  }
+});
+
+/**
+ * GET /api/debug/session
+ * Debug endpoint - check session configuration
+ */
+router.get('/debug/session', async (req: Request, res: Response) => {
+  try {
+    return res.json({
+      success: true,
+      session: {
+        sessionID: req.sessionID,
+        hasSession: !!req.session,
+        userId: req.session?.userId || null,
+        whatsappNumber: req.session?.whatsappNumber || null,
+      },
+      env: {
+        SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
+        NODE_ENV: process.env.NODE_ENV,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: 'Session check failed',
+      details: error.message,
     });
   }
 });
