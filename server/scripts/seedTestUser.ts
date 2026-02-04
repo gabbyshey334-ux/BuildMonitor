@@ -22,7 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 const TEST_EMAIL = 'testuser@buildmonitor.local';
 const TEST_PASSWORD = 'TestPassword123!';
 const TEST_WHATSAPP = '+256700000001';
-const TEST_USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'; // Placeholder UUID - UPDATE THIS with actual Supabase User ID
+const TEST_USER_ID = '0d1d4252-fdb8-4ec5-acc9-8c00e8d9e3c3'; // Supabase User ID for testuser@buildmonitor.local
 
 async function seedTestUser() {
   console.log('🌱 Starting test user seed...\n');
