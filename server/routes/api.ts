@@ -174,18 +174,35 @@ router.post('/auth/register', async (req: Request, res: Response) => {
   try {
     const { fullName, email, password, whatsappNumber } = registerSchema.parse(req.body);
 
-    // Use Supabase client for auth
+    console.log('[Register] Starting registration for:', { email, whatsappNumber });
+
+    // Use Supabase client for auth (needs service role key for admin operations)
     const { supabase } = await import('../db');
     
-    // Check if user already exists by WhatsApp number
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('whatsapp_number', whatsappNumber)
-      .is('deleted_at', null)
-      .single();
+    // Check if user already exists by email or WhatsApp number using Drizzle
+    const existingByEmail = await db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.email, email), isNull(profiles.deletedAt)))
+      .limit(1);
 
-    if (existingProfile) {
+    const existingByWhatsApp = await db
+      .select()
+      .from(profiles)
+      .where(and(eq(profiles.whatsappNumber, whatsappNumber), isNull(profiles.deletedAt)))
+      .limit(1);
+
+    if (existingByEmail.length > 0) {
+      console.error('[Register] User already exists with email:', email);
+      return res.status(400).json({
+        success: false,
+        error: 'User already exists',
+        message: 'An account with this email address already exists.',
+      });
+    }
+
+    if (existingByWhatsApp.length > 0) {
+      console.error('[Register] User already exists with WhatsApp:', whatsappNumber);
       return res.status(400).json({
         success: false,
         error: 'User already exists',
@@ -194,6 +211,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     // 1. Create Supabase Auth user
+    console.log('[Register] Creating Supabase auth user...');
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email: email,
       password: password,
@@ -201,51 +219,60 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     });
 
     if (authError || !authData.user) {
-      console.error('[Register] Auth user creation error:', authError);
+      console.error('[Register] Auth user creation error:', {
+        error: authError,
+        message: authError?.message,
+        status: authError?.status,
+      });
       return res.status(500).json({
         success: false,
         error: 'Registration failed',
-        message: authError?.message || 'Failed to create authentication account',
+        message: authError?.message || 'Failed to create authentication account. Please try again.',
       });
     }
 
     const userId = authData.user.id;
+    console.log('[Register] Auth user created:', userId);
 
-    // 2. Create Profile using the Auth user's ID
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .insert({
+    // 2. Create Profile using Drizzle ORM (consistent with login endpoint)
+    console.log('[Register] Creating user profile...');
+    const now = new Date();
+    try {
+      const [profile] = await db.insert(profiles).values({
         id: userId,
         email: email,
-        full_name: fullName,
-        whatsapp_number: whatsappNumber,
-        default_currency: 'UGX',
-        preferred_language: 'en',
-      })
-      .select()
-      .single();
+        fullName: fullName,
+        whatsappNumber: whatsappNumber,
+        defaultCurrency: 'UGX',
+        preferredLanguage: 'en',
+        createdAt: now,
+        updatedAt: now,
+      }).returning();
 
-    if (profileError) {
-      console.error('[Register] Profile creation error:', profileError);
-      // Cleanup: delete the auth user if profile creation failed
-      await supabase.auth.admin.deleteUser(userId);
-      
-      return res.status(500).json({
-        success: false,
-        error: 'Registration failed',
-        message: profileError.message || 'Failed to create user profile',
-      });
-    }
+      if (!profile) {
+        throw new Error('Profile creation returned no data');
+      }
+
+      console.log('[Register] Profile created:', profile.id);
 
     // NOTE: We don't manually create default project or categories here 
     // because project.sql has a database trigger (create_user_defaults) 
     // that automatically handles this when a new profile is inserted.
 
-    // Create session
+      // Create session - ensure it's saved
     req.session.userId = profile.id;
-    req.session.whatsappNumber = profile.whatsapp_number;
+      req.session.whatsappNumber = profile.whatsappNumber;
 
-    console.log(`[Register] ✅ User registered successfully: ${profile.full_name} (${profile.id})`);
+      // Save session explicitly
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Register] Error saving session:', err);
+        } else {
+          console.log('[Register] Session saved successfully');
+        }
+      });
+
+      console.log(`[Register] ✅ User registered successfully: ${profile.fullName} (${profile.id})`);
 
     res.status(201).json({
       success: true,
@@ -253,14 +280,39 @@ router.post('/auth/register', async (req: Request, res: Response) => {
       user: {
         id: profile.id,
         email: profile.email,
-        whatsappNumber: profile.whatsapp_number,
-        fullName: profile.full_name,
-        defaultCurrency: profile.default_currency || 'UGX',
-        preferredLanguage: profile.preferred_language || 'en',
+          whatsappNumber: profile.whatsappNumber,
+          fullName: profile.fullName,
+          defaultCurrency: profile.defaultCurrency || 'UGX',
+          preferredLanguage: profile.preferredLanguage || 'en',
       },
     });
+    } catch (profileError: any) {
+      console.error('[Register] Profile creation error:', {
+        error: profileError,
+        message: profileError?.message,
+        code: profileError?.code,
+      });
+      
+      // Cleanup: delete the auth user if profile creation failed
+      try {
+        await supabase.auth.admin.deleteUser(userId);
+        console.log('[Register] Cleaned up auth user after profile creation failure');
+      } catch (cleanupError) {
+        console.error('[Register] Error cleaning up auth user:', cleanupError);
+      }
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Registration failed',
+        message: profileError?.message || 'Failed to create user profile. Please try again.',
+      });
+    }
   } catch (error: any) {
-    console.error('[Register] Error:', error);
+    console.error('[Register] Unexpected error:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack,
+    });
     
     if (error.name === 'ZodError') {
       return res.status(400).json({
@@ -273,7 +325,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Registration failed',
-      message: error.message || 'An error occurred while creating your account',
+      message: error.message || 'An error occurred while creating your account. Please try again.',
     });
   }
 });
@@ -328,9 +380,9 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     let authData, authError;
     try {
       const result = await authClient.auth.signInWithPassword({
-        email,
-        password,
-      });
+      email,
+      password,
+    });
       authData = result.data;
       authError = result.error;
     } catch (err: any) {
@@ -377,6 +429,17 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     req.session.userId = profile.id;
     req.session.whatsappNumber = profile.whatsappNumber;
 
+    // Save session explicitly to ensure it's persisted
+    req.session.save((err) => {
+      if (err) {
+        console.error('[Login] Error saving session:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Session error',
+          message: 'Failed to create session. Please try again.',
+        });
+      }
+
     // Return user profile
     res.json({
       success: true,
@@ -389,6 +452,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
         defaultCurrency: profile.defaultCurrency || 'UGX',
         preferredLanguage: profile.preferredLanguage || 'en',
       },
+      });
     });
   } catch (error: any) {
     console.error('[Login] Unexpected error:', {
@@ -511,6 +575,34 @@ router.post('/auth/logout', (req: Request, res: Response) => {
     res.json({
       success: true,
       message: 'Already logged out',
+    });
+  }
+});
+
+/**
+ * GET /api/auth/check
+ * Check authentication status and session
+ */
+router.get('/auth/check', async (req: Request, res: Response) => {
+  try {
+    const hasSession = !!req.session;
+    const hasUserId = !!req.session?.userId;
+    const sessionId = req.sessionID;
+    
+    return res.json({
+      success: true,
+      authenticated: hasUserId,
+      hasSession,
+      sessionId,
+      userId: req.session?.userId || null,
+      message: hasUserId ? 'User is authenticated' : 'User is not authenticated',
+    });
+  } catch (error: any) {
+    console.error('[Auth Check] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Check failed',
+      message: error.message || 'An error occurred',
     });
   }
 });
