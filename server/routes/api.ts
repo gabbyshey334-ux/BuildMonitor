@@ -686,29 +686,48 @@ router.get('/auth/me', async (req: Request, res: Response) => {
     }
 
     if (!profile) {
-      return res.status(404).json({
+      // Session exists but user not found - clear invalid session
+      req.session.destroy((err) => {
+        if (err) console.error('[Auth Me] Error destroying invalid session:', err);
+      });
+      
+      return res.status(401).json({
         success: false,
         error: 'User not found',
+        message: 'Your account may have been deleted. Please log in again.',
       });
     }
+
+    // Update last active timestamp (non-blocking)
+    db.update(profiles)
+      .set({ lastActiveAt: new Date() })
+      .where(eq(profiles.id, profile.id))
+      .catch((err) => {
+        console.error('[Auth Me] Error updating lastActiveAt:', err);
+      });
 
     res.json({
       success: true,
       user: {
         id: profile.id,
+        email: profile.email,
         whatsappNumber: profile.whatsappNumber,
         fullName: profile.fullName,
         defaultCurrency: profile.defaultCurrency || 'UGX',
         preferredLanguage: profile.preferredLanguage || 'en',
-        createdAt: profile.createdAt,
-        lastActiveAt: profile.lastActiveAt,
       },
     });
-  } catch (error) {
-    console.error('[Auth Me] Error:', error);
+  } catch (error: any) {
+    console.error('[Auth Me] Unexpected error:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack,
+    });
+    
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch user profile',
+      error: 'Failed to fetch user',
+      message: error.message || 'An error occurred while fetching your profile',
     });
   }
 });
