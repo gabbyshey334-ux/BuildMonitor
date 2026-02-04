@@ -222,6 +222,15 @@ router.post('/webhook', async (req: Request, res: Response) => {
       console.log(`[WhatsApp Webhook] ${requestId} - Invalid intent or missing required fields`);
       const reply = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
       
+      console.log(`[WhatsApp Webhook] ${requestId} - Sending help message for invalid intent...`);
+      const sendResult = await sendWhatsAppMessage(data.From, reply);
+      
+      if (sendResult.success) {
+        console.log(`[WhatsApp Webhook] ${requestId} - ✅ Help message sent: ${sendResult.messageSid}`);
+      } else {
+        console.error(`[WhatsApp Webhook] ${requestId} - ❌ Failed to send help message:`, sendResult.error);
+      }
+      
       logWhatsAppInteraction({
         phoneNumber,
         userId: profile.id,
@@ -229,9 +238,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
         messageBody: reply,
         intent: 'unknown',
         action: 'Sent help message',
-        success: true,
-        metadata: { requestId, messageId: incomingMessage.id },
+        success: sendResult.success,
+        error: sendResult.error,
+        metadata: { requestId, messageId: incomingMessage.id, messageSid: sendResult.messageSid },
       });
+      
+      // Mark message as processed
+      await db.update(whatsappMessages)
+        .set({ 
+          processed: true, 
+          processedAt: new Date(),
+        })
+        .where(eq(whatsappMessages.id, incomingMessage.id));
       
       return res.status(200).send('<Response></Response>');
     }
@@ -240,6 +258,15 @@ router.post('/webhook', async (req: Request, res: Response) => {
       console.log(`[WhatsApp Webhook] ${requestId} - Low confidence (${parsed.confidence}), using unknown handler`);
       const reply = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
       
+      console.log(`[WhatsApp Webhook] ${requestId} - Sending help message for low confidence...`);
+      const sendResult = await sendWhatsAppMessage(data.From, reply);
+      
+      if (sendResult.success) {
+        console.log(`[WhatsApp Webhook] ${requestId} - ✅ Help message sent: ${sendResult.messageSid}`);
+      } else {
+        console.error(`[WhatsApp Webhook] ${requestId} - ❌ Failed to send help message:`, sendResult.error);
+      }
+      
       logWhatsAppInteraction({
         phoneNumber,
         userId: profile.id,
@@ -247,9 +274,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
         messageBody: reply,
         intent: 'unknown',
         action: 'Sent help message (low confidence)',
-        success: true,
-        metadata: { requestId, messageId: incomingMessage.id, confidence: parsed.confidence },
+        success: sendResult.success,
+        error: sendResult.error,
+        metadata: { requestId, messageId: incomingMessage.id, confidence: parsed.confidence, messageSid: sendResult.messageSid },
       });
+      
+      // Mark message as processed
+      await db.update(whatsappMessages)
+        .set({ 
+          processed: true, 
+          processedAt: new Date(),
+        })
+        .where(eq(whatsappMessages.id, incomingMessage.id));
       
       return res.status(200).send('<Response></Response>');
     }
