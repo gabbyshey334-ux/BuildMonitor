@@ -529,7 +529,7 @@ export default function SupplierManagement({ projectId }: SupplierManagementProp
                           purchaseForm.setValue('supplierId', supplier.id);
                         }}
                         size="sm"
-                        className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300 text-xs px-3 py-1"
+                        className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine text-xs px-3 py-1"
                       >
                         Purchase
                       </Button>
@@ -637,7 +637,7 @@ export default function SupplierManagement({ projectId }: SupplierManagementProp
                               </td>
                               <td className="py-2 text-sm text-white">{entry.item}</td>
                               <td className="py-2 text-sm text-muted-foreground">{entry.category}</td>
-                              <td className="py-2 text-sm text-blue-400 font-medium">
+                              <td className="py-2 text-sm text-ocean-pine font-medium">
                                 {formatCurrency(entry.amount)}
                               </td>
                               <td className="py-2 text-sm text-muted-foreground">
@@ -668,7 +668,7 @@ export default function SupplierManagement({ projectId }: SupplierManagementProp
                     </div>
                     <div>
                       <span className="text-muted-foreground">Daily Ledger Entries:</span>
-                      <span className="block text-blue-400 font-medium">
+                      <span className="block text-ocean-pine font-medium">
                         {formatCurrency(
                           supplierHistory.ledgerEntries.reduce((sum: number, e: any) => sum + parseFloat(e.amount), 0)
                         )}

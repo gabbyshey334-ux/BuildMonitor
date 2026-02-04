@@ -278,7 +278,7 @@ export default function AddExpenseDialog({
                               className="w-3 h-3 rounded-full"
                               style={{
                                 backgroundColor:
-                                  category.colorHex || "#3B82F6",
+                                  category.colorHex || "#218598",
                               }}
                             />
                             {category.name}

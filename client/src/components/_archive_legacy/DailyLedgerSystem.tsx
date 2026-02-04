@@ -1076,7 +1076,7 @@ export default function DailyLedgerSystem({ projectId, userRole = "Manager" }: D
                             setEditingLedger(ledger);
                             setIsEditDialogOpen(true);
                           }}
-                          className="border-blue-600/40 text-blue-400 hover:bg-blue-600/20"
+                          className="border-ocean-pine/30 text-ocean-pine hover:bg-ocean-pine/15"
                         >
                           <Edit2 className="w-4 h-4" />
                         </Button>
@@ -1103,7 +1103,7 @@ export default function DailyLedgerSystem({ projectId, userRole = "Manager" }: D
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Supplier Spent</span>
-                      <span className="text-sm font-medium text-blue-400">
+                      <span className="text-sm font-medium text-ocean-pine">
                         -{formatCurrency(ledger.totalSupplierSpent)}
                       </span>
                     </div>
@@ -1130,7 +1130,7 @@ export default function DailyLedgerSystem({ projectId, userRole = "Manager" }: D
                             </span>
                           )}
                           {line.paymentMethod === 'supplier' && (
-                            <span className="text-blue-300 ml-1">(Supplier)</span>
+                            <span className="text-ocean-pine/90 ml-1">(Supplier)</span>
                           )}
                         </div>
                       ))}

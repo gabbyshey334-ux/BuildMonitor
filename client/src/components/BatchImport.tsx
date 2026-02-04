@@ -207,7 +207,7 @@ export default function BatchImport({
   const getStatusIcon = () => {
     switch (importProgress.status) {
       case 'importing':
-        return <Upload className="h-6 w-6 text-blue-500 animate-pulse" />;
+        return <Upload className="h-6 w-6 text-ocean-pine animate-pulse" />;
       case 'complete':
         return <CheckCircle className="h-6 w-6 text-green-500" />;
       case 'error':

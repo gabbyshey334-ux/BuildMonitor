@@ -70,7 +70,7 @@ export default function Features() {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
             >
-              <Card className="bg-card border-border hover:shadow-lg hover:shadow-blue-500/10 transition-all h-full">
+              <Card className="bg-card border-border hover:shadow-lg hover:shadow-ocean-pine/10 transition-all h-full">
                 <CardContent className="p-6">
                   <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4">
                     <feature.icon className="w-6 h-6 text-primary" />

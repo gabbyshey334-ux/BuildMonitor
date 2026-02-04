@@ -155,7 +155,7 @@ export default function DataPreview({
               <div className="text-sm text-muted-foreground">Errors</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-500">{mappedFields.length}</div>
+              <div className="text-2xl font-heading font-bold text-ocean-pine">{mappedFields.length}</div>
               <div className="text-sm text-muted-foreground">Mapped Fields</div>
             </div>
           </div>

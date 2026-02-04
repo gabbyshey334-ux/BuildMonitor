@@ -34,12 +34,23 @@ export default function Navigation() {
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <div className="bg-primary p-1.5 rounded-lg">
-              <Hammer className="w-6 h-6 text-primary-foreground" />
+            <div className="relative flex items-center gap-2">
+              <img
+                src="/images/logo/jengatrack-logo-primary.svg"
+                alt="JengaTrack"
+                className="h-10 w-auto"
+                onError={(e) => {
+                  // Fallback to icon + text if logo asset isn't present yet
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
+              <div className="bg-ocean-pine p-1.5 rounded-lg">
+                <Hammer className="w-6 h-6 text-white" />
+              </div>
+              <span className="text-2xl font-heading font-bold text-foreground tracking-tight">
+                JengaTrack
+              </span>
             </div>
-            <span className="text-2xl font-bold text-foreground tracking-tight">
-              JengaTrack
-            </span>
           </Link>
 
           {/* Desktop Nav */}

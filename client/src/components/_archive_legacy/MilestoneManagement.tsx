@@ -134,7 +134,7 @@ export default function MilestoneManagement({ projectId }: MilestoneManagementPr
     const daysRemaining = getDaysRemaining(milestone.targetDate.toString());
     if (daysRemaining < 0) return 'text-red-400';
     if (daysRemaining <= 7) return 'text-yellow-400';
-    return 'text-blue-400';
+    return 'text-ocean-pine';
   };
 
   const getStatusText = (milestone: Milestone) => {
@@ -237,7 +237,7 @@ export default function MilestoneManagement({ projectId }: MilestoneManagementPr
 
           <Dialog open={isProgressDialogOpen} onOpenChange={setIsProgressDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300">
+              <Button className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine">
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Update Progress
               </Button>
@@ -408,7 +408,7 @@ export default function MilestoneManagement({ projectId }: MilestoneManagementPr
                               setIsProgressDialogOpen(true);
                             }}
                             size="sm"
-                            className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300 text-xs px-3 py-1"
+                            className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine text-xs px-3 py-1"
                           >
                             Update
                           </Button>
@@ -474,7 +474,7 @@ export default function MilestoneManagement({ projectId }: MilestoneManagementPr
                               Completed
                             </span>
                           ) : (
-                            <span className="status-pill bg-blue-600/20 border-blue-600/40 text-blue-300">
+                            <span className="status-pill bg-ocean-pine/15 border-ocean-pine/30 text-ocean-pine">
                               {daysRemaining >= 0 ? `${daysRemaining}d left` : 'On track'}
                             </span>
                           )}

@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,50 +5,58 @@
 :root {
   /* Light Mode (Default) */
   --background: 0 0% 100%;
-  --foreground: 222.2 84% 4.9%;
+  /* graphite */
+  --foreground: 165 4% 19%;
 
   --card: 0 0% 100%;
-  --card-foreground: 222.2 84% 4.9%;
+  --card-foreground: var(--foreground);
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222.2 84% 4.9%;
+  --popover-foreground: var(--foreground);
 
-  --primary: 221.2 83.2% 53.3%;
-  --primary-foreground: 210 40% 98%;
+  /* ocean-pine */
+  --primary: 189 64% 36%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 189 64% 32%;
 
-  --secondary: 210 40% 96.1%;
-  --secondary-foreground: 222.2 47.4% 11.2%;
+  /* ash-gray */
+  --secondary: 0 0% 88%;
+  --secondary-foreground: var(--foreground);
 
-  --muted: 210 40% 96.1%;
-  --muted-foreground: 215.4 16.3% 46.9%;
+  --muted: 0 0% 96%;
+  --muted-foreground: 165 4% 34%;
 
-  --accent: 210 40% 96.1%;
-  --accent-foreground: 222.2 47.4% 11.2%;
+  /* aqua-breeze */
+  --accent: 179 41% 59%;
+  --accent-foreground: 165 4% 12%;
 
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 214.3 31.8% 91.4%;
-  --input: 214.3 31.8% 91.4%;
-  --ring: 221.2 83.2% 53.3%;
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: var(--primary);
 
-  --chart-1: 221.2 83.2% 53.3%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
+  /* Chart palette (Brand) */
+  --chart-1: 85 50% 54%;  /* fresh-fern */
+  --chart-2: 189 64% 36%; /* ocean-pine */
+  --chart-3: 87 43% 70%;  /* moss-green */
+  --chart-4: 179 41% 59%; /* aqua-breeze */
+  --chart-5: 165 4% 19%;  /* graphite */
 
-  --sidebar: 210 40% 96.1%;
-  --sidebar-foreground: 222.2 47.4% 11.2%;
-  --sidebar-primary: 221.2 83.2% 53.3%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 40% 96.1%;
-  --sidebar-accent-foreground: 222.2 47.4% 11.2%;
-  --sidebar-border: 214.3 31.8% 91.4%;
-  --sidebar-ring: 221.2 83.2% 53.3%;
+  --sidebar: 0 0% 96%;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 
   --radius: 0.5rem;
-  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-heading: 'League Spartan';
+  --font-body: 'Nunito Sans';
+  --font-sans: var(--font-body), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Mobile optimizations */
@@ -134,48 +141,51 @@
 }
 
 .dark {
-  --background: 222.2 84% 4.9%;
+  /* graphite/dark */
+  --background: 165 4% 12%;
   --foreground: 210 40% 98%;
 
-  --card: 222.2 84% 4.9%;
+  --card: 165 4% 14%;
   --card-foreground: 210 40% 98%;
 
-  --popover: 222.2 84% 4.9%;
+  --popover: 165 4% 14%;
   --popover-foreground: 210 40% 98%;
 
-  --primary: 217.2 91.2% 59.8%;
-  --primary-foreground: 222.2 47.4% 11.2%;
+  /* ocean-pine brightened for dark */
+  --primary: 189 64% 46%;
+  --primary-foreground: 0 0% 100%;
+  --primary-hover: 189 64% 40%;
 
-  --secondary: 217.2 32.6% 17.5%;
+  --secondary: 165 4% 18%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 217.2 32.6% 17.5%;
-  --muted-foreground: 215 20.2% 65.1%;
+  --muted: 165 4% 18%;
+  --muted-foreground: 0 0% 80%;
 
-  --accent: 217.2 32.6% 17.5%;
-  --accent-foreground: 210 40% 98%;
+  --accent: 179 41% 30%;
+  --accent-foreground: 0 0% 100%;
 
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 210 40% 98%;
 
-  --border: 217.2 32.6% 17.5%;
-  --input: 217.2 32.6% 17.5%;
-  --ring: 224.3 76.3% 48%;
+  --border: 165 4% 22%;
+  --input: 165 4% 22%;
+  --ring: var(--primary);
 
-  --chart-1: 217.2 91.2% 59.8%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
+  --chart-1: 85 50% 54%;
+  --chart-2: 189 64% 46%;
+  --chart-3: 87 43% 70%;
+  --chart-4: 179 41% 59%;
+  --chart-5: 0 0% 90%;
 
-  --sidebar: 217.2 32.6% 17.5%;
+  --sidebar: 165 4% 16%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-primary: 217.2 91.2% 59.8%;
-  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
-  --sidebar-accent: 217.2 32.6% 17.5%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-border: 217.2 32.6% 17.5%;
-  --sidebar-ring: 224.3 76.3% 48%;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @layer base {
@@ -184,8 +194,12 @@
   }
   
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground font-body antialiased;
     min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading;
   }
 }
 
@@ -199,7 +213,7 @@
   }
   
   .btn-brand:hover {
-    background: hsl(43, 94%, 50%);
+    background: hsl(var(--primary-hover));
   }
   
   .btn-secondary {
@@ -298,6 +312,6 @@
   }
   
   .status-complete {
-    @apply bg-blue-600/20 border-blue-600/40 text-blue-300;
+    @apply bg-ocean-pine/20 border-ocean-pine/40 text-ocean-pine;
   }
 }

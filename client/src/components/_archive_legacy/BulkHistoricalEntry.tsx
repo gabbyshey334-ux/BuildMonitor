@@ -639,7 +639,7 @@ export default function BulkHistoricalEntry({ projectId }: BulkHistoricalEntryPr
                   variant="outline"
                   size="sm"
                   onClick={() => setIsPhaseAssignmentOpen(true)}
-                  className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300"
+                  className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine"
                   data-testid="button-assign-phases"
                 >
                   <Flag className="w-4 h-4 mr-2" />
@@ -740,7 +740,7 @@ export default function BulkHistoricalEntry({ projectId }: BulkHistoricalEntryPr
                         )}
                       </td>
                       <td className="py-3 px-2 text-sm">
-                        <span className="px-2 py-1 rounded text-xs bg-blue-600/20 text-blue-300">
+                        <span className="px-2 py-1 rounded text-xs bg-ocean-pine/15 text-ocean-pine">
                           {phases.find(p => p.id === expense.phaseId)?.name || 'Unknown'}
                         </span>
                       </td>

@@ -43,17 +43,22 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-background/90 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-50 bg-brand-gradient text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
           {/* Brand Section */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary rounded-xl flex items-center justify-center font-bold text-primary-foreground shadow-lg">
-              CM
-            </div>
+            <img
+              src="/images/logo/jengatrack-icon.svg"
+              alt="JengaTrack"
+              className="w-8 h-8 sm:w-10 sm:h-10"
+              onError={(e) => {
+                (e.currentTarget as HTMLImageElement).style.display = "none";
+              }}
+            />
             <div>
-              <h1 className="text-sm sm:text-lg font-bold text-foreground">JengaTrack</h1>
-              <p className="text-xs text-muted-foreground hidden sm:block">Enhanced project management system</p>
+              <h1 className="text-sm sm:text-lg font-heading font-bold text-white">JengaTrack</h1>
+              <p className="text-xs text-white/80 hidden sm:block font-body">Track budgets. Stay on schedule.</p>
             </div>
           </div>
 
@@ -65,13 +70,13 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
                 variant="ghost"
                 size="sm"
                 onClick={() => setIsSettingsOpen(true)}
-                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                className="h-8 w-8 p-0 text-white/80 hover:text-white hover:bg-white/10"
                 data-testid="button-settings"
               >
                 <Settings className="w-4 h-4" />
               </Button>
               <Select value={role} onValueChange={(value: 'owner' | 'manager') => onRoleChange(value)}>
-                <SelectTrigger className="w-[120px] h-8 bg-card border-border text-foreground">
+                <SelectTrigger className="w-[120px] h-8 bg-white/10 border-white/20 text-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -82,7 +87,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
             </div>
             
             {user && (
-              <div className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-full">
+              <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full">
                 {(user as any)?.profileImageUrl && (
                   <img 
                     src={(user as any).profileImageUrl} 
@@ -90,7 +95,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
                     className="w-6 h-6 rounded-full object-cover"
                   />
                 )}
-                <span className="text-sm text-foreground">
+                <span className="text-sm text-white font-body">
                   {(user as any)?.firstName || (user as any)?.email || 'User'}
                 </span>
               </div>
@@ -98,7 +103,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
 
             <Button
               onClick={handleExportData}
-              className="btn-brand text-sm"
+              className="bg-white text-ocean-pine hover:bg-ash-gray font-heading font-semibold text-sm"
               data-testid="button-export-data"
             >
               <Download className="w-4 h-4 mr-2" />
@@ -109,7 +114,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
               onClick={handleReset}
               variant="outline"
               size="sm"
-              className="btn-secondary"
+              className="border-white/30 text-white hover:bg-white/10"
               title="Reset demo data"
             >
               <RefreshCw className="w-4 h-4" />
@@ -119,7 +124,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
               onClick={handleLogout}
               variant="outline" 
               size="sm"
-              className="btn-ghost"
+              className="border-white/30 text-white hover:bg-white/10"
             >
               <LogOut className="w-4 h-4" />
             </Button>

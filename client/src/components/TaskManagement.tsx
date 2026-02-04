@@ -433,7 +433,7 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
                             size="sm"
                             className={task.completed 
                               ? "bg-green-600/20 hover:bg-green-600/30 border-green-600/40 text-green-300"
-                              : "bg-blue-600/20 hover:bg-blue-600/30 border-blue-600/40 text-blue-300"
+                              : "bg-ocean-pine/15 hover:bg-ocean-pine/20 border-ocean-pine/30 text-ocean-pine"
                             }
                             disabled={updateTaskMutation.isPending}
                           >
@@ -450,7 +450,7 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
                               Completed by Manager
                             </span>
                           ) : (
-                            <span className="text-blue-300 flex items-center gap-2">
+                            <span className="text-ocean-pine flex items-center gap-2">
                               <Clock className="w-4 h-4" />
                               Assigned to Manager
                             </span>

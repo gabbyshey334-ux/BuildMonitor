@@ -183,7 +183,7 @@ export default function ExcelUpload({
   // Get status icon
   const getStatusIcon = () => {
     if (fileState.isProcessing) {
-      return <Upload className="h-8 w-8 text-blue-500 animate-pulse" />;
+      return <Upload className="h-8 w-8 text-ocean-pine animate-pulse" />;
     }
     if (fileState.isProcessed) {
       return <CheckCircle className="h-8 w-8 text-green-500" />;
@@ -211,7 +211,7 @@ export default function ExcelUpload({
   // Get status color classes
   const getStatusColors = () => {
     if (fileState.isProcessing) {
-      return "border-blue-300 bg-blue-50 dark:bg-blue-950/20";
+      return "border-ocean-pine/30 bg-ocean-pine/5 dark:bg-ocean-pine/10";
     }
     if (fileState.isProcessed) {
       return "border-green-300 bg-green-50 dark:bg-green-950/20";

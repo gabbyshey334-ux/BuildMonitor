@@ -11,6 +11,20 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       colors: {
+        // ============================================================================
+        // JengaTrack Brand Palette (Official)
+        // ============================================================================
+        "fresh-fern": "#93C54E",
+        "ocean-pine": "#218598",
+        graphite: "#2F3332",
+        "ash-gray": "#E0E0E0",
+        "moss-green": "#B4D68C",
+        "aqua-breeze": "#6EC1C0",
+
+        // Gradient stops
+        "brand-primary-start": "#93C54E",
+        "brand-primary-end": "#218598",
+
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -62,8 +76,15 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      backgroundImage: {
+        "brand-gradient": "linear-gradient(135deg, #93C54E 0%, #218598 100%)",
+        "brand-gradient-dark": "linear-gradient(135deg, #2F3332 0%, #000000 100%)",
+        "brand-gradient-light": "linear-gradient(135deg, #FFFFFF 0%, #E0E0E0 100%)",
+      },
       fontFamily: {
         sans: ["var(--font-sans)"],
+        heading: ["var(--font-heading)", "system-ui", "sans-serif"],
+        body: ["var(--font-body)", "system-ui", "sans-serif"],
       },
       keyframes: {
         "accordion-down": {

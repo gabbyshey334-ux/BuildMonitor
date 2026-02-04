@@ -112,7 +112,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
 
   const getPriorityBadge = (priority: string) => {
     const colors = {
-      low: 'bg-blue-600/20 text-blue-300 border-blue-600/40',
+      low: 'bg-ocean-pine/15 text-ocean-pine border-ocean-pine/30',
       medium: 'bg-yellow-600/20 text-yellow-300 border-yellow-600/40',
       high: 'bg-red-600/20 text-red-300 border-red-600/40',
     };
@@ -128,24 +128,24 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
       {/* Budget Overview Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Budget Card */}
-        <Card className="card-glass">
+        <Card className="bg-card border-l-4 border-fresh-fern shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-sm font-heading font-semibold text-graphite">
               Total Budget
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-brand" />
+            <DollarSign className="h-4 w-4 text-ocean-pine" />
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-8 w-32" />
             ) : dashboardSummary ? (
               <>
-            <div className="text-2xl font-bold text-white">
+                <div className="text-2xl font-heading font-bold text-ocean-pine">
                   {formatCurrency(dashboardSummary.budget)}
-            </div>
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {dashboardSummary.projectName}
-            </p>
+                </p>
               </>
             ) : (
               <div className="text-sm text-red-400">Error loading</div>
@@ -154,24 +154,24 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
         </Card>
 
         {/* Total Spent Card */}
-        <Card className="card-glass">
+        <Card className="bg-card border-l-4 border-ocean-pine shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-sm font-heading font-semibold text-graphite">
               Total Spent
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-yellow-500" />
+            <TrendingUp className="h-4 w-4 text-fresh-fern" />
           </CardHeader>
           <CardContent>
             {summaryLoading ? (
               <Skeleton className="h-8 w-32" />
             ) : dashboardSummary ? (
               <>
-            <div className="text-2xl font-bold text-white">
+                <div className="text-2xl font-heading font-bold text-fresh-fern">
                   {formatCurrency(dashboardSummary.totalSpent)}
-            </div>
-                <p className={`text-xs mt-1 ${getBudgetColor(dashboardSummary.percentUsed)}`}>
+                </div>
+                <p className={`text-xs mt-1 font-body ${getBudgetColor(dashboardSummary.percentUsed)}`}>
                   {dashboardSummary.percentUsed.toFixed(1)}% of budget used
-            </p>
+                </p>
               </>
             ) : (
               <div className="text-sm text-red-400">Error loading</div>
@@ -180,9 +180,9 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
         </Card>
 
         {/* Remaining Balance Card */}
-        <Card className="card-glass">
+        <Card className="bg-ash-gray/60 border-l-4 border-graphite shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="text-sm font-heading font-semibold text-graphite">
               Remaining Balance
             </CardTitle>
             {dashboardSummary && dashboardSummary.percentUsed >= 80 ? (
@@ -196,9 +196,9 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
               <Skeleton className="h-8 w-32" />
             ) : dashboardSummary ? (
               <>
-                <div className={`text-2xl font-bold ${getBudgetColor(dashboardSummary.percentUsed)}`}>
+                <div className={`text-2xl font-heading font-bold ${getBudgetColor(dashboardSummary.percentUsed)}`}>
                   {formatCurrency(dashboardSummary.remaining)}
-            </div>
+                </div>
                 {dashboardSummary.percentUsed >= 90 ? (
                   <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
@@ -257,7 +257,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 <CardTitle className="text-lg font-bold text-white">Recent Expenses</CardTitle>
                 <Button 
                   variant="link" 
-                  className="text-brand hover:text-brand/80 p-0"
+                  className="text-ocean-pine hover:text-ocean-pine/80 p-0 font-heading font-semibold"
                   onClick={() => onTabChange?.('financials')}
                 >
                   View All <ExternalLink className="w-3 h-3 ml-1" />
@@ -293,9 +293,9 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                             <Badge 
                               className="text-xs px-2 py-0" 
                               style={{ 
-                                backgroundColor: `${expense.categoryColor || '#3B82F6'}20`,
-                                color: expense.categoryColor || '#3B82F6',
-                                borderColor: `${expense.categoryColor || '#3B82F6'}40`
+                                backgroundColor: `${expense.categoryColor || '#218598'}20`,
+                                color: expense.categoryColor || '#218598',
+                                borderColor: `${expense.categoryColor || '#218598'}40`
                               }}
                             >
                               <Tag className="w-3 h-3 mr-1" />
@@ -341,7 +341,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 <CardTitle className="text-lg font-bold text-white">Active Tasks</CardTitle>
                 <Button 
                   variant="link" 
-                  className="text-brand hover:text-brand/80 p-0"
+                  className="text-ocean-pine hover:text-ocean-pine/80 p-0 font-heading font-semibold"
                   onClick={() => onTabChange?.('tasks')}
                 >
                   View All <ExternalLink className="w-3 h-3 ml-1" />
@@ -394,7 +394,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
           </Card>
 
           {/* Quick Actions - WhatsApp Info */}
-          <Card className="card-glass bg-gradient-to-br from-green-600/10 to-blue-600/10 border-green-600/30">
+          <Card className="card-glass bg-gradient-to-br from-fresh-fern/10 to-ocean-pine/10 border-fresh-fern/30">
             <CardHeader>
               <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-green-400" />
@@ -415,7 +415,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 <p className="text-xs text-muted-foreground">Send a message like:</p>
                 <div className="bg-white/5 rounded-lg p-3 space-y-1.5">
                   <p className="text-xs text-green-300">💬 "spent 50000 on cement"</p>
-                  <p className="text-xs text-blue-300">💬 "task: inspect foundation"</p>
+                  <p className="text-xs text-ocean-pine/90">💬 "task: inspect foundation"</p>
                   <p className="text-xs text-yellow-300">💬 "set budget 2000000"</p>
                 </div>
               </div>

@@ -301,7 +301,7 @@ export default function InventoryManagement({ projectId }: InventoryManagementPr
 
           <Dialog open={isUsageDialogOpen} onOpenChange={setIsUsageDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300">
+              <Button className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine">
                 <Edit className="w-4 h-4 mr-2" />
                 Log Usage
               </Button>
@@ -442,7 +442,7 @@ export default function InventoryManagement({ projectId }: InventoryManagementPr
                           <div key={idx} className="flex justify-between items-center py-2 border-b border-white/10 last:border-0">
                             <span className="text-white text-sm">{item.item}</span>
                             <div className="text-right">
-                              <div className="text-blue-400 font-medium text-sm">
+                              <div className="text-ocean-pine font-medium text-sm">
                                 {item.totalRemaining} / {item.totalQuantity}
                               </div>
                               <div className="text-xs text-muted-foreground">
@@ -471,7 +471,7 @@ export default function InventoryManagement({ projectId }: InventoryManagementPr
                       <div className="text-sm text-muted-foreground">Hardware Items</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-400">
+                      <div className="text-2xl font-heading font-bold text-ocean-pine">
                         {inventoryAnalytics.onSiteItems.length}
                       </div>
                       <div className="text-sm text-muted-foreground">On-Site Items</div>
@@ -575,7 +575,7 @@ export default function InventoryManagement({ projectId }: InventoryManagementPr
                                 setIsUsageDialogOpen(true);
                               }}
                               size="sm"
-                              className="bg-blue-600/20 hover:bg-blue-600/30 border border-blue-600/40 text-blue-300 text-xs px-2 py-1"
+                              className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border border-ocean-pine/30 text-ocean-pine text-xs px-2 py-1"
                             >
                               Use
                             </Button>

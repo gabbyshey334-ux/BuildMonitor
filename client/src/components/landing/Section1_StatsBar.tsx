@@ -37,7 +37,7 @@ export default function StatsBar() {
   ];
 
   return (
-    <section className="py-12 bg-slate-800/50 border-y border-border">
+    <section className="py-12 bg-gradient-to-b from-background to-ash-gray/40 border-y border-border">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
           {stats.map((stat, index) => (
@@ -50,7 +50,7 @@ export default function StatsBar() {
               className="text-center"
             >
               <div className="text-4xl mb-2">{stat.icon}</div>
-              <div className="text-3xl lg:text-4xl font-bold text-blue-400 mb-2">
+              <div className="text-3xl lg:text-4xl font-heading font-bold text-ocean-pine mb-2">
                 <AnimatedCounter end={stat.value} />
                 {stat.suffix}
               </div>

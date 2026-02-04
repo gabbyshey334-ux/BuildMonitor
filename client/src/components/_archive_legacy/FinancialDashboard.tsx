@@ -166,7 +166,7 @@ export default function FinancialDashboard({ projectId, userRole = 'owner' }: Fi
       case 'materials':
         return 'bg-brand';
       case 'labor':
-        return 'bg-blue-500';
+        return 'bg-ocean-pine';
       case 'transport':
         return 'bg-green-500';
       case 'food':
@@ -338,7 +338,7 @@ export default function FinancialDashboard({ projectId, userRole = 'owner' }: Fi
                   </Form>
                 </DialogContent>
               </Dialog>
-              <Button variant="outline" className="bg-blue-600/20 hover:bg-blue-600/30 border-blue-600/40 text-blue-300">
+              <Button variant="outline" className="bg-ocean-pine/15 hover:bg-ocean-pine/20 border-ocean-pine/30 text-ocean-pine">
                 <Plus className="w-4 h-4 mr-2" />
                 Export Report
               </Button>
@@ -447,7 +447,7 @@ export default function FinancialDashboard({ projectId, userRole = 'owner' }: Fi
             <div className="text-3xl font-bold text-white">
               {analytics ? formatCurrency(analytics.totalSupplierSpent) : 'Loading...'}
             </div>
-            <p className="text-sm text-blue-400 mt-1">
+            <p className="text-sm text-ocean-pine mt-1">
               <i className="fas fa-handshake mr-1"></i>Via suppliers
             </p>
           </CardContent>
