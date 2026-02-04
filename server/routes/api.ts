@@ -602,25 +602,43 @@ router.get('/projects', requireAuth, async (req: Request, res: Response) => {
 router.post('/projects', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { name, description, budgetAmount, status, startDate, endDate } = req.body;
+    const { name, description, budgetAmount, status } = req.body;
 
-    console.log('[Create Project] Request body:', { name, description, budgetAmount, status, startDate, endDate });
+    console.log('[Create Project] Request body:', { name, description, budgetAmount, status });
     console.log('[Create Project] User ID:', userId);
 
     // Validate required fields
-    if (!name || name.trim() === '') {
+    if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'Project name is required',
+        message: 'Please provide a project name',
       });
     }
 
+    // Normalize status - ensure it's lowercase and valid
+    const validStatuses = ['active', 'completed', 'paused'];
+    let normalizedStatus = 'active';
+    if (status && typeof status === 'string') {
+      const lowerStatus = status.toLowerCase().trim();
+      if (validStatuses.includes(lowerStatus)) {
+        normalizedStatus = lowerStatus;
+      }
+    }
+
     // Parse budget amount - handle string or number
-    let parsedBudgetAmount: string | null = null;
+    let parsedBudgetAmount = '0';
     if (budgetAmount !== undefined && budgetAmount !== null && budgetAmount !== '') {
-      const budgetNum = typeof budgetAmount === 'string' ? parseFloat(budgetAmount) : budgetAmount;
+      const budgetNum = typeof budgetAmount === 'string' ? parseFloat(budgetAmount) : Number(budgetAmount);
       if (!isNaN(budgetNum) && budgetNum >= 0) {
-        parsedBudgetAmount = budgetNum.toString();
+        // Format as decimal string with 2 decimal places
+        parsedBudgetAmount = budgetNum.toFixed(2);
+      } else if (budgetNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid budget amount',
+          message: 'Budget amount cannot be negative',
+        });
       }
     }
 
@@ -629,13 +647,17 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       userId,
       name: name.trim(),
       description: description?.trim() || null,
-      budgetAmount: parsedBudgetAmount || '0',
-      status: status || 'active',
+      budgetAmount: parsedBudgetAmount,
+      status: normalizedStatus,
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
 
-    console.log('[Create Project] Success - Project created:', project.id);
+    console.log('[Create Project] ✅ Success - Project created:', {
+      id: project.id,
+      name: project.name,
+      userId: project.userId,
+    });
 
     res.status(201).json({
       success: true,
@@ -643,20 +665,38 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       project,
     });
   } catch (error: any) {
-    console.error('[Create Project] Error:', error);
-    console.error('[Create Project] Error stack:', error.stack);
+    console.error('[Create Project] ❌ Error:', error);
+    console.error('[Create Project] Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      stack: error.stack,
+    });
     
-    // Provide more detailed error message
+    // Provide more detailed error message based on error type
     let errorMessage = 'Failed to create project';
+    let statusCode = 500;
+
     if (error.code === '23505') {
+      // Unique constraint violation
       errorMessage = 'A project with this name already exists';
+      statusCode = 409;
+    } else if (error.code === '23503') {
+      // Foreign key constraint violation
+      errorMessage = 'Invalid user account. Please log in again.';
+      statusCode = 400;
+    } else if (error.code === '23502') {
+      // Not null constraint violation
+      errorMessage = 'Missing required fields';
+      statusCode = 400;
     } else if (error.message) {
       errorMessage = error.message;
     }
 
-    res.status(500).json({
+    res.status(statusCode).json({
       success: false,
       error: errorMessage,
+      message: errorMessage,
     });
   }
 });

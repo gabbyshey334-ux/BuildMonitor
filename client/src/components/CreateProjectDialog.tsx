@@ -42,7 +42,7 @@ export default function CreateProjectDialog({
       name: '',
       description: '',
       budget: '0',
-      status: 'Active',
+      status: 'active', // Use lowercase to match database
       startDate: '',
       endDate: '',
     },
@@ -56,9 +56,8 @@ export default function CreateProjectDialog({
         name: data.name?.trim(),
         description: data.description?.trim() || '',
         budgetAmount: data.budget?.toString() || '0',
-        status: (data.status || 'active').toLowerCase(), // Ensure lowercase to match DB
-        startDate: data.startDate || undefined,
-        endDate: data.endDate || undefined,
+        status: (data.status || 'active').toLowerCase().trim(), // Ensure lowercase to match DB
+        // Note: startDate and endDate are not in the database schema, so we don't send them
       };
 
       console.log('[CreateProjectDialog] Sending to API:', projectData);
