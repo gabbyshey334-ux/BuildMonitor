@@ -83,8 +83,8 @@ export default {
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
-        heading: ["var(--font-heading)", "system-ui", "sans-serif"],
-        body: ["var(--font-body)", "system-ui", "sans-serif"],
+        heading: ["League Spartan", "system-ui", "sans-serif"],
+        body: ["Nunito Sans", "system-ui", "sans-serif"], // Using Nunito as Avenir substitute
       },
       keyframes: {
         "accordion-down": {
