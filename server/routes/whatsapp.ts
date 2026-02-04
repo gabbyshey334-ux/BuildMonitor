@@ -58,6 +58,49 @@ const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://jengatrack.app';
 const MAX_DESCRIPTION_LENGTH = 500;
 
 // ============================================================================
+// COMPREHENSIVE LOGGING
+// ============================================================================
+
+interface WhatsAppLog {
+  timestamp: Date;
+  userId?: string;
+  phoneNumber: string;
+  direction: 'inbound' | 'outbound';
+  messageBody?: string;
+  intent?: string;
+  confidence?: number;
+  action?: string;
+  success?: boolean;
+  error?: string;
+  metadata?: Record<string, any>;
+}
+
+const whatsappLogs: WhatsAppLog[] = [];
+
+function logWhatsAppInteraction(log: WhatsAppLog): void {
+  const logEntry = {
+    ...log,
+    timestamp: new Date(),
+  };
+  
+  whatsappLogs.push(logEntry);
+  
+  // Log to console with emoji indicators
+  const emoji = log.success === false ? '❌' : log.success === true ? '✅' : '📱';
+  const direction = log.direction === 'inbound' ? 'IN' : 'OUT';
+  
+  console.log(`${emoji} [WhatsApp ${direction}] ${log.phoneNumber} | Intent: ${log.intent || 'N/A'} | ${log.action || 'Message'}`);
+  
+  if (log.error) {
+    console.error(`   Error: ${log.error}`);
+  }
+  
+  if (log.metadata) {
+    console.log(`   Metadata:`, JSON.stringify(log.metadata, null, 2));
+  }
+}
+
+// ============================================================================
 // WEBHOOK ENDPOINT
 // ============================================================================
 
@@ -66,46 +109,69 @@ const MAX_DESCRIPTION_LENGTH = 500;
  * Main Twilio WhatsApp webhook endpoint
  */
 router.post('/webhook', async (req: Request, res: Response) => {
-  console.log('[WhatsApp Webhook] Received request');
+  const startTime = Date.now();
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  
+  console.log(`[WhatsApp Webhook] ${requestId} - Received request`);
   
   try {
     // 1. Validate incoming webhook data
     const data = twilioWebhookSchema.parse(req.body);
-    console.log(`[WhatsApp Webhook] Message from ${data.From}`);
-    
-    // 2. Extract WhatsApp phone number (remove "whatsapp:" prefix)
     const phoneNumber = data.From.replace('whatsapp:', '');
     const messageBody = data.Body.trim();
     const mediaUrl = data.NumMedia > 0 ? data.MediaUrl0 : undefined;
     
-    // 3. Look up user profile
+    logWhatsAppInteraction({
+      phoneNumber,
+      direction: 'inbound',
+      messageBody,
+      intent: 'pending',
+      action: 'Webhook received',
+      metadata: {
+        requestId,
+        messageSid: data.MessageSid,
+        hasMedia: data.NumMedia > 0,
+        mediaType: data.MediaContentType0,
+      },
+    });
+    
+    // 2. Look up user profile
     const profile = await getUserByWhatsApp(phoneNumber);
     
     if (!profile) {
-      console.log(`[WhatsApp Webhook] User not found: ${phoneNumber}`);
+      console.log(`[WhatsApp Webhook] ${requestId} - User not found: ${phoneNumber}`);
       
-      // Send registration prompt
-      await sendWhatsAppMessage(
-        data.From,
-        `👋 Welcome to JengaTrack!\n\nPlease register at ${DASHBOARD_URL} to get started.\n\nOnce registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`
-      );
+      const welcomeMessage = `👋 Welcome to JengaTrack!\n\n` +
+        `Please register at ${DASHBOARD_URL} to get started.\n\n` +
+        `Once registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`;
       
-      // Log the interaction
+      await sendWhatsAppMessage(data.From, welcomeMessage);
+      
       await logUnregisteredUserMessage(phoneNumber, messageBody, data.MessageSid);
+      
+      logWhatsAppInteraction({
+        phoneNumber,
+        direction: 'outbound',
+        messageBody: welcomeMessage,
+        intent: 'registration_required',
+        action: 'Sent welcome message',
+        success: true,
+        metadata: { requestId },
+      });
       
       return res.status(200).send('<Response></Response>');
     }
     
-    console.log(`[WhatsApp Webhook] User found: ${profile.fullName} (${profile.id})`);
+    console.log(`[WhatsApp Webhook] ${requestId} - User found: ${profile.fullName} (${profile.id})`);
     
-    // 4. Log incoming message
+    // 3. Log incoming message
     const incomingMessage = await logWhatsAppMessage({
       userId: profile.id,
       whatsappMessageId: data.MessageSid || null,
       direction: 'inbound',
       messageBody: messageBody || null,
       mediaUrl: mediaUrl || null,
-      intent: 'pending', // Will be updated after parsing
+      intent: 'pending',
       processed: false,
       aiUsed: false,
       errorMessage: null,
@@ -113,98 +179,183 @@ router.post('/webhook', async (req: Request, res: Response) => {
       processedAt: null,
     });
     
-    console.log(`[WhatsApp Webhook] Message logged: ${incomingMessage.id}`);
+    console.log(`[WhatsApp Webhook] ${requestId} - Message logged: ${incomingMessage.id}`);
     
-    // 5. Parse user intent
+    // 4. Parse user intent
     const parsed = parseIntent(messageBody, mediaUrl);
-    console.log(`[WhatsApp Webhook] Intent detected: ${parsed.intent} (confidence: ${parsed.confidence})`);
+    
+    logWhatsAppInteraction({
+      phoneNumber,
+      userId: profile.id,
+      direction: 'inbound',
+      messageBody,
+      intent: parsed.intent,
+      confidence: parsed.confidence,
+      action: 'Intent parsed',
+      success: true,
+      metadata: {
+        requestId,
+        messageId: incomingMessage.id,
+        parsedData: {
+          amount: parsed.amount,
+          description: parsed.description,
+          title: parsed.title,
+        },
+      },
+    });
     
     // Update message with detected intent
     await db.update(whatsappMessages)
       .set({ intent: parsed.intent })
       .where(eq(whatsappMessages.id, incomingMessage.id));
     
-    // 6. Validate intent and check confidence
+    // 5. Validate intent and check confidence
     if (!isValidIntent(parsed)) {
-      console.log('[WhatsApp Webhook] Invalid intent or missing required fields');
-      await handleUnknown(profile.id, parsed, incomingMessage.id, data.From);
+      console.log(`[WhatsApp Webhook] ${requestId} - Invalid intent or missing required fields`);
+      const reply = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
+      
+      logWhatsAppInteraction({
+        phoneNumber,
+        userId: profile.id,
+        direction: 'outbound',
+        messageBody: reply,
+        intent: 'unknown',
+        action: 'Sent help message',
+        success: true,
+        metadata: { requestId, messageId: incomingMessage.id },
+      });
+      
       return res.status(200).send('<Response></Response>');
     }
     
     if (!meetsConfidenceThreshold(parsed)) {
-      console.log(`[WhatsApp Webhook] Low confidence (${parsed.confidence}), using unknown handler`);
-      await handleUnknown(profile.id, parsed, incomingMessage.id, data.From);
+      console.log(`[WhatsApp Webhook] ${requestId} - Low confidence (${parsed.confidence}), using unknown handler`);
+      const reply = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
+      
+      logWhatsAppInteraction({
+        phoneNumber,
+        userId: profile.id,
+        direction: 'outbound',
+        messageBody: reply,
+        intent: 'unknown',
+        action: 'Sent help message (low confidence)',
+        success: true,
+        metadata: { requestId, messageId: incomingMessage.id, confidence: parsed.confidence },
+      });
+      
       return res.status(200).send('<Response></Response>');
     }
     
-    // 7. Route to appropriate intent handler
+    // 6. Route to appropriate intent handler
     let replyMessage: string;
+    let handlerSuccess = false;
+    let handlerError: string | undefined;
     
-    switch (parsed.intent) {
-      case 'log_expense':
-        replyMessage = await handleLogExpense(profile.id, parsed, data.From);
-        break;
-      
-      case 'create_task':
-        replyMessage = await handleCreateTask(profile.id, parsed, data.From);
-        break;
-      
-      case 'set_budget':
-        replyMessage = await handleSetBudget(profile.id, parsed, data.From);
-        break;
-      
-      case 'query_expenses':
-        replyMessage = await handleQueryExpenses(profile.id, data.From);
-        break;
-      
-      case 'log_image':
-        replyMessage = await handleLogImage(profile.id, parsed, data.From);
-        break;
-      
-      case 'unknown':
-      default:
-        replyMessage = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From);
-        break;
+    try {
+      switch (parsed.intent) {
+        case 'log_expense':
+          replyMessage = await handleLogExpense(profile.id, parsed, data.From, requestId);
+          handlerSuccess = true;
+          break;
+        
+        case 'create_task':
+          replyMessage = await handleCreateTask(profile.id, parsed, data.From, requestId);
+          handlerSuccess = true;
+          break;
+        
+        case 'set_budget':
+          replyMessage = await handleSetBudget(profile.id, parsed, data.From, requestId);
+          handlerSuccess = true;
+          break;
+        
+        case 'query_expenses':
+          replyMessage = await handleQueryExpenses(profile.id, data.From, requestId);
+          handlerSuccess = true;
+          break;
+        
+        case 'log_image':
+          replyMessage = await handleLogImage(profile.id, parsed, data.From, requestId);
+          handlerSuccess = true;
+          break;
+        
+        case 'unknown':
+        default:
+          replyMessage = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
+          handlerSuccess = true;
+          break;
+      }
+    } catch (error: any) {
+      handlerError = error.message || 'Unknown error';
+      console.error(`[WhatsApp Webhook] ${requestId} - Handler error:`, error);
+      replyMessage = `❌ Sorry, something went wrong processing your request. Please try again or contact support at ${DASHBOARD_URL}`;
     }
     
-    // 8. Mark message as processed
+    logWhatsAppInteraction({
+      phoneNumber,
+      userId: profile.id,
+      direction: 'outbound',
+      messageBody: replyMessage,
+      intent: parsed.intent,
+      action: `Handled ${parsed.intent}`,
+      success: handlerSuccess,
+      error: handlerError,
+      metadata: {
+        requestId,
+        messageId: incomingMessage.id,
+        processingTime: Date.now() - startTime,
+      },
+    });
+    
+    // 7. Mark message as processed
     await db.update(whatsappMessages)
       .set({ 
         processed: true, 
-        processedAt: new Date() 
+        processedAt: new Date(),
+        errorMessage: handlerError || null,
       })
       .where(eq(whatsappMessages.id, incomingMessage.id));
     
-    // 9. Log outbound reply
+    // 8. Log outbound reply
     await logWhatsAppMessage({
       userId: profile.id,
-      whatsappMessageId: null, // Twilio generates new SID for outbound
+      whatsappMessageId: null,
       direction: 'outbound',
       messageBody: replyMessage,
       mediaUrl: null,
       intent: 'reply',
       processed: true,
       aiUsed: false,
-      errorMessage: null,
+      errorMessage: handlerError || null,
       receivedAt: new Date(),
       processedAt: new Date(),
     });
     
-    console.log('[WhatsApp Webhook] Request processed successfully');
+    console.log(`[WhatsApp Webhook] ${requestId} - Request processed successfully in ${Date.now() - startTime}ms`);
     
-    // 10. Return TwiML response
+    // 9. Return TwiML response
     return res.status(200).send('<Response></Response>');
     
   } catch (error: any) {
-    console.error('[WhatsApp Webhook] Error:', error);
+    console.error(`[WhatsApp Webhook] Error:`, error);
     
-    // Log error but don't expose internal details to Twilio
+    logWhatsAppInteraction({
+      phoneNumber: req.body?.From?.replace('whatsapp:', '') || 'unknown',
+      direction: 'inbound',
+      action: 'Webhook error',
+      success: false,
+      error: error.message || 'Unknown error',
+      metadata: {
+        requestId,
+        errorType: error.name,
+        stack: error.stack,
+      },
+    });
+    
     if (error.name === 'ZodError') {
       console.error('[WhatsApp Webhook] Validation error:', error.errors);
       return res.status(400).send('<Response></Response>');
     }
     
-    // Send generic error response
     return res.status(500).send('<Response></Response>');
   }
 });
@@ -214,28 +365,25 @@ router.post('/webhook', async (req: Request, res: Response) => {
 // ============================================================================
 
 /**
- * Handle expense logging
- * Inserts expense record into database
+ * Handle expense logging with professional response
  */
 async function handleLogExpense(
   userId: string, 
   parsed: ReturnType<typeof parseIntent>,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleLogExpense] User: ${userId}, Amount: ${parsed.amount}, Description: ${parsed.description}`);
+    console.log(`[handleLogExpense] ${requestId} - User: ${userId}, Amount: ${parsed.amount}, Description: ${parsed.description}`);
     
-    // Get user's default project
     const project = await getUserDefaultProject(userId);
     
     if (!project) {
-      return `❌ No active project found.\n\nPlease create a project in the dashboard first: ${DASHBOARD_URL}`;
+      return `❌ No active project found.\n\nPlease create a project in the dashboard first:\n${DASHBOARD_URL}`;
     }
     
-    // Try to auto-categorize based on description
     const categoryId = await findMatchingCategory(userId, parsed.description || '');
     
-    // Insert expense
     const newExpense: InsertExpense = {
       userId,
       projectId: project.id,
@@ -251,48 +399,66 @@ async function handleLogExpense(
     
     const [expense] = await db.insert(expenses).values(newExpense).returning();
     
-    // Format amount with commas
     const formattedAmount = formatAmount(parsed.amount!, parsed.currency || 'UGX');
-    
-    // Calculate new project total
     const totalSpent = await calculateProjectTotal(project.id);
-    const remaining = parseFloat(project.budgetAmount) - totalSpent;
+    const budget = parseFloat(project.budgetAmount);
+    const remaining = budget - totalSpent;
+    const percentUsed = (totalSpent / budget) * 100;
+    
+    // Get today's spending
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todaySpent = await db.select({
+      total: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+    })
+      .from(expenses)
+      .where(
+        and(
+          eq(expenses.userId, userId),
+          eq(expenses.projectId, project.id),
+          sql`${expenses.expenseDate} >= ${todayStart}`,
+          isNull(expenses.deletedAt)
+        )
+      );
+    
+    const formattedTodaySpent = formatAmount(parseFloat(todaySpent[0].total.toString()), 'UGX');
     const formattedRemaining = formatAmount(remaining, 'UGX');
     
-    console.log(`[handleLogExpense] Expense created: ${expense.id}`);
+    console.log(`[handleLogExpense] ${requestId} - Expense created: ${expense.id}`);
     
-    return `✅ Expense recorded!\n\n` +
-           `📝 ${parsed.description}\n` +
-           `💰 ${formattedAmount}\n` +
+    // Professional response format
+    return `✅ *Expense Logged*\n\n` +
+           `📝 *${parsed.description}*\n` +
+           `💰 *${formattedAmount}*\n` +
            `📊 Project: ${project.name}\n\n` +
-           `💵 Remaining budget: ${formattedRemaining}`;
+           `📈 *Today's Total:* ${formattedTodaySpent}\n` +
+           `💵 *Remaining Budget:* ${formattedRemaining}\n` +
+           `📊 *Budget Used:* ${percentUsed.toFixed(1)}%`;
     
   } catch (error: any) {
-    console.error('[handleLogExpense] Error:', error);
-    return `❌ Failed to log expense. Please try again or contact support.`;
+    console.error(`[handleLogExpense] ${requestId} - Error:`, error);
+    return `❌ Failed to log expense. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
 
 /**
- * Handle task creation
- * Inserts task record into database
+ * Handle task creation with professional response
  */
 async function handleCreateTask(
   userId: string,
   parsed: ReturnType<typeof parseIntent>,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleCreateTask] User: ${userId}, Title: ${parsed.title}`);
+    console.log(`[handleCreateTask] ${requestId} - User: ${userId}, Title: ${parsed.title}`);
     
-    // Get user's default project
     const project = await getUserDefaultProject(userId);
     
     if (!project) {
-      return `❌ No active project found.\n\nPlease create a project in the dashboard first: ${DASHBOARD_URL}`;
+      return `❌ No active project found.\n\nPlease create a project in the dashboard first:\n${DASHBOARD_URL}`;
     }
     
-    // Insert task
     const newTask: InsertTask = {
       userId,
       projectId: project.id,
@@ -308,9 +474,6 @@ async function handleCreateTask(
     
     const [task] = await db.insert(tasks).values(newTask).returning();
     
-    console.log(`[handleCreateTask] Task created: ${task.id}`);
-    
-    // Get pending task count
     const pendingCount = await db.select({ count: sql<number>`count(*)` })
       .from(tasks)
       .where(
@@ -322,38 +485,39 @@ async function handleCreateTask(
         )
       );
     
-    return `✅ Task created!\n\n` +
-           `📋 ${parsed.title}\n` +
+    console.log(`[handleCreateTask] ${requestId} - Task created: ${task.id}`);
+    
+    return `✅ *Task Added*\n\n` +
+           `📋 *${parsed.title}*\n` +
            `📊 Project: ${project.name}\n` +
-           `⚡ Priority: ${parsed.priority || 'medium'}\n\n` +
-           `📝 You have ${pendingCount[0].count} pending tasks.`;
+           `⚡ Priority: ${parsed.priority || 'medium'}\n` +
+           `📝 Status: Pending\n\n` +
+           `📌 You have *${pendingCount[0].count}* pending tasks`;
     
   } catch (error: any) {
-    console.error('[handleCreateTask] Error:', error);
-    return `❌ Failed to create task. Please try again or contact support.`;
+    console.error(`[handleCreateTask] ${requestId} - Error:`, error);
+    return `❌ Failed to create task. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
 
 /**
- * Handle budget setting
- * Updates project budget_amount
+ * Handle budget setting with professional response
  */
 async function handleSetBudget(
   userId: string,
   parsed: ReturnType<typeof parseIntent>,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleSetBudget] User: ${userId}, Amount: ${parsed.amount}`);
+    console.log(`[handleSetBudget] ${requestId} - User: ${userId}, Amount: ${parsed.amount}`);
     
-    // Get user's default project
     const project = await getUserDefaultProject(userId);
     
     if (!project) {
-      return `❌ No active project found.\n\nPlease create a project in the dashboard first: ${DASHBOARD_URL}`;
+      return `❌ No active project found.\n\nPlease create a project in the dashboard first:\n${DASHBOARD_URL}`;
     }
     
-    // Update project budget
     await db.update(projects)
       .set({ 
         budgetAmount: parsed.amount!.toString(),
@@ -362,52 +526,49 @@ async function handleSetBudget(
       .where(eq(projects.id, project.id));
     
     const formattedBudget = formatAmount(parsed.amount!, 'UGX');
-    
-    // Calculate current spending
     const totalSpent = await calculateProjectTotal(project.id);
     const formattedSpent = formatAmount(totalSpent, 'UGX');
     const remaining = parsed.amount! - totalSpent;
     const formattedRemaining = formatAmount(remaining, 'UGX');
+    const percentUsed = (totalSpent / parsed.amount!) * 100;
     
-    console.log(`[handleSetBudget] Budget updated for project: ${project.id}`);
+    console.log(`[handleSetBudget] ${requestId} - Budget updated for project: ${project.id}`);
     
-    return `✅ Budget updated!\n\n` +
+    return `✅ *Budget Updated*\n\n` +
            `📊 Project: ${project.name}\n` +
-           `💰 New budget: ${formattedBudget}\n` +
-           `💵 Already spent: ${formattedSpent}\n` +
-           `💸 Remaining: ${formattedRemaining}`;
+           `💰 *New Budget:* ${formattedBudget}\n` +
+           `💵 *Already Spent:* ${formattedSpent}\n` +
+           `💸 *Remaining:* ${formattedRemaining}\n` +
+           `📊 *Used:* ${percentUsed.toFixed(1)}%`;
     
   } catch (error: any) {
-    console.error('[handleSetBudget] Error:', error);
-    return `❌ Failed to set budget. Please try again or contact support.`;
+    console.error(`[handleSetBudget] ${requestId} - Error:`, error);
+    return `❌ Failed to set budget. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
 
 /**
- * Handle expense queries
- * Returns summary of expenses
+ * Handle expense queries with professional response
  */
 async function handleQueryExpenses(
   userId: string,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleQueryExpenses] User: ${userId}`);
+    console.log(`[handleQueryExpenses] ${requestId} - User: ${userId}`);
     
-    // Get user's default project
     const project = await getUserDefaultProject(userId);
     
     if (!project) {
-      return `❌ No active project found.\n\nPlease create a project in the dashboard first: ${DASHBOARD_URL}`;
+      return `❌ No active project found.\n\nPlease create a project in the dashboard first:\n${DASHBOARD_URL}`;
     }
     
-    // Calculate totals
     const totalSpent = await calculateProjectTotal(project.id);
     const budget = parseFloat(project.budgetAmount);
     const remaining = budget - totalSpent;
     const percentUsed = (totalSpent / budget) * 100;
     
-    // Get expense count
     const expenseCount = await db.select({ count: sql<number>`count(*)` })
       .from(expenses)
       .where(
@@ -418,7 +579,6 @@ async function handleQueryExpenses(
         )
       );
     
-    // Get top categories
     const topCategories = await db.select({
       categoryName: expenseCategories.name,
       total: sql<number>`SUM(CAST(${expenses.amount} AS DECIMAL))`,
@@ -436,17 +596,16 @@ async function handleQueryExpenses(
       .orderBy(desc(sql`SUM(CAST(${expenses.amount} AS DECIMAL))`))
       .limit(3);
     
-    console.log(`[handleQueryExpenses] Total spent: ${totalSpent}`);
+    console.log(`[handleQueryExpenses] ${requestId} - Total spent: ${totalSpent}`);
     
-    // Build response message
-    let message = `📊 *${project.name}* Expense Report\n\n`;
-    message += `💰 Budget: ${formatAmount(budget, 'UGX')}\n`;
-    message += `💵 Spent: ${formatAmount(totalSpent, 'UGX')} (${percentUsed.toFixed(1)}%)\n`;
-    message += `💸 Remaining: ${formatAmount(remaining, 'UGX')}\n`;
-    message += `📝 Total expenses: ${expenseCount[0].count}\n\n`;
+    let message = `📊 *${project.name} - Expense Report*\n\n`;
+    message += `💰 *Budget:* ${formatAmount(budget, 'UGX')}\n`;
+    message += `💵 *Spent:* ${formatAmount(totalSpent, 'UGX')} (${percentUsed.toFixed(1)}%)\n`;
+    message += `💸 *Remaining:* ${formatAmount(remaining, 'UGX')}\n`;
+    message += `📝 *Total Expenses:* ${expenseCount[0].count}\n\n`;
     
     if (topCategories.length > 0) {
-      message += `🔝 Top Categories:\n`;
+      message += `🔝 *Top Categories:*\n`;
       topCategories.forEach((cat, idx) => {
         const catName = cat.categoryName || 'Uncategorized';
         const catAmount = formatAmount(parseFloat(cat.total.toString()), 'UGX');
@@ -454,50 +613,48 @@ async function handleQueryExpenses(
       });
     }
     
-    // Add warning if over budget
     if (remaining < 0) {
       message += `\n⚠️ *Warning:* You're over budget by ${formatAmount(Math.abs(remaining), 'UGX')}!`;
+    } else if (percentUsed >= 80) {
+      message += `\n⚠️ *Warning:* You've used ${percentUsed.toFixed(1)}% of your budget.`;
     }
     
     return message;
     
   } catch (error: any) {
-    console.error('[handleQueryExpenses] Error:', error);
-    return `❌ Failed to retrieve expenses. Please try again or contact support.`;
+    console.error(`[handleQueryExpenses] ${requestId} - Error:`, error);
+    return `❌ Failed to retrieve expenses. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
 
 /**
  * Handle image uploads
- * Stores image metadata
  */
 async function handleLogImage(
   userId: string,
   parsed: ReturnType<typeof parseIntent>,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleLogImage] User: ${userId}, Caption: ${parsed.caption}`);
+    console.log(`[handleLogImage] ${requestId} - User: ${userId}, Caption: ${parsed.caption}`);
     
-    // Get user's default project
     const project = await getUserDefaultProject(userId);
     
     if (!project) {
-      return `❌ No active project found.\n\nPlease create a project in the dashboard first: ${DASHBOARD_URL}`;
+      return `❌ No active project found.\n\nPlease create a project in the dashboard first:\n${DASHBOARD_URL}`;
     }
     
-    // Extract filename from URL
     const fileName = parsed.mediaUrl?.split('/').pop() || 'whatsapp-image.jpg';
     
-    // Insert image record
     const newImage: InsertImage = {
       userId,
       projectId: project.id,
-      expenseId: null, // Can be linked later
+      expenseId: null,
       storagePath: parsed.mediaUrl!,
       fileName: fileName,
-      fileSizeBytes: null, // Unknown from Twilio
-      mimeType: 'image/jpeg', // Assume JPEG
+      fileSizeBytes: null,
+      mimeType: 'image/jpeg',
       caption: parsed.caption || null,
       source: 'whatsapp',
       createdAt: new Date(),
@@ -505,49 +662,49 @@ async function handleLogImage(
     
     const [image] = await db.insert(images).values(newImage).returning();
     
-    console.log(`[handleLogImage] Image created: ${image.id}`);
+    console.log(`[handleLogImage] ${requestId} - Image created: ${image.id}`);
     
-    return `✅ Image received!\n\n` +
-           `📸 ${parsed.caption || 'No caption'}\n` +
+    return `✅ *Image Received*\n\n` +
+           `📸 ${parsed.caption || 'No caption provided'}\n` +
            `📊 Project: ${project.name}\n\n` +
-           `💡 Tip: Send expense amount to link this image to an expense.`;
+           `💡 *Tip:* Send an expense amount to link this image to an expense.\n` +
+           `Example: "spent 50000 on cement"`;
     
   } catch (error: any) {
-    console.error('[handleLogImage] Error:', error);
-    return `❌ Failed to save image. Please try again or contact support.`;
+    console.error(`[handleLogImage] ${requestId} - Error:`, error);
+    return `❌ Failed to save image. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
 
 /**
- * Handle unknown intents
- * Fallback when intent cannot be determined or confidence is low
+ * Handle unknown intents with helpful response
  */
 async function handleUnknown(
   userId: string,
   parsed: ReturnType<typeof parseIntent>,
   messageId: string,
-  phoneNumber: string
+  phoneNumber: string,
+  requestId: string
 ): Promise<string> {
   try {
-    console.log(`[handleUnknown] User: ${userId}, Original: ${parsed.originalMessage}`);
-    
-    // TODO: Integrate OpenAI for AI-powered fallback
-    // For now, send helpful instructions
+    console.log(`[handleUnknown] ${requestId} - User: ${userId}, Original: ${parsed.originalMessage}`);
     
     const helpMessage = 
-      `🤖 I didn't quite understand that.\n\n` +
+      `🤖 *I didn't quite understand that.*\n\n` +
       `Here's what I can help with:\n\n` +
       `💰 *Log Expenses:*\n` +
-      `"spent 500 on cement"\n` +
-      `"paid 200 for bricks"\n\n` +
+      `"spent 500000 on cement"\n` +
+      `"paid 200000 for bricks"\n` +
+      `"nimaze 300 ku sand" (Luganda)\n\n` +
       `📋 *Create Tasks:*\n` +
       `"task: inspect foundation"\n` +
       `"todo: buy materials"\n\n` +
       `💵 *Set Budget:*\n` +
-      `"set budget 1000000"\n\n` +
+      `"set budget 5000000"\n\n` +
       `📊 *Check Expenses:*\n` +
       `"how much did I spend?"\n` +
-      `"show expenses"\n\n` +
+      `"show expenses"\n` +
+      `"ssente zmeka" (Luganda)\n\n` +
       `Need help? Visit ${DASHBOARD_URL}`;
     
     await sendWhatsAppMessage(phoneNumber, helpMessage);
@@ -555,7 +712,7 @@ async function handleUnknown(
     return helpMessage;
     
   } catch (error: any) {
-    console.error('[handleUnknown] Error:', error);
+    console.error(`[handleUnknown] ${requestId} - Error:`, error);
     return `❌ Something went wrong. Please try again later.`;
   }
 }
@@ -570,7 +727,7 @@ async function logUnregisteredUserMessage(
 ): Promise<void> {
   try {
     await logWhatsAppMessage({
-      userId: null, // No user yet
+      userId: null,
       whatsappMessageId: messageSid || null,
       direction: 'inbound',
       messageBody: messageBody || null,
@@ -598,7 +755,6 @@ async function findMatchingCategory(userId: string, description: string): Promis
   try {
     const lowerDesc = description.toLowerCase();
     
-    // Get all user categories
     const userCategories = await db.select()
       .from(expenseCategories)
       .where(
@@ -608,7 +764,6 @@ async function findMatchingCategory(userId: string, description: string): Promis
         )
       );
     
-    // Simple keyword matching
     const keywords: Record<string, string[]> = {
       'Materials': ['cement', 'sand', 'bricks', 'steel', 'iron', 'timber', 'wood', 'stone', 'gravel', 'aggregate'],
       'Labor': ['worker', 'labour', 'labor', 'mason', 'carpenter', 'plumber', 'electrician', 'painter', 'wages', 'salary'],
@@ -670,8 +825,35 @@ function formatAmount(amount: number, currency: string): string {
 }
 
 // ============================================================================
+// DEBUG ENDPOINT - Get WhatsApp logs
+// ============================================================================
+
+/**
+ * GET /webhook/debug
+ * Get recent WhatsApp interaction logs
+ */
+router.get('/webhook/debug', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const recentLogs = whatsappLogs.slice(-limit);
+    
+    res.json({
+      success: true,
+      total: whatsappLogs.length,
+      logs: recentLogs,
+    });
+  } catch (error: any) {
+    console.error('[WhatsApp Debug] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
 export default router;
-
+export { whatsappLogs, logWhatsAppInteraction };
