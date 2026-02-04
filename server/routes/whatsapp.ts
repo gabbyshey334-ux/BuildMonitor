@@ -145,7 +145,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
         `Please register at ${DASHBOARD_URL} to get started.\n\n` +
         `Once registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`;
       
-      await sendWhatsAppMessage(data.From, welcomeMessage);
+      console.log(`[WhatsApp Webhook] ${requestId} - Sending welcome message to unregistered user...`);
+      const sendResult = await sendWhatsAppMessage(data.From, welcomeMessage);
+      
+      if (sendResult.success) {
+        console.log(`[WhatsApp Webhook] ${requestId} - ✅ Welcome message sent: ${sendResult.messageSid}`);
+      } else {
+        console.error(`[WhatsApp Webhook] ${requestId} - ❌ Failed to send welcome message:`, sendResult.error);
+      }
       
       await logUnregisteredUserMessage(phoneNumber, messageBody, data.MessageSid);
       
@@ -155,8 +162,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
         messageBody: welcomeMessage,
         intent: 'registration_required',
         action: 'Sent welcome message',
-        success: true,
-        metadata: { requestId },
+        success: sendResult.success,
+        error: sendResult.error,
+        metadata: { requestId, messageSid: sendResult.messageSid },
       });
       
       return res.status(200).send('<Response></Response>');
@@ -252,37 +260,37 @@ router.post('/webhook', async (req: Request, res: Response) => {
     let handlerError: string | undefined;
     
     try {
-      switch (parsed.intent) {
-        case 'log_expense':
+    switch (parsed.intent) {
+      case 'log_expense':
           replyMessage = await handleLogExpense(profile.id, parsed, data.From, requestId);
           handlerSuccess = true;
-          break;
-        
-        case 'create_task':
+        break;
+      
+      case 'create_task':
           replyMessage = await handleCreateTask(profile.id, parsed, data.From, requestId);
           handlerSuccess = true;
-          break;
-        
-        case 'set_budget':
+        break;
+      
+      case 'set_budget':
           replyMessage = await handleSetBudget(profile.id, parsed, data.From, requestId);
           handlerSuccess = true;
-          break;
-        
-        case 'query_expenses':
+        break;
+      
+      case 'query_expenses':
           replyMessage = await handleQueryExpenses(profile.id, data.From, requestId);
           handlerSuccess = true;
-          break;
-        
-        case 'log_image':
+        break;
+      
+      case 'log_image':
           replyMessage = await handleLogImage(profile.id, parsed, data.From, requestId);
           handlerSuccess = true;
-          break;
-        
-        case 'unknown':
-        default:
+        break;
+      
+      case 'unknown':
+      default:
           replyMessage = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
           handlerSuccess = true;
-          break;
+        break;
       }
     } catch (error: any) {
       handlerError = error.message || 'Unknown error';
@@ -306,7 +314,32 @@ router.post('/webhook', async (req: Request, res: Response) => {
       },
     });
     
-    // 7. Mark message as processed
+    // 7. Send reply message via Twilio
+    console.log(`[WhatsApp Webhook] ${requestId} - Sending reply message...`);
+    let messageSent = false;
+    let messageSid: string | null = null;
+    
+    try {
+      const sendResult = await sendWhatsAppMessage(data.From, replyMessage);
+      
+      if (sendResult.success && sendResult.messageSid) {
+        messageSent = true;
+        messageSid = sendResult.messageSid;
+        console.log(`[WhatsApp Webhook] ${requestId} - ✅ Reply sent successfully: ${messageSid}`);
+      } else {
+        console.error(`[WhatsApp Webhook] ${requestId} - ❌ Failed to send reply:`, sendResult.error);
+        handlerError = sendResult.error || 'Failed to send WhatsApp message';
+      }
+    } catch (sendError: any) {
+      console.error(`[WhatsApp Webhook] ${requestId} - ❌ Exception sending reply:`, {
+        error: sendError,
+        message: sendError?.message,
+        stack: sendError?.stack,
+      });
+      handlerError = sendError.message || 'Failed to send WhatsApp message';
+    }
+    
+    // 8. Mark message as processed
     await db.update(whatsappMessages)
       .set({ 
         processed: true, 
@@ -315,15 +348,15 @@ router.post('/webhook', async (req: Request, res: Response) => {
       })
       .where(eq(whatsappMessages.id, incomingMessage.id));
     
-    // 8. Log outbound reply
+    // 9. Log outbound reply
     await logWhatsAppMessage({
       userId: profile.id,
-      whatsappMessageId: null,
+      whatsappMessageId: messageSid || null,
       direction: 'outbound',
       messageBody: replyMessage,
       mediaUrl: null,
       intent: 'reply',
-      processed: true,
+      processed: messageSent,
       aiUsed: false,
       errorMessage: handlerError || null,
       receivedAt: new Date(),
@@ -331,8 +364,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
     });
     
     console.log(`[WhatsApp Webhook] ${requestId} - Request processed successfully in ${Date.now() - startTime}ms`);
+    console.log(`[WhatsApp Webhook] ${requestId} - Reply sent: ${messageSent ? '✅ YES' : '❌ NO'}`);
     
-    // 9. Return TwiML response
+    // 10. Return TwiML response (Twilio expects this even if we send via API)
     return res.status(200).send('<Response></Response>');
     
   } catch (error: any) {
@@ -675,6 +709,188 @@ async function handleLogImage(
     return `❌ Failed to save image. Please try again or contact support at ${DASHBOARD_URL}`;
   }
 }
+
+/**
+ * Handle unknown intents with helpful response
+ */
+async function handleUnknown(
+  userId: string,
+  parsed: ReturnType<typeof parseIntent>,
+  messageId: string,
+  phoneNumber: string,
+  requestId: string
+): Promise<string> {
+  try {
+    console.log(`[handleUnknown] ${requestId} - User: ${userId}, Original: ${parsed.originalMessage}`);
+    
+    const helpMessage = 
+      `🤖 *I didn't quite understand that.*\n\n` +
+      `Here's what I can help with:\n\n` +
+      `💰 *Log Expenses:*\n` +
+      `"spent 500000 on cement"\n` +
+      `"paid 200000 for bricks"\n` +
+      `"nimaze 300 ku sand" (Luganda)\n\n` +
+      `📋 *Create Tasks:*\n` +
+      `"task: inspect foundation"\n` +
+      `"todo: buy materials"\n\n` +
+      `💵 *Set Budget:*\n` +
+      `"set budget 5000000"\n\n` +
+      `📊 *Check Expenses:*\n` +
+      `"how much did I spend?"\n` +
+      `"show expenses"\n` +
+      `"ssente zmeka" (Luganda)\n\n` +
+      `Need help? Visit ${DASHBOARD_URL}`;
+    
+    await sendWhatsAppMessage(phoneNumber, helpMessage);
+    
+    return helpMessage;
+    
+  } catch (error: any) {
+    console.error(`[handleUnknown] ${requestId} - Error:`, error);
+    return `❌ Something went wrong. Please try again later.`;
+  }
+}
+
+/**
+ * Log message from unregistered user
+ */
+async function logUnregisteredUserMessage(
+  phoneNumber: string,
+  messageBody: string,
+  messageSid?: string
+): Promise<void> {
+  try {
+    await logWhatsAppMessage({
+      userId: null,
+      whatsappMessageId: messageSid || null,
+      direction: 'inbound',
+      messageBody: messageBody || null,
+      mediaUrl: null,
+      intent: 'registration_required',
+      processed: true,
+      aiUsed: false,
+      errorMessage: `Unregistered user: ${phoneNumber}`,
+      receivedAt: new Date(),
+      processedAt: new Date(),
+    });
+  } catch (error) {
+    console.error('[logUnregisteredUserMessage] Error:', error);
+  }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Find matching expense category based on description keywords
+ */
+async function findMatchingCategory(userId: string, description: string): Promise<string | null> {
+  try {
+    const lowerDesc = description.toLowerCase();
+    
+    const userCategories = await db.select()
+      .from(expenseCategories)
+      .where(
+        and(
+          eq(expenseCategories.userId, userId),
+          isNull(expenseCategories.deletedAt)
+        )
+      );
+    
+    const keywords: Record<string, string[]> = {
+      'Materials': ['cement', 'sand', 'bricks', 'steel', 'iron', 'timber', 'wood', 'stone', 'gravel', 'aggregate'],
+      'Labor': ['worker', 'labour', 'labor', 'mason', 'carpenter', 'plumber', 'electrician', 'painter', 'wages', 'salary'],
+      'Equipment': ['equipment', 'tools', 'machine', 'excavator', 'mixer', 'generator', 'scaffolding'],
+      'Transport': ['transport', 'delivery', 'fuel', 'petrol', 'diesel', 'lorry', 'truck', 'vehicle'],
+      'Miscellaneous': ['misc', 'other', 'sundry'],
+    };
+    
+    for (const category of userCategories) {
+      const categoryKeywords = keywords[category.name] || [];
+      
+      for (const keyword of categoryKeywords) {
+        if (lowerDesc.includes(keyword)) {
+          return category.id;
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('[findMatchingCategory] Error:', error);
+    return null;
+  }
+}
+
+/**
+ * Calculate total expenses for a project
+ */
+async function calculateProjectTotal(projectId: string): Promise<number> {
+  try {
+    const result = await db.select({
+      total: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+    })
+      .from(expenses)
+      .where(
+        and(
+          eq(expenses.projectId, projectId),
+          isNull(expenses.deletedAt)
+        )
+      );
+    
+    return parseFloat(result[0].total.toString());
+  } catch (error) {
+    console.error('[calculateProjectTotal] Error:', error);
+    return 0;
+  }
+}
+
+/**
+ * Format amount with currency and commas
+ */
+function formatAmount(amount: number, currency: string): string {
+  const formatted = amount.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
+  
+  return `${currency} ${formatted}`;
+}
+
+// ============================================================================
+// DEBUG ENDPOINT - Get WhatsApp logs
+// ============================================================================
+
+/**
+ * GET /webhook/debug
+ * Get recent WhatsApp interaction logs
+ */
+router.get('/webhook/debug', async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 50;
+    const recentLogs = whatsappLogs.slice(-limit);
+    
+    res.json({
+      success: true,
+      total: whatsappLogs.length,
+      logs: recentLogs,
+    });
+  } catch (error: any) {
+    console.error('[WhatsApp Debug] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+export default router;
+export { whatsappLogs, logWhatsAppInteraction };
 
 /**
  * Handle unknown intents with helpful response
