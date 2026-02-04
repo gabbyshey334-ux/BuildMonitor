@@ -288,22 +288,36 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 
     const { createClient } = await import('@supabase/supabase-js');
     
-    // Create a client with anon key for sign-in (signInWithPassword requires anon key)
-    // Then use service role key for admin operations
     const SUPABASE_URL = process.env.SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
     const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.error('[Login] Missing Supabase credentials');
+    if (!SUPABASE_URL) {
+      console.error('[Login] Missing SUPABASE_URL');
       return res.status(500).json({
         success: false,
         error: 'Server configuration error',
-        message: 'Authentication service is not properly configured',
+        message: 'SUPABASE_URL is not configured. Please contact support.',
       });
     }
 
-    // Use anon key for sign-in operation
+    // For server-side authentication, we need the anon key
+    // Service role key is for admin operations, not user authentication
+    if (!SUPABASE_ANON_KEY) {
+      console.error('[Login] Missing SUPABASE_ANON_KEY - required for user authentication');
+      console.error('[Login] Available env vars:', {
+        hasUrl: !!SUPABASE_URL,
+        hasAnonKey: !!SUPABASE_ANON_KEY,
+        hasServiceKey: !!SUPABASE_SERVICE_ROLE_KEY,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'SUPABASE_ANON_KEY is required for authentication but is not configured. Please set it in your environment variables.',
+      });
+    }
+
+    // Create auth client with anon key for user authentication
     const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         autoRefreshToken: false,
@@ -311,13 +325,26 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       },
     });
 
-    const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
-      email,
-      password,
-    });
+    let authData, authError;
+    try {
+      const result = await authClient.auth.signInWithPassword({
+        email,
+        password,
+      });
+      authData = result.data;
+      authError = result.error;
+    } catch (err: any) {
+      console.error('[Login] SignInWithPassword exception:', err);
+      authError = err;
+      authData = null;
+    }
 
     if (authError || !authData.user) {
-      console.error('[Login] Auth error:', authError);
+      console.error('[Login] Auth error:', {
+        message: authError?.message,
+        status: authError?.status,
+        name: authError?.name,
+      });
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials',
@@ -364,7 +391,11 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Login] Error:', error);
+    console.error('[Login] Unexpected error:', {
+      name: error?.name,
+      message: error?.message,
+      stack: error?.stack,
+    });
     
     if (error.name === 'ZodError') {
       return res.status(400).json({
@@ -377,7 +408,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Login failed',
-      message: error.message || 'An error occurred while logging in',
+      message: error.message || 'An error occurred while logging in. Please try again.',
     });
   }
 });
