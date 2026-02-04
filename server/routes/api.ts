@@ -286,15 +286,38 @@ router.post('/auth/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = loginSchema.parse(req.body);
 
-    const { supabase } = await import('../db');
+    const { createClient } = await import('@supabase/supabase-js');
+    
+    // Create a client with anon key for sign-in (signInWithPassword requires anon key)
+    // Then use service role key for admin operations
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error('[Login] Missing Supabase credentials');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Authentication service is not properly configured',
+      });
+    }
+
+    // Use anon key for sign-in operation
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
       email,
       password,
     });
 
     if (authError || !authData.user) {
+      console.error('[Login] Auth error:', authError);
       return res.status(401).json({
         success: false,
         error: 'Invalid credentials',
@@ -302,20 +325,26 @@ router.post('/auth/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Fetch profile from database
+    const userId = authData.user.id;
+    console.log(`[Login] Auth successful for user: ${userId}`);
+
+    // Fetch profile from database using Drizzle
     const [profile] = await db
       .select()
       .from(profiles)
-      .where(and(eq(profiles.id, authData.user.id), isNull(profiles.deletedAt)))
+      .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
       .limit(1);
 
     if (!profile) {
+      console.error(`[Login] Profile not found for user: ${userId}`);
       return res.status(404).json({
         success: false,
         error: 'User not found',
-        message: 'No profile found for this account.',
+        message: 'No profile found for this account. Please contact support.',
       });
     }
+
+    console.log(`[Login] Profile found: ${profile.fullName} (${profile.id})`);
 
     // Create session
     req.session.userId = profile.id;
@@ -348,7 +377,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: 'Login failed',
-      message: 'An error occurred while logging in',
+      message: error.message || 'An error occurred while logging in',
     });
   }
 });
