@@ -4,46 +4,53 @@ This guide will help you create a test user account with sample dashboard data f
 
 ## Prerequisites
 
-- Access to Supabase dashboard
-- Database connection configured (`.env` file with `DATABASE_URL`)
 - Node.js and npm installed
+- `.env` file configured with:
+  - `DATABASE_URL` (Supabase PostgreSQL connection string)
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+- Database schema is up to date (run `npm run db:push` if needed)
 
 ---
 
 ## Step 1: Create Auth User in Supabase
 
-1. Go to your Supabase project dashboard:
-   - URL: `https://supabase.com/dashboard/project/[your-project-id]`
-   - Or navigate via: **Supabase Dashboard** → **Your Project**
+1. Go to your Supabase Dashboard:
+   - URL: https://supabase.com/dashboard/project/[your-project-id]
+   - Or navigate via: **Authentication** → **Users**
 
-2. Navigate to: **Authentication** → **Users**
+2. Click: **"Add user"** → **"Create new user"**
 
-3. Click: **"Add user"** → **"Create new user"**
-
-4. Fill in the form:
+3. Fill in the form:
    - **Email**: `testuser@buildmonitor.local`
    - **Password**: `TestPassword123!`
    - **Auto Confirm User**: ✅ **YES** (important! This allows immediate login)
-   - **Send invitation email**: ❌ No (optional)
+   - **Send confirmation email**: ❌ No (optional, since we're auto-confirming)
 
-5. Click **"Create user"**
+4. Click **"Create user"**
 
-6. **Copy the User ID** (UUID that appears in the user list)
+5. **Copy the User ID** (UUID that appears in the user list)
    - Example: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
-   - This is the UUID you'll need in the next step
+   - You'll need this for Step 2
 
 ---
 
 ## Step 2: Update Seed Script with User ID
 
-1. Open: `server/scripts/seedTestUser.ts`
-
-2. Find line 15:
-   ```typescript
-   const TEST_USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'; // Placeholder UUID
+1. Open the seed script:
+   ```
+   server/scripts/seedTestUser.ts
    ```
 
-3. Replace `'a1b2c3d4-e5f6-7890-abcd-ef1234567890'` with your copied User ID from Step 1
+2. Find this line (around line 20):
+   ```typescript
+   const TEST_USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'; // Placeholder UUID - UPDATE THIS
+   ```
+
+3. Replace the placeholder UUID with the User ID you copied from Step 1:
+   ```typescript
+   const TEST_USER_ID = 'your-actual-user-id-here'; // From Supabase Auth
+   ```
 
 4. Save the file
 
@@ -51,7 +58,7 @@ This guide will help you create a test user account with sample dashboard data f
 
 ## Step 3: Run Seed Script
 
-From the project root directory, run:
+Run the seed script to create the test user profile and sample data:
 
 ```bash
 npm run seed:test
@@ -61,33 +68,36 @@ npm run seed:test
 
 ```
 🌱 Starting test user seed...
+
 ─────────────────────────────────────
 
-📝 Creating test user profile...
-✅ Profile created: [user-id]
-   Email: testuser@buildmonitor.local
+1️⃣  Checking for existing test user profile...
+   ✅ Test user profile already exists
+   User ID: [user-id]
+   Name: Test User
    WhatsApp: +256700000001
 
-📝 Creating test project...
-✅ Project created: [project-id]
-   Name: My Construction Project
-   Budget: 10000000 UGX
+2️⃣  Checking for existing test project...
+   ✅ Test project already exists
+   Project: My Construction Project ([project-id])
 
-📝 Creating expense categories...
-✅ Categories created: 5
-   Categories: Materials, Labor, Equipment, Transport, Miscellaneous
+3️⃣  Checking for existing expense categories...
+   ✅ 5 categories already exist
+      - Materials (#93C54E)
+      - Labor (#218598)
+      - Equipment (#B4D68C)
+      - Transport (#6EC1C0)
+      - Miscellaneous (#2F3332)
 
-📝 Creating sample expenses...
-✅ Expenses created: 7
-   Total amount: 1,850,000 UGX
+4️⃣  Checking for existing sample expenses...
+   ✅ 6 expenses already exist
 
-📝 Creating sample tasks...
-✅ Tasks created: 5
-   Pending: 3, In Progress: 1, Completed: 1
+5️⃣  Checking for existing sample tasks...
+   ✅ 5 tasks already exist
 
 ─────────────────────────────────────
+
 🎉 Test user seed completed successfully!
-─────────────────────────────────────
 
 📋 Test Credentials:
    Email: testuser@buildmonitor.local
@@ -95,16 +105,14 @@ npm run seed:test
    WhatsApp: +256700000001
    User ID: [user-id]
 
-💡 Note: You must create the auth user in Supabase first!
-   Go to: Supabase → Authentication → Users → Add user
-   Then update TEST_USER_ID in this script with the User ID.
+💡 You can now login and see a fully populated dashboard!
 ```
 
 ---
 
 ## Step 4: Login and Verify
 
-1. Start the development server:
+1. Start the development server (if not already running):
    ```bash
    npm run dev
    ```
@@ -117,8 +125,8 @@ npm run seed:test
 
 4. You should see:
    - ✅ Dashboard with budget overview cards
-   - ✅ 7 sample expenses in the Recent Expenses table
-   - ✅ 5 tasks in the Kanban board (3 pending, 1 in progress, 1 completed)
+   - ✅ 6 sample expenses in the Recent Expenses table
+   - ✅ 5 tasks in the Kanban board (Pending, In Progress, Completed)
    - ✅ Expense category breakdown pie chart
    - ✅ Spending over time line chart
    - ✅ Budget progress bar
@@ -127,83 +135,103 @@ npm run seed:test
 
 ## What Gets Created
 
-### Profile
-- User profile with WhatsApp number: `+256700000001`
-- Default currency: `UGX`
-- Preferred language: `en`
+The seed script creates:
 
-### Project
-- **Name**: "My Construction Project"
-- **Budget**: 10,000,000 UGX
-- **Status**: Active
+### 1. User Profile
+- Email: `testuser@buildmonitor.local`
+- WhatsApp: `+256700000001`
+- Full Name: `Test User`
+- Default Currency: `UGX`
+- Preferred Language: `en`
 
-### Expense Categories (5)
-- Materials (Fresh Fern: `#93C54E`)
-- Labor (Ocean Pine: `#218598`)
-- Equipment (Moss Green: `#B4D68C`)
-- Transport (Aqua Breeze: `#6EC1C0`)
-- Miscellaneous (Graphite: `#2F3332`)
+### 2. Project
+- Name: `My Construction Project`
+- Budget: `UGX 10,000,000`
+- Status: `active`
 
-### Sample Expenses (7)
-1. Cement bags - 500,000 UGX (Materials, WhatsApp)
-2. Construction workers wages - 300,000 UGX (Labor, Dashboard)
-3. Sand delivery - 150,000 UGX (Materials, WhatsApp)
-4. Truck rental - 50,000 UGX (Transport, WhatsApp)
-5. Bricks - 200,000 UGX (Materials, Dashboard)
-6. Generator rental - 250,000 UGX (Equipment, WhatsApp)
-7. Masonry work - 400,000 UGX (Labor, Dashboard)
+### 3. Expense Categories (5)
+- **Materials** - Fresh Fern (#93C54E)
+- **Labor** - Ocean Pine (#218598)
+- **Equipment** - Moss Green (#B4D68C)
+- **Transport** - Aqua Breeze (#6EC1C0)
+- **Miscellaneous** - Graphite (#2F3332)
 
-**Total Spent**: 1,850,000 UGX (18.5% of budget)
+### 4. Sample Expenses (6)
+- Cement bags (UGX 500,000) - Today
+- Construction workers wages (UGX 300,000) - Yesterday
+- Sand delivery (UGX 150,000) - 2 days ago
+- Truck rental (UGX 50,000) - 3 days ago
+- Bricks (UGX 200,000) - 4 days ago
+- Concrete mixer rental (UGX 120,000) - 5 days ago
 
-### Sample Tasks (5)
-1. **Inspect foundation** - Pending, High priority (due in 2 days)
-2. **Pour foundation** - In Progress, High priority (due in 5 days)
-3. **Order additional materials** - Pending, Medium priority (due in 7 days)
-4. **Site cleanup** - Completed, Low priority (completed yesterday)
-5. **Review building plans** - Pending, Medium priority (due in 3 days)
+**Total Spent**: UGX 1,320,000 (13.2% of budget)
+
+### 5. Sample Tasks (5)
+- **Pending** (3):
+  - Inspect foundation (High priority, due in 2 days)
+  - Order additional materials (Medium priority, due in 7 days)
+  - Review building plans (Medium priority, due in 3 days)
+- **In Progress** (1):
+  - Pour foundation (High priority, due in 5 days)
+- **Completed** (1):
+  - Site cleanup (Low priority, completed yesterday)
 
 ---
 
 ## Troubleshooting
 
-### Error: "User ID not found in Supabase Auth"
-- **Solution**: Make sure you created the auth user in Supabase first (Step 1)
-- Verify the User ID in the seed script matches the one in Supabase
+### Error: "Auth user creation failed"
 
-### Error: "Profile already exists"
-- This is normal if you've run the script before
-- The script will skip creating duplicate data
-- To start fresh, delete the user from Supabase and run the script again
+**Solution**: The script will try to create the auth user automatically, but if it fails:
+1. Create the auth user manually in Supabase Dashboard (Step 1)
+2. Copy the User ID
+3. Update `TEST_USER_ID` in the seed script (Step 2)
+4. Run the seed script again
 
-### Error: "Database connection failed"
-- Check your `.env` file has `DATABASE_URL` set correctly
-- Verify your Supabase connection string is valid
-- Ensure your IP is whitelisted in Supabase (if required)
+### Error: "DATABASE_URL must be set"
 
-### Error: "Foreign key constraint violation"
-- Make sure the User ID in the seed script matches an existing auth user
-- The profile `id` must match the Supabase auth user `id`
+**Solution**: Make sure your `.env` file has:
+```env
+DATABASE_URL=postgresql://[user]:[password]@[host]:[port]/[database]
+```
 
-### Dashboard shows empty data
-- Verify the seed script completed successfully
-- Check that expenses and tasks were created (check the console output)
-- Refresh the browser and clear cache if needed
+### Error: "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set"
+
+**Solution**: Add to your `.env` file:
+```env
+SUPABASE_URL=https://[your-project].supabase.co
+SUPABASE_SERVICE_ROLE_KEY=[your-service-role-key]
+```
+
+### Data Already Exists
+
+The script is **idempotent** - it checks for existing data and won't create duplicates. If you want to reset:
+1. Delete the test user from Supabase Dashboard
+2. Delete related data from the database (or use a fresh database)
+3. Run the seed script again
 
 ---
 
 ## Resetting Test Data
 
-To reset and recreate all test data:
+To reset all test data:
 
-1. Delete the user from Supabase:
-   - Go to: **Authentication** → **Users**
+1. **Delete from Supabase Dashboard**:
+   - Go to Authentication → Users
    - Find `testuser@buildmonitor.local`
-   - Click **"..."** → **"Delete user"**
+   - Delete the user
 
-2. Delete related database records (optional, they'll cascade):
-   - The seed script will handle this automatically on next run
+2. **Delete from Database** (optional, if you want to keep auth user):
+   ```sql
+   -- Run in Supabase SQL Editor
+   DELETE FROM expenses WHERE user_id = '[user-id]';
+   DELETE FROM tasks WHERE user_id = '[user-id]';
+   DELETE FROM expense_categories WHERE user_id = '[user-id]';
+   DELETE FROM projects WHERE user_id = '[user-id]';
+   DELETE FROM profiles WHERE id = '[user-id]';
+   ```
 
-3. Run the seed script again:
+3. **Run seed script again**:
    ```bash
    npm run seed:test
    ```
@@ -212,24 +240,18 @@ To reset and recreate all test data:
 
 ## Notes
 
-- The seed script is **idempotent** - you can run it multiple times safely
-- It will skip creating data that already exists
-- The WhatsApp number `+256700000001` is reserved for testing
+- The seed script is safe to run multiple times - it checks for existing data
 - All amounts are in UGX (Ugandan Shillings)
-- Dates are spread across the past week for realistic chart data
+- Dates are spread across the past week for realistic dashboard visualization
+- Tasks have different priorities and statuses for a complete Kanban view
+- Category colors match the JengaTrack brand palette
 
 ---
 
-## Next Steps
+## Support
 
-After setting up the test user:
-
-1. ✅ Test the dashboard UI and charts
-2. ✅ Verify expense filtering and search
-3. ✅ Test task creation and status updates
-4. ✅ Test WhatsApp integration (if configured)
-5. ✅ Verify budget calculations
-6. ✅ Test mobile responsiveness
-
-Happy testing! 🚀
-
+If you encounter issues:
+1. Check the error message in the console
+2. Verify all environment variables are set correctly
+3. Ensure database schema is up to date (`npm run db:push`)
+4. Check Supabase Dashboard for auth user status
