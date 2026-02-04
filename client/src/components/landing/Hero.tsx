@@ -24,12 +24,12 @@ export default function Hero() {
               <span className="flex h-2 w-2 rounded-full bg-fresh-fern mr-2 animate-pulse" />
               Trusted by 50+ Ugandan Contractors
             </div>
-
+            
             <h1 className="font-heading text-5xl sm:text-6xl lg:text-7xl font-bold mb-6 leading-tight">
               Track Your Construction Budget.
               <span className="block text-fresh-fern">Right from WhatsApp.</span>
             </h1>
-
+            
             <p className="font-body text-lg sm:text-xl mb-8 text-white/90 leading-relaxed max-w-xl">
               Log expenses in seconds. View insights instantly. Keep your projects on budget—no app download needed.
             </p>
