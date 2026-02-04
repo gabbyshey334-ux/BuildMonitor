@@ -380,22 +380,28 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     let authData, authError;
     try {
       const result = await authClient.auth.signInWithPassword({
-      email,
-      password,
-    });
+        email,
+        password,
+      });
       authData = result.data;
       authError = result.error;
     } catch (err: any) {
-      console.error('[Login] SignInWithPassword exception:', err);
+      console.error('[Login] SignInWithPassword exception:', {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+      });
       authError = err;
       authData = null;
     }
 
-    if (authError || !authData.user) {
+    if (authError || !authData?.user) {
       console.error('[Login] Auth error:', {
         message: authError?.message,
         status: authError?.status,
         name: authError?.name,
+        hasData: !!authData,
+        hasUser: !!authData?.user,
       });
       return res.status(401).json({
         success: false,
@@ -408,11 +414,27 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     console.log(`[Login] Auth successful for user: ${userId}`);
 
     // Fetch profile from database using Drizzle
-    const [profile] = await db
-      .select()
-      .from(profiles)
-      .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
-      .limit(1);
+    let profile;
+    try {
+      const profileResult = await db
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
+        .limit(1);
+
+      profile = profileResult[0];
+    } catch (dbError: any) {
+      console.error('[Login] Database error fetching profile:', {
+        error: dbError,
+        message: dbError?.message,
+        userId,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database error',
+        message: 'Failed to fetch user profile. Please try again.',
+      });
+    }
 
     if (!profile) {
       console.error(`[Login] Profile not found for user: ${userId}`);
@@ -426,34 +448,49 @@ router.post('/auth/login', async (req: Request, res: Response) => {
     console.log(`[Login] Profile found: ${profile.fullName} (${profile.id})`);
 
     // Create session
-    req.session.userId = profile.id;
-    req.session.whatsappNumber = profile.whatsappNumber;
+    try {
+      req.session.userId = profile.id;
+      req.session.whatsappNumber = profile.whatsappNumber;
 
-    // Save session explicitly to ensure it's persisted
-    req.session.save((err) => {
-      if (err) {
-        console.error('[Login] Error saving session:', err);
-        return res.status(500).json({
-          success: false,
-          error: 'Session error',
-          message: 'Failed to create session. Please try again.',
+      // Save session explicitly to ensure it's persisted
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Login] Error saving session:', {
+            error: err,
+            message: err?.message,
+          });
+          return res.status(500).json({
+            success: false,
+            error: 'Session error',
+            message: 'Failed to create session. Please try again.',
+          });
+        }
+
+        // Return user profile
+        res.json({
+          success: true,
+          message: 'Login successful',
+          user: {
+            id: profile.id,
+            email: profile.email,
+            whatsappNumber: profile.whatsappNumber,
+            fullName: profile.fullName,
+            defaultCurrency: profile.defaultCurrency || 'UGX',
+            preferredLanguage: profile.preferredLanguage || 'en',
+          },
         });
-      }
-
-    // Return user profile
-    res.json({
-      success: true,
-      message: 'Login successful',
-      user: {
-        id: profile.id,
-        email: profile.email,
-        whatsappNumber: profile.whatsappNumber,
-        fullName: profile.fullName,
-        defaultCurrency: profile.defaultCurrency || 'UGX',
-        preferredLanguage: profile.preferredLanguage || 'en',
-      },
       });
-    });
+    } catch (sessionError: any) {
+      console.error('[Login] Session creation error:', {
+        error: sessionError,
+        message: sessionError?.message,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Session error',
+        message: 'Failed to create session. Please try again.',
+      });
+    }
   } catch (error: any) {
     console.error('[Login] Unexpected error:', {
       name: error?.name,
