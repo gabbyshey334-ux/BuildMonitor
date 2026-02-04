@@ -1,41 +1,31 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "client/**",
-      "use": "@vercel/static"
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "dist/public",
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": "dist/public/**"
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index"
+      "source": "/api/(.*)",
+      "destination": "/api/index"
     },
     {
-      "src": "/webhook/(.*)",
-      "dest": "/api/index"
+      "source": "/webhook/(.*)",
+      "destination": "/api/index"
     },
     {
-      "src": "/health",
-      "dest": "/api/index"
+      "source": "/health",
+      "destination": "/api/index"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index"
+      "source": "/(.*)",
+      "destination": "/api/index"
     }
   ],
   "env": {
     "NODE_ENV": "production"
-  },
-  "git": {
-    "deploymentEnabled": true,
-    "productionBranch": "main"
   }
 }

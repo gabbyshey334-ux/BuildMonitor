@@ -140,7 +140,7 @@ app.use('/api', apiRouter);
 app.use('/webhook', whatsappRouter);
 
 // Serve static files from the Vite build output
-const clientDistPath = path.join(__dirname, '..', 'dist', 'client');
+const clientDistPath = path.join(__dirname, '..', 'dist', 'public');
 app.use(express.static(clientDistPath));
 
 // Catch-all route for SPA (serves index.html for all non-API routes)
