@@ -73,9 +73,10 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Secure cookies in production
+    secure: process.env.NODE_ENV === 'production', // Secure cookies in production (HTTPS required)
     maxAge: sessionTtl,
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax', // Use 'lax' for Vercel compatibility
+    domain: process.env.COOKIE_DOMAIN, // Optional: set if using custom domain
   },
   name: 'jengatrack.sid', // Custom session cookie name
 }));
