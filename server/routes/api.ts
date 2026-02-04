@@ -179,10 +179,38 @@ router.post('/auth/register', async (req: Request, res: Response) => {
 
     console.log('[AUTH SIGNUP] Attempting signup for:', email);
 
+    // Validation
+    if (!email || !password || !fullName) {
+      console.log('[AUTH SIGNUP] ❌ Missing required fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Email, password, and full name are required',
+      });
+    }
+
+    // Check database connection
+    try {
+      console.log('[AUTH SIGNUP] Testing database connection...');
+      await db.select().from(profiles).limit(1);
+      console.log('[AUTH SIGNUP] ✅ Database connection OK');
+    } catch (dbError: any) {
+      console.error('[AUTH SIGNUP] ❌ Database connection failed:', {
+        error: dbError,
+        message: dbError?.message,
+        stack: dbError?.stack,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection failed',
+        details: dbError.message,
+      });
+    }
+
     // Use Supabase client for auth (needs service role key for admin operations)
     const { supabase } = await import('../db');
     
     // Check if user already exists by email or WhatsApp number using Drizzle
+    console.log('[AUTH SIGNUP] Checking for existing users...');
     const existingByEmail = await db
       .select()
       .from(profiles)
@@ -238,7 +266,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     console.log('[AUTH SIGNUP] ✅ Supabase user created:', userId);
 
     // 2. Create Profile using Drizzle ORM (consistent with login endpoint)
-    console.log('[Register] Creating user profile...');
+    console.log('[AUTH SIGNUP] Creating user profile...');
     const now = new Date();
     try {
       const [profile] = await db.insert(profiles).values({
@@ -256,7 +284,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
         throw new Error('Profile creation returned no data');
       }
 
-      console.log('[Register] Profile created:', profile.id);
+      console.log('[AUTH SIGNUP] ✅ Profile created:', profile.id);
 
     // NOTE: We don't manually create default project or categories here 
     // because project.sql has a database trigger (create_user_defaults) 
