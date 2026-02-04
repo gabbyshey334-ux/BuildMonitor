@@ -114,22 +114,22 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
   };
 
   const getBudgetColor = (percentUsed: number) => {
-    if (percentUsed >= 80) return 'text-red-400';
-    if (percentUsed >= 50) return 'text-yellow-400';
-    return 'text-green-400';
+    if (percentUsed >= 80) return 'text-red-500';
+    if (percentUsed >= 50) return 'text-fresh-fern';
+    return 'text-fresh-fern';
   };
 
   const getRemainingColor = (percentUsed: number) => {
-    if (percentUsed >= 80) return 'bg-red-600/20 border-red-600/40 text-red-300';
-    if (percentUsed >= 50) return 'bg-yellow-600/20 border-yellow-600/40 text-yellow-300';
-    return 'bg-green-600/20 border-green-600/40 text-green-300';
+    if (percentUsed >= 80) return 'bg-red-600/20 border-red-600/40 text-red-500';
+    if (percentUsed >= 50) return 'bg-fresh-fern/20 border-fresh-fern/40 text-fresh-fern';
+    return 'bg-fresh-fern/20 border-fresh-fern/40 text-fresh-fern';
   };
 
   const getPriorityBadge = (priority: string) => {
     const colors = {
       low: 'bg-ocean-pine/15 text-ocean-pine border-ocean-pine/30',
-      medium: 'bg-yellow-600/20 text-yellow-300 border-yellow-600/40',
-      high: 'bg-red-600/20 text-red-300 border-red-600/40',
+      medium: 'bg-fresh-fern/20 text-fresh-fern border-fresh-fern/40',
+      high: 'bg-red-600/20 text-red-500 border-red-600/40',
     };
     return colors[priority as keyof typeof colors] || colors.medium;
   };
@@ -201,13 +201,13 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
               <>
                 <div className="text-3xl font-heading font-bold text-ocean-pine mb-1">
                   {formatCurrency(dashboardSummary.budget)}
-                </div>
+            </div>
                 <p className="text-xs text-muted-foreground mt-2 font-body">
                   {dashboardSummary.projectName}
-                </p>
+            </p>
               </>
             ) : (
-              <div className="text-sm text-red-400">Error loading</div>
+              <div className="text-sm text-red-500 font-body">Error loading</div>
             )}
           </CardContent>
         </Card>
@@ -229,13 +229,13 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
               <>
                 <div className="text-3xl font-heading font-bold text-fresh-fern mb-1">
                   {formatCurrency(dashboardSummary.totalSpent)}
-                </div>
+            </div>
                 <p className={`text-xs mt-2 font-body font-medium ${getBudgetColor(dashboardSummary.percentUsed)}`}>
                   {dashboardSummary.percentUsed.toFixed(1)}% of budget used
-                </p>
+            </p>
               </>
             ) : (
-              <div className="text-sm text-red-400">Error loading</div>
+              <div className="text-sm text-red-500 font-body">Error loading</div>
             )}
           </CardContent>
         </Card>
@@ -247,11 +247,11 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
               Remaining Balance
             </CardTitle>
             <div className="p-2 bg-graphite/10 rounded-lg">
-              {dashboardSummary && dashboardSummary.percentUsed >= 80 ? (
-                <TrendingDown className="h-5 w-5 text-red-400" />
-              ) : (
-                <DollarSign className="h-5 w-5 text-green-400" />
-              )}
+            {dashboardSummary && dashboardSummary.percentUsed >= 80 ? (
+                <TrendingDown className="h-5 w-5 text-red-500" />
+            ) : (
+                <DollarSign className="h-5 w-5 text-fresh-fern" />
+            )}
             </div>
           </CardHeader>
           <CardContent>
@@ -261,25 +261,25 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
               <>
                 <div className={`text-3xl font-heading font-bold mb-1 ${getBudgetColor(dashboardSummary.percentUsed)}`}>
                   {formatCurrency(dashboardSummary.remaining)}
-                </div>
+            </div>
                 {dashboardSummary.percentUsed >= 90 ? (
-                  <p className="text-xs text-red-400 mt-2 flex items-center gap-1 font-body">
+                  <p className="text-xs text-red-500 mt-2 flex items-center gap-1 font-body">
                     <AlertCircle className="w-3 h-3" />
                     Critical: Over budget!
                   </p>
                 ) : dashboardSummary.percentUsed >= 80 ? (
-                  <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1 font-body">
+                  <p className="text-xs text-fresh-fern mt-2 flex items-center gap-1 font-body">
                     <AlertCircle className="w-3 h-3" />
                     Warning: Near limit
                   </p>
                 ) : (
-                  <p className="text-xs text-green-400 mt-2 font-body">
+                  <p className="text-xs text-fresh-fern mt-2 font-body">
                     Budget on track
                   </p>
                 )}
               </>
             ) : (
-              <div className="text-sm text-red-400">Error loading</div>
+              <div className="text-sm text-red-500 font-body">Error loading</div>
             )}
           </CardContent>
         </Card>
@@ -416,12 +416,12 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                     <tbody className="divide-y divide-border">
                       {recentExpenses.map((expense, index) => (
                         <tr 
-                          key={expense.id} 
+                      key={expense.id} 
                           className={`hover:bg-ash-gray/20 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-ash-gray/5'}`}
-                        >
+                    >
                           <td className="px-4 py-4 whitespace-nowrap">
                             <div className="text-sm font-body font-medium text-graphite">
-                              {expense.description}
+                            {expense.description}
                             </div>
                             <div className="text-xs text-muted-foreground capitalize mt-1">
                               {expense.source}
@@ -429,31 +429,31 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">
                             {expense.categoryName ? (
-                              <Badge 
+                            <Badge 
                                 className="text-xs px-2 py-1 font-body" 
-                                style={{ 
+                              style={{ 
                                   backgroundColor: `${expense.categoryColor || '#218598'}15`,
                                   color: expense.categoryColor || '#218598',
                                   borderColor: `${expense.categoryColor || '#218598'}40`,
                                   borderWidth: '1px',
-                                }}
-                              >
-                                <Tag className="w-3 h-3 mr-1" />
-                                {expense.categoryName}
-                              </Badge>
+                              }}
+                            >
+                              <Tag className="w-3 h-3 mr-1" />
+                              {expense.categoryName}
+                            </Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">Uncategorized</span>
-                            )}
+                          )}
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">
                             <div className="text-sm font-body text-graphite">
-                              {formatDate(expense.expenseDate)}
-                            </div>
+                          {formatDate(expense.expenseDate)}
+                      </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-right">
                             <div className="text-sm font-heading font-bold text-ocean-pine">
-                              {formatCurrency(Number(expense.amount))}
-                            </div>
+                          {formatCurrency(Number(expense.amount))}
+                      </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-center">
                             <div className="flex items-center justify-center gap-2">
@@ -483,13 +483,13 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                               >
                                 <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
-                            </div>
+                    </div>
                           </td>
                         </tr>
-                      ))}
+                  ))}
                     </tbody>
                   </table>
-                </div>
+                  </div>
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <DollarSign className="w-16 h-16 mx-auto mb-4 opacity-30 text-ocean-pine" />
@@ -504,8 +504,8 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                     <Plus className="w-4 h-4 mr-2" />
                     Add First Expense
                   </Button>
-                </div>
-              )}
+                  </div>
+                )}
             </CardContent>
           </Card>
         </div>
@@ -542,17 +542,17 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                       Pending ({tasksByStatus.pending.length})
                     </div>
                     {tasksByStatus.pending.slice(0, 3).map((task) => (
-                      <div 
-                        key={task.id}
+                    <div 
+                      key={task.id} 
                         className="p-3 bg-ash-gray/20 border border-border rounded-lg hover:shadow-md transition-all"
-                      >
+                    >
                         <p className="text-sm font-body font-medium text-graphite mb-2 line-clamp-2">
                           {task.title}
                         </p>
                         <div className="flex items-center justify-between">
-                          <Badge className={`text-xs ${getPriorityBadge(task.priority || 'medium')}`}>
-                            {task.priority || 'medium'}
-                          </Badge>
+                        <Badge className={`text-xs ${getPriorityBadge(task.priority || 'medium')}`}>
+                          {task.priority || 'medium'}
+                        </Badge>
                           {task.dueDate && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <CalendarClock className="w-3 h-3" />
@@ -584,12 +584,12 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                           <Badge className={`text-xs ${getPriorityBadge(task.priority || 'medium')}`}>
                             {task.priority || 'medium'}
                           </Badge>
-                          {task.dueDate && (
+                        {task.dueDate && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
-                              <CalendarClock className="w-3 h-3" />
-                              {formatDate(task.dueDate)}
-                            </span>
-                          )}
+                            <CalendarClock className="w-3 h-3" />
+                            {formatDate(task.dueDate)}
+                          </span>
+                        )}
                         </div>
                       </div>
                     ))}
@@ -612,24 +612,24 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                           {task.title}
                         </p>
                         <div className="flex items-center justify-between">
-                          <Badge className="text-xs bg-green-600/20 text-green-600 border-green-600/40">
+                          <Badge className="text-xs bg-fresh-fern/20 text-fresh-fern border-fresh-fern/40">
                             Done
-                          </Badge>
+                        </Badge>
                           {task.dueDate && (
                             <span className="text-xs text-muted-foreground flex items-center gap-1">
                               <CalendarClock className="w-3 h-3" />
                               {formatDate(task.dueDate)}
                             </span>
                           )}
-                        </div>
                       </div>
-                    ))}
+                    </div>
+                  ))}
                     {tasksByStatus.completed.length === 0 && (
                       <div className="text-xs text-muted-foreground text-center py-4">No completed tasks</div>
                     )}
-                  </div>
                 </div>
-              )}
+                  </div>
+                )}
             </CardContent>
           </Card>
 
@@ -648,25 +648,25 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 </p>
                 <p className="text-base font-mono text-ocean-pine font-semibold">
                   {user?.whatsappNumber || 'Not set'}
-                </p>
-              </div>
+                    </p>
+                  </div>
               
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground font-body">Send a message like:</p>
                 <div className="bg-white/60 rounded-lg p-3 space-y-1.5 border border-border">
                   <p className="text-xs text-fresh-fern font-body">💬 "spent 50000 on cement"</p>
                   <p className="text-xs text-ocean-pine font-body">💬 "task: inspect foundation"</p>
-                  <p className="text-xs text-yellow-600 font-body">💬 "set budget 2000000"</p>
+                  <p className="text-xs text-ocean-pine font-body">💬 "set budget 2000000"</p>
                 </div>
               </div>
                 
-              <Button 
+                <Button 
                 onClick={() => setIsAddExpenseOpen(true)}
                 className="w-full bg-ocean-pine hover:bg-ocean-pine/90 text-white font-heading font-semibold shadow-md hover:shadow-lg transition-all min-h-[44px]"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Expense Manually
-              </Button>
+                </Button>
             </CardContent>
           </Card>
         </div>
