@@ -112,11 +112,29 @@ router.post('/webhook', async (req: Request, res: Response) => {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
+  console.log(`[WhatsApp Webhook] ${requestId} - ========================================`);
   console.log(`[WhatsApp Webhook] ${requestId} - Received request`);
+  console.log(`[WhatsApp Webhook] ${requestId} - Method: ${req.method}`);
+  console.log(`[WhatsApp Webhook] ${requestId} - URL: ${req.url}`);
+  console.log(`[WhatsApp Webhook] ${requestId} - Headers:`, {
+    'content-type': req.headers['content-type'],
+    'x-twilio-signature': req.headers['x-twilio-signature'] ? 'present' : 'missing',
+    'user-agent': req.headers['user-agent'],
+  });
+  console.log(`[WhatsApp Webhook] ${requestId} - Body keys:`, Object.keys(req.body || {}));
+  console.log(`[WhatsApp Webhook] ${requestId} - Body preview:`, {
+    From: req.body?.From,
+    To: req.body?.To,
+    Body: req.body?.Body?.substring(0, 50),
+    MessageSid: req.body?.MessageSid,
+    NumMedia: req.body?.NumMedia,
+  });
   
   try {
     // 1. Validate incoming webhook data
+    console.log(`[WhatsApp Webhook] ${requestId} - Validating webhook data...`);
     const data = twilioWebhookSchema.parse(req.body);
+    console.log(`[WhatsApp Webhook] ${requestId} - ✅ Validation passed`);
     const phoneNumber = data.From.replace('whatsapp:', '');
     const messageBody = data.Body.trim();
     const mediaUrl = data.NumMedia > 0 ? data.MediaUrl0 : undefined;
