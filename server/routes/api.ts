@@ -647,22 +647,43 @@ router.get('/auth/check', async (req: Request, res: Response) => {
 /**
  * GET /api/auth/me
  * Get current authenticated user
+ * NOTE: Don't use requireAuth middleware here to avoid circular errors
  */
-router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
+router.get('/auth/me', async (req: Request, res: Response) => {
   try {
-    if (!req.user) {
+    // Check session directly (don't use req.user from requireAuth)
+    if (!req.session || !req.session.userId) {
       return res.status(401).json({
         success: false,
         error: 'Not authenticated',
+        message: 'Please log in to access this resource',
       });
     }
 
+    const userId = req.session.userId;
+
     // Fetch full profile from database
-    const [profile] = await db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.id, req.user.id))
-      .limit(1);
+    let profile;
+    try {
+      const profileResult = await db
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.id, userId), isNull(profiles.deletedAt)))
+        .limit(1);
+      
+      profile = profileResult[0];
+    } catch (dbError: any) {
+      console.error('[Auth Me] Database error:', {
+        error: dbError,
+        message: dbError?.message,
+        userId,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database error',
+        message: 'Failed to fetch user profile. Please try again.',
+      });
+    }
 
     if (!profile) {
       return res.status(404).json({
