@@ -128,7 +128,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center mt-8 text-muted-foreground text-xs uppercase tracking-widest font-bold">
-          &copy; 2026 BuildMonitor Uganda
+          &copy; 2026 JengaTrack Uganda
         </p>
       </div>
     </div>

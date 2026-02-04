@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "=========================================="
-echo "🚀 Deploying BuildMonitor to Vercel"
+echo "🚀 Deploying JengaTrack to Vercel"
 echo "=========================================="
 echo ""
 echo "This will deploy directly to your existing Vercel project."

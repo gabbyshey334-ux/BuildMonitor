@@ -1,7 +1,7 @@
 /**
  * RESTful API Routes
  * 
- * Complete backend API for BuildMonitor dashboard
+ * Complete backend API for JengaTrack dashboard
  * Handles authentication, expenses, tasks, dashboard metrics, and more
  */
 
@@ -542,35 +542,61 @@ router.get('/projects', requireAuth, async (req: Request, res: Response) => {
 router.post('/projects', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { name, description, budgetAmount } = req.body;
+    const { name, description, budgetAmount, status, startDate, endDate } = req.body;
 
-    if (!name) {
+    console.log('[Create Project] Request body:', { name, description, budgetAmount, status, startDate, endDate });
+    console.log('[Create Project] User ID:', userId);
+
+    // Validate required fields
+    if (!name || name.trim() === '') {
       return res.status(400).json({
         success: false,
         error: 'Project name is required',
       });
     }
 
+    // Parse budget amount - handle string or number
+    let parsedBudgetAmount: string | null = null;
+    if (budgetAmount !== undefined && budgetAmount !== null && budgetAmount !== '') {
+      const budgetNum = typeof budgetAmount === 'string' ? parseFloat(budgetAmount) : budgetAmount;
+      if (!isNaN(budgetNum) && budgetNum >= 0) {
+        parsedBudgetAmount = budgetNum.toString();
+      }
+    }
+
+    // Insert project
     const [project] = await db.insert(projects).values({
       userId,
-      name,
-      description: description || null,
-      budgetAmount: budgetAmount || '0',
-      status: 'active',
+      name: name.trim(),
+      description: description?.trim() || null,
+      budgetAmount: parsedBudgetAmount || '0',
+      status: status || 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
+
+    console.log('[Create Project] Success - Project created:', project.id);
 
     res.status(201).json({
       success: true,
       message: 'Project created successfully',
       project,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[Create Project] Error:', error);
+    console.error('[Create Project] Error stack:', error.stack);
+    
+    // Provide more detailed error message
+    let errorMessage = 'Failed to create project';
+    if (error.code === '23505') {
+      errorMessage = 'A project with this name already exists';
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
     res.status(500).json({
       success: false,
-      error: 'Failed to create project',
+      error: errorMessage,
     });
   }
 });

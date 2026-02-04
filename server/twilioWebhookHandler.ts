@@ -133,7 +133,7 @@ async function processWhatsAppMessage(
     
     // If user has no projects, guide them to create one
     if (projects.length === 0) {
-      return "Welcome to Construction Monitor! 👷\n\n" +
+      return "Welcome to JengaTrack! 👷\n\n" +
         "To get started, please create a project in the web dashboard:\n" +
         `${process.env.FRONTEND_URL || 'http://localhost:5000'}\n\n` +
         "Once you've created a project, you can track expenses here via WhatsApp!";
@@ -147,7 +147,7 @@ async function processWhatsAppMessage(
 
     // Help command
     if (lowerMessage.includes('help') || lowerMessage === '?') {
-      return "📋 *Construction Monitor Commands:*\n\n" +
+      return "📋 *JengaTrack Commands:*\n\n" +
         "💰 *Track Expense:* Just describe what you bought\n" +
         "   Example: _Cement 10 bags 50000_\n\n" +
         "📊 *View Report:* 'report' or 'summary'\n" +

@@ -1,4 +1,4 @@
-# Construction Monitor Uganda 🏗️🇺🇬
+# JengaTrack Uganda 🏗️🇺🇬
 
 A **WhatsApp-based expense tracking system** for Ugandan contractors built with React, Express, Supabase, and Twilio.
 
@@ -63,7 +63,7 @@ Before you begin, ensure you have:
 
 ```bash
 git clone <your-repo-url>
-cd BuildMonitor
+cd JengaTrack
 ```
 
 ### 2. Install Dependencies
@@ -519,7 +519,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For questions or issues:
 - Open an issue on GitHub
-- Email: support@buildmonitor.ug (example)
+- Email: support@jengatrack.ug (example)
 - WhatsApp: +256 XXX XXX XXX (example)
 
 ---

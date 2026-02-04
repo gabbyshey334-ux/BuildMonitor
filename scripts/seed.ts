@@ -39,7 +39,7 @@ async function seed() {
     } else {
       // Create test user in Supabase Auth first
       console.log('   Creating test user in Supabase Auth...');
-      const testEmail = 'testuser@buildmonitor.local';
+      const testEmail = 'testuser@jengatrack.local';
       const testPassword = 'TestPassword123!';
       
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({

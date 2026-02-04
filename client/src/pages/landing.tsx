@@ -1,6 +1,15 @@
 import Navigation from "@/components/landing/Navigation";
 import Hero from "@/components/landing/Hero";
-// Other components will be added here as they are built
+import StatsBar from "@/components/landing/Section1_StatsBar";
+import ProblemSolution from "@/components/landing/Section2_ProblemSolution";
+import HowItWorks from "@/components/landing/Section3_HowItWorks";
+import Features from "@/components/landing/Section4_Features";
+import DashboardPreview from "@/components/landing/Section5_DashboardPreview";
+import Testimonials from "@/components/landing/Section6_Testimonials";
+import Pricing from "@/components/landing/Section7_Pricing";
+import FAQ from "@/components/landing/Section8_FAQ";
+import FinalCTA from "@/components/landing/Section9_FinalCTA";
+import Footer from "@/components/landing/Section10_Footer";
 
 export default function Landing() {
   return (
@@ -8,14 +17,17 @@ export default function Landing() {
       <Navigation />
       <main>
         <Hero />
-        {/* Placeholder for next sections */}
-        <section id="features" className="py-20 bg-secondary/30 flex items-center justify-center">
-          <p className="text-muted-foreground font-medium">Features Section (Coming Next...)</p>
-        </section>
+        <StatsBar />
+        <ProblemSolution />
+        <HowItWorks />
+        <Features />
+        <DashboardPreview />
+        <Testimonials />
+        <Pricing />
+        <FAQ />
+        <FinalCTA />
       </main>
-      <footer className="py-12 bg-card border-t border-border text-center">
-        <p className="text-muted-foreground">&copy; 2026 BuildMonitor Uganda. All rights reserved.</p>
-      </footer>
+      <Footer />
     </div>
   );
 }

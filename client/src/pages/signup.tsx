@@ -46,7 +46,7 @@ export default function Signup() {
             Create Account
           </h1>
           <p className="text-muted-foreground text-sm">
-            Join BuildMonitor to manage your projects professionaly
+            Join JengaTrack to manage your projects professionaly
           </p>
         </div>
 
@@ -161,7 +161,7 @@ export default function Signup() {
         </Card>
 
         <p className="text-center mt-8 text-muted-foreground text-xs uppercase tracking-widest font-bold">
-          &copy; 2026 BuildMonitor Uganda
+          &copy; 2026 JengaTrack Uganda
         </p>
       </div>
     </div>

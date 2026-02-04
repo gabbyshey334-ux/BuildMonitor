@@ -284,7 +284,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                       key={expense.id} 
                       className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
                     >
-                      <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-sm font-medium text-white truncate">
                             {expense.description}
@@ -317,16 +317,16 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                       </div>
                     </div>
                   ))}
-                </div>
+                  </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-center py-8 text-muted-foreground">
                   <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p className="mb-2">No expenses recorded yet</p>
                   <p className="text-sm">
                     Start tracking by sending a WhatsApp message or adding manually
                   </p>
-                </div>
-              )}
+                  </div>
+                )}
             </CardContent>
           </Card>
         </div>
@@ -356,7 +356,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                   ))}
                 </div>
               ) : activeTasks.length > 0 ? (
-                <div className="space-y-3">
+              <div className="space-y-3">
                   {activeTasks.map((task) => (
                     <div 
                       key={task.id} 
@@ -388,8 +388,8 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 <div className="text-center py-6 text-muted-foreground">
                   <CheckSquare className="w-10 h-10 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No active tasks</p>
-                </div>
-              )}
+                  </div>
+                )}
             </CardContent>
           </Card>
 
@@ -408,8 +408,8 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                 </p>
                 <p className="text-base font-mono text-white">
                   {user?.whatsappNumber || 'Not set'}
-                </p>
-              </div>
+                    </p>
+                  </div>
               
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">Send a message like:</p>
@@ -419,14 +419,14 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                   <p className="text-xs text-yellow-300">💬 "set budget 2000000"</p>
                 </div>
               </div>
-
-              <Button 
+                
+                <Button 
                 onClick={() => setIsAddExpenseOpen(true)}
                 className="w-full bg-brand/20 hover:bg-brand/30 border border-brand/40 text-brand"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Add Expense Manually
-              </Button>
+                </Button>
             </CardContent>
           </Card>
         </div>

@@ -54,7 +54,7 @@ type TwilioWebhook = z.infer<typeof twilioWebhookSchema>;
 // CONSTANTS
 // ============================================================================
 
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://buildmonitor.app';
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://jengatrack.app';
 const MAX_DESCRIPTION_LENGTH = 500;
 
 // ============================================================================
@@ -87,7 +87,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
       // Send registration prompt
       await sendWhatsAppMessage(
         data.From,
-        `👋 Welcome to BuildMonitor!\n\nPlease register at ${DASHBOARD_URL} to get started.\n\nOnce registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`
+        `👋 Welcome to JengaTrack!\n\nPlease register at ${DASHBOARD_URL} to get started.\n\nOnce registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`
       );
       
       // Log the interaction

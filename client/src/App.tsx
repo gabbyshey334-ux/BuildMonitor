@@ -60,7 +60,7 @@ function App() {
         attribute="class"
         defaultTheme="light"
         enableSystem={true}
-        storageKey="buildmonitor-theme"
+        storageKey="jengatrack-theme"
       >
         <QueryClientProvider client={queryClient}>
           <AuthProvider>

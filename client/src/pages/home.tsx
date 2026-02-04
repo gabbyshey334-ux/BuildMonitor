@@ -153,7 +153,7 @@ export default function Home() {
         <div className="bg-card/50 border-b border-white/10 p-4">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div>
-              <h1 className="text-xl font-bold text-white">Construction Monitor Uganda</h1>
+              <h1 className="text-xl font-bold text-white">JengaTrack Uganda</h1>
               <p className="text-sm text-muted-foreground">
                 Logged in as: {user?.username} ({user?.role})
               </p>
@@ -314,7 +314,7 @@ export default function Home() {
       <footer className="hidden md:block bg-card/50 border-t border-white/10 py-6 mt-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-sm text-muted-foreground">
-            Construction Monitor Uganda - Phase 1 features: Money management • Supplier credit • Inventory • Milestones • Daily Accountability
+            JengaTrack Uganda - Phase 1 features: Money management • Supplier credit • Inventory • Milestones • Daily Accountability
           </p>
           <p className="text-xs text-muted-foreground mt-2">
             Server-hosted with data persistence and photo uploads

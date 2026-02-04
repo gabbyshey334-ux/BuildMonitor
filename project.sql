@@ -1,5 +1,5 @@
 -- =====================================================
--- Construction Monitor (Uganda) - Database Schema
+-- JengaTrack (Uganda) - Database Schema
 -- Complete setup for Supabase PostgreSQL
 -- Copy and paste this entire file into Supabase SQL Editor
 -- =====================================================

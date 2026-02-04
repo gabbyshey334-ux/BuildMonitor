@@ -56,7 +56,7 @@ app.use(session({
     maxAge: sessionTtl,
     sameSite: 'strict',
   },
-  name: 'buildmonitor.sid',
+  name: 'jengatrack.sid',
 }));
 
 // Extend session types

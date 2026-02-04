@@ -34,9 +34,6 @@
   "env": {
     "NODE_ENV": "production"
   },
-  "typescript": {
-    "ignoreBuildErrors": true
-  },
   "git": {
     "deploymentEnabled": true,
     "productionBranch": "main"

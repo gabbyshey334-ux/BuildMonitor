@@ -102,7 +102,7 @@ export default function Hero() {
             >
               <img
                 src="/images/hero/whatsapp-phone.png"
-                alt="BuildMonitor WhatsApp expense tracking on mobile"
+                alt="JengaTrack WhatsApp expense tracking on mobile"
                 className="w-full h-auto object-contain"
                 style={{
                   // Remove background, allow transparency

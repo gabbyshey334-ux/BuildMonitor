@@ -20,10 +20,12 @@ interface CreateProjectDialogProps {
 }
 
 const projectFormSchema = insertProjectSchema.extend({
+  budget: z.string().optional(), // Form uses 'budget' instead of 'budgetAmount'
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 }).omit({
-  ownerId: true,
+  userId: true, // userId is set by the server from session, not the form
+  budgetAmount: true, // Remove budgetAmount since we're using 'budget' instead
 });
 
 export default function CreateProjectDialog({ 
@@ -48,34 +50,57 @@ export default function CreateProjectDialog({
 
   const createProjectMutation = useMutation({
     mutationFn: async (data: z.infer<typeof projectFormSchema>) => {
+      console.log('[CreateProjectDialog] Submitting project data:', data);
+      
       const projectData = {
-        name: data.name,
-        description: data.description || '',
-        budgetAmount: data.budget?.toString() || '0', // Changed from 'budget' to 'budgetAmount'
-        status: data.status || 'Active',
+        name: data.name?.trim(),
+        description: data.description?.trim() || '',
+        budgetAmount: data.budget?.toString() || '0',
+        status: (data.status || 'active').toLowerCase(), // Ensure lowercase to match DB
         startDate: data.startDate || undefined,
         endDate: data.endDate || undefined,
       };
-      const response = await apiRequest('POST', '/api/projects', projectData);
-      return await response.json();
+
+      console.log('[CreateProjectDialog] Sending to API:', projectData);
+
+      try {
+        const response = await apiRequest('POST', '/api/projects', projectData);
+        const result = await response.json();
+        console.log('[CreateProjectDialog] API response:', result);
+        return result;
+      } catch (error: any) {
+        console.error('[CreateProjectDialog] API request failed:', error);
+        throw error;
+      }
     },
     onSuccess: (result: any) => {
+      console.log('[CreateProjectDialog] Mutation success:', result);
+      
+      // Invalidate and refetch projects list
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      
       toast({
         title: "Success",
         description: "Project created successfully",
       });
+      
       form.reset();
       onOpenChange(false);
+      
+      // Call callback if project ID is available
       if (onProjectCreated && result?.project?.id) {
         onProjectCreated(result.project.id);
       }
     },
     onError: (error: any) => {
-      console.error('Project creation error:', error);
+      console.error('[CreateProjectDialog] Mutation error:', error);
+      console.error('[CreateProjectDialog] Error details:', {
+        message: error.message,
+        stack: error.stack,
+      });
       
       // Extract user-friendly error message
-      let errorMessage = "Failed to create project";
+      let errorMessage = "Failed to create project. Please try again.";
       if (error.message) {
         errorMessage = error.message;
       }

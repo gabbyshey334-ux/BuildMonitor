@@ -66,7 +66,7 @@ app.use(session({
       throw new Error('SESSION_SECRET must be set in production environment');
     }
     console.warn('⚠️  Using default SESSION_SECRET in development. Set SESSION_SECRET environment variable for production.');
-    return 'buildmonitor-dev-secret-' + Date.now();
+    return 'jengatrack-dev-secret-' + Date.now();
   })(),
   store: sessionStore,
   resave: false,
@@ -77,7 +77,7 @@ app.use(session({
     maxAge: sessionTtl,
     sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
   },
-  name: 'buildmonitor.sid', // Custom session cookie name
+  name: 'jengatrack.sid', // Custom session cookie name
 }));
 
 // Extend session types
@@ -211,7 +211,7 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   // This serves both the API and the client.
   const port = parseInt(process.env.PORT || '5000', 10);
   app.listen(port, "0.0.0.0", () => {
-    log(`🚀 BuildMonitor server running on port ${port}`);
+    log(`🚀 JengaTrack server running on port ${port}`);
     log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     log(`🔐 Session store: PostgreSQL`);
     log(`💬 WhatsApp webhook: /webhook/webhook`);

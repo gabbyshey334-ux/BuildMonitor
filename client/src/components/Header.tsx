@@ -52,7 +52,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
               CM
             </div>
             <div>
-              <h1 className="text-sm sm:text-lg font-bold text-foreground">Construction Monitor</h1>
+              <h1 className="text-sm sm:text-lg font-bold text-foreground">JengaTrack</h1>
               <p className="text-xs text-muted-foreground hidden sm:block">Enhanced project management system</p>
             </div>
           </div>

@@ -8,7 +8,7 @@
 - Format: PNG or JPG
 - Minimum Resolution: 1200x1600px (portrait orientation)
 - File Size: < 500KB (compress using tinypng.com)
-- Content: Smartphone mockup showing WhatsApp conversation with BuildMonitor
+- Content: Smartphone mockup showing WhatsApp conversation with JengaTrack
 
 ## How to Add Your Image
 

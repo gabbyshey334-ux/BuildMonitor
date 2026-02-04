@@ -172,7 +172,7 @@ export class ExportService {
       };
     } else {
       // CSV format - multiple files combined
-      let csvContent = `# Construction Monitor Uganda - Project Export\n`;
+      let csvContent = `# JengaTrack Uganda - Project Export\n`;
       csvContent += `# Project: ${project.name}\n`;
       csvContent += `# Exported: ${new Date().toISOString()}\n`;
       csvContent += `# Format: CSV\n\n`;
