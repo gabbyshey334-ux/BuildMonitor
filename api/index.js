@@ -91,6 +91,106 @@ try {
 }
 
 // ============================================================================
+// TEST ENDPOINTS (available even when server app is loaded)
+// ============================================================================
+
+// Test Supabase and Database connection
+app.get('/api/test/supabase', async (req, res) => {
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        status: 'error',
+        message: 'Missing Supabase environment variables',
+        env: {
+          hasUrl: !!supabaseUrl,
+          hasKey: !!supabaseKey,
+        }
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Test profiles table
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, whatsapp_number, full_name')
+      .limit(5);
+
+    // Test projects table
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id, name, user_id, budget_amount')
+      .limit(5);
+
+    // Test expenses table
+    const { data: expenses, error: expensesError } = await supabase
+      .from('expenses')
+      .select('id, description, amount, user_id')
+      .limit(5);
+
+    // Test tasks table
+    const { data: tasks, error: tasksError } = await supabase
+      .from('tasks')
+      .select('id, title, status, user_id')
+      .limit(5);
+
+    // Test Drizzle database connection
+    let drizzleTest = { connected: false, error: null };
+    try {
+      const { db } = await import('../dist/server/db.js');
+      const { sql } = await import('drizzle-orm');
+      await db.execute(sql`SELECT 1`);
+      drizzleTest.connected = true;
+    } catch (dbError) {
+      drizzleTest.error = dbError.message;
+    }
+
+    res.json({
+      status: 'ok',
+      connection: 'successful',
+      supabase: {
+        url: supabaseUrl.substring(0, 30) + '...',
+        hasKey: !!supabaseKey,
+      },
+      data: {
+        profiles: { 
+          count: profiles?.length || 0, 
+          error: profilesError?.message || null, 
+          sample: profiles?.slice(0, 2) || []
+        },
+        projects: { 
+          count: projects?.length || 0, 
+          error: projectsError?.message || null, 
+          sample: projects?.slice(0, 2) || []
+        },
+        expenses: { 
+          count: expenses?.length || 0, 
+          error: expensesError?.message || null, 
+          sample: expenses?.slice(0, 2) || []
+        },
+        tasks: { 
+          count: tasks?.length || 0, 
+          error: tasksError?.message || null, 
+          sample: tasks?.slice(0, 2) || []
+        },
+      },
+      drizzle: drizzleTest,
+    });
+  } catch (error) {
+    console.error('[Test Supabase] Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// ============================================================================
 // FALLBACK ROUTES (if compiled server not available)
 // ============================================================================
 
