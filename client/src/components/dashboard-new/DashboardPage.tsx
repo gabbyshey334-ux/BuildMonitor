@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Upload, AlertCircle, FileText } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { getToken } from '@/lib/authToken';
 
 // Import individual dashboard sections
 import { ProjectHealthSummary } from './ProjectHealthSummary';
@@ -15,7 +16,7 @@ import { TrendsQuickInsightsSection } from './TrendsQuickInsightsSection';
 
 // Helper to get auth headers
 const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
+  const token = getToken();
   const headers: Record<string, string> = {};
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -23,51 +24,71 @@ const getAuthHeaders = () => {
   return headers;
 };
 
+// Helper to get project ID from URL
+const getProjectIdFromUrl = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get('project') || urlParams.get('projectId');
+};
+
 // Define fetcher functions for each endpoint
 const fetchSummary = async () => {
-  const res = await fetch('/api/dashboard/summary', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/summary?projectId=${projectId}` : '/api/dashboard/summary';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch summary');
   const data = await res.json();
   return data;
 };
 
 const fetchProgress = async () => {
-  const res = await fetch('/api/dashboard/progress', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/progress?projectId=${projectId}` : '/api/dashboard/progress';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch progress');
   const data = await res.json();
   return data;
 };
 
 const fetchBudget = async () => {
-  const res = await fetch('/api/dashboard/budget', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/budget?projectId=${projectId}` : '/api/dashboard/budget';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch budget');
   const data = await res.json();
   return data;
 };
 
 const fetchInventory = async () => {
-  const res = await fetch('/api/dashboard/inventory', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/inventory?projectId=${projectId}` : '/api/dashboard/inventory';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch inventory');
   const data = await res.json();
   return data;
 };
 
 const fetchIssues = async () => {
-  const res = await fetch('/api/dashboard/issues', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/issues?projectId=${projectId}` : '/api/dashboard/issues';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch issues');
   const data = await res.json();
   return data;
 };
 
 const fetchMedia = async () => {
-  const res = await fetch('/api/dashboard/media', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/media?projectId=${projectId}` : '/api/dashboard/media';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch media');
   const data = await res.json();
   return data;
 };
 
 const fetchTrends = async () => {
-  const res = await fetch('/api/dashboard/trends', { headers: getAuthHeaders() });
+  const projectId = getProjectIdFromUrl();
+  const url = projectId ? `/api/dashboard/trends?projectId=${projectId}` : '/api/dashboard/trends';
+  const res = await fetch(url, { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch trends');
   const data = await res.json();
   return data;

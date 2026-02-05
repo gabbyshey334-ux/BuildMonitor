@@ -1145,15 +1145,22 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
       });
     }
 
-    // Get user's default/active project
-    const profileResult = await dbConnection.execute(sql`
-      SELECT active_project_id as "activeProjectId"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
-      LIMIT 1
-    `);
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
-    const activeProjectId = profile?.activeProjectId;
+    // Get project ID from query parameter, or use first project
+    let activeProjectId = req.query.projectId || req.query.project;
+    
+    if (!activeProjectId) {
+      // Get user's first project if no project ID specified
+      const projectsResult = await dbConnection.execute(sql`
+        SELECT id FROM projects
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const firstProject = Array.isArray(projectsResult) 
+        ? projectsResult[0] 
+        : (projectsResult.rows ? projectsResult.rows[0] : projectsResult);
+      activeProjectId = firstProject?.id;
+    }
 
     if (!activeProjectId) {
       return res.json({
@@ -1169,9 +1176,9 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
 
     // Get project details
     const projectResult = await dbConnection.execute(sql`
-      SELECT id, name, budget_amount as "budgetAmount"
+      SELECT id, name, budget
       FROM projects
-      WHERE id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE id = ${activeProjectId} AND user_id = ${userId}
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
@@ -1180,7 +1187,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const expensesResult = await dbConnection.execute(sql`
       SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
       FROM expenses
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
     `);
     const totalSpent = parseFloat(Array.isArray(expensesResult) ? expensesResult[0]?.total : (expensesResult.rows ? expensesResult.rows[0]?.total : expensesResult?.total) || '0');
 
@@ -1190,14 +1197,14 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress')) as open,
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress') AND priority = 'high') as critical
       FROM tasks
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult[0] : (tasksResult.rows ? tasksResult.rows[0] : tasksResult);
     const totalTasks = parseInt(tasks?.total || '0');
     const completedTasks = parseInt(tasks?.total || '0') - parseInt(tasks?.open || '0');
     const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-    const totalBudget = parseFloat(project?.budgetAmount || '0');
+    const totalBudget = parseFloat(project?.budget || '0');
     const spentPercent = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
 
     res.json({
@@ -1241,15 +1248,22 @@ app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
       });
     }
 
-    // Get active project
-    const profileResult = await dbConnection.execute(sql`
-      SELECT active_project_id as "activeProjectId"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
-      LIMIT 1
-    `);
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
-    const activeProjectId = profile?.activeProjectId;
+    // Get project ID from query parameter, or use first project
+    let activeProjectId = req.query.projectId || req.query.project;
+    
+    if (!activeProjectId) {
+      // Get user's first project if no project ID specified
+      const projectsResult = await dbConnection.execute(sql`
+        SELECT id FROM projects
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const firstProject = Array.isArray(projectsResult) 
+        ? projectsResult[0] 
+        : (projectsResult.rows ? projectsResult.rows[0] : projectsResult);
+      activeProjectId = firstProject?.id;
+    }
 
     if (!activeProjectId) {
       return res.json({
@@ -1263,7 +1277,7 @@ app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, due_date as "dueDate", priority, status
       FROM tasks
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
       ORDER BY due_date ASC
       LIMIT 10
     `);
@@ -1323,15 +1337,22 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
       });
     }
 
-    // Get active project
-    const profileResult = await dbConnection.execute(sql`
-      SELECT active_project_id as "activeProjectId"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
-      LIMIT 1
-    `);
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
-    const activeProjectId = profile?.activeProjectId;
+    // Get project ID from query parameter, or use first project
+    let activeProjectId = req.query.projectId || req.query.project;
+    
+    if (!activeProjectId) {
+      // Get user's first project if no project ID specified
+      const projectsResult = await dbConnection.execute(sql`
+        SELECT id FROM projects
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const firstProject = Array.isArray(projectsResult) 
+        ? projectsResult[0] 
+        : (projectsResult.rows ? projectsResult.rows[0] : projectsResult);
+      activeProjectId = firstProject?.id;
+    }
 
     if (!activeProjectId) {
       return res.json({
@@ -1348,13 +1369,13 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
 
     // Get project budget
     const projectResult = await dbConnection.execute(sql`
-      SELECT budget_amount as "budgetAmount"
+      SELECT budget
       FROM projects
-      WHERE id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE id = ${activeProjectId} AND user_id = ${userId}
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
-    const totalBudget = parseFloat(project?.budgetAmount || '0');
+    const totalBudget = parseFloat(project?.budget || '0');
 
     // Get expenses by category
     const expensesResult = await dbConnection.execute(sql`
@@ -1364,7 +1385,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
         COALESCE(SUM(CAST(e.amount AS DECIMAL)), 0) as total
       FROM expenses e
       LEFT JOIN expense_categories ec ON e.category_id = ec.id
-      WHERE e.project_id = ${activeProjectId} AND e.deleted_at IS NULL
+      WHERE e.project_id = ${activeProjectId}
       GROUP BY ec.name, ec.color_hex
       ORDER BY total DESC
     `);
@@ -1392,7 +1413,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
         DATE(expense_date) as date,
         SUM(CAST(amount AS DECIMAL)) as daily_total
       FROM expenses
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
       GROUP BY DATE(expense_date)
       ORDER BY DATE(expense_date) ASC
     `);
@@ -1473,15 +1494,22 @@ app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
       });
     }
 
-    // Get active project
-    const profileResult = await dbConnection.execute(sql`
-      SELECT active_project_id as "activeProjectId"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
-      LIMIT 1
-    `);
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
-    const activeProjectId = profile?.activeProjectId;
+    // Get project ID from query parameter, or use first project
+    let activeProjectId = req.query.projectId || req.query.project;
+    
+    if (!activeProjectId) {
+      // Get user's first project if no project ID specified
+      const projectsResult = await dbConnection.execute(sql`
+        SELECT id FROM projects
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const firstProject = Array.isArray(projectsResult) 
+        ? projectsResult[0] 
+        : (projectsResult.rows ? projectsResult.rows[0] : projectsResult);
+      activeProjectId = firstProject?.id;
+    }
 
     if (!activeProjectId) {
       return res.json({
@@ -1501,7 +1529,7 @@ app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, description, status, priority, created_at as "createdAt"
       FROM tasks
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
       ORDER BY created_at DESC
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult : (tasksResult.rows || []);
@@ -1589,15 +1617,22 @@ app.get('/api/dashboard/media', requireAuth, async (req, res) => {
       });
     }
 
-    // Get active project
-    const profileResult = await dbConnection.execute(sql`
-      SELECT active_project_id as "activeProjectId"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
-      LIMIT 1
-    `);
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
-    const activeProjectId = profile?.activeProjectId;
+    // Get project ID from query parameter, or use first project
+    let activeProjectId = req.query.projectId || req.query.project;
+    
+    if (!activeProjectId) {
+      // Get user's first project if no project ID specified
+      const projectsResult = await dbConnection.execute(sql`
+        SELECT id FROM projects
+        WHERE user_id = ${userId}
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+      const firstProject = Array.isArray(projectsResult) 
+        ? projectsResult[0] 
+        : (projectsResult.rows ? projectsResult.rows[0] : projectsResult);
+      activeProjectId = firstProject?.id;
+    }
 
     if (!activeProjectId) {
       return res.json({
@@ -1614,7 +1649,7 @@ app.get('/api/dashboard/media', requireAuth, async (req, res) => {
     const photosResult = await dbConnection.execute(sql`
       SELECT id, storage_path as "storagePath", caption, created_at as "createdAt"
       FROM images
-      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      WHERE project_id = ${activeProjectId}
       ORDER BY created_at DESC
       LIMIT 10
     `);
