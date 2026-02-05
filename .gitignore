@@ -12,6 +12,9 @@ dist/
 build/
 .vite/
 
+# Don't ignore api folder (needed for Vercel)
+!api/
+
 # IDE
 .vscode/
 .idea/

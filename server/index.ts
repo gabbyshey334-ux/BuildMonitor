@@ -192,42 +192,55 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // VITE SETUP (Development) / Static Serving (Production)
 // ============================================================================
 
-// Importantly only setup vite in development and after
-// setting up all the other routes so the catch-all route
-// doesn't interfere with the other routes
-(async () => {
-  if (app.get("env") === "development") {
-    // setupVite requires a Server instance, but in production this won't run
-    // Type assertion is safe here since this code path is dev-only
-    const http = await import("http");
-    const server = http.createServer(app);
-    await setupVite(app, server);
-  } else {
-    serveStatic(app);
-  }
+// ============================================================================
+// VITE SETUP (Development) / Static Serving (Production)
+// ============================================================================
 
-  // ============================================================================
-  // SERVER START
-  // ============================================================================
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // This serves both the API and the client.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  app.listen(port, "0.0.0.0", () => {
-    log(`🚀 JengaTrack server running on port ${port}`);
-    log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    log(`🔐 Session store: PostgreSQL`);
-    log(`💬 WhatsApp webhook: /webhook/webhook`);
-    log(`🌐 API endpoint: /api`);
-    log(`\n✅ Environment Variables Check:`);
-    log(`   DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
-    log(`   SESSION_SECRET: ${process.env.SESSION_SECRET ? '✅ Set' : '❌ NOT SET'}`);
-    log(`   SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
-    log(`   SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ NOT SET'}`);
-    log(`   SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ NOT SET'}`);
-    if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
-      log(`\n⚠️  WARNING: SESSION_SECRET is required in production!`);
+// Only start server if not in Vercel serverless environment
+// In Vercel, the app is exported and used by api/index.js
+if (!process.env.VERCEL) {
+  (async () => {
+    if (app.get("env") === "development") {
+      // setupVite requires a Server instance, but in production this won't run
+      // Type assertion is safe here since this code path is dev-only
+      const http = await import("http");
+      const server = http.createServer(app);
+      await setupVite(app, server);
+    } else {
+      serveStatic(app);
     }
-  });
-})();
+
+    // ============================================================================
+    // SERVER START
+    // ============================================================================
+
+    // ALWAYS serve the app on the port specified in the environment variable PORT
+    // Other ports are firewalled. Default to 5000 if not specified.
+    // This serves both the API and the client.
+    const port = parseInt(process.env.PORT || '5000', 10);
+    app.listen(port, "0.0.0.0", () => {
+      log(`🚀 JengaTrack server running on port ${port}`);
+      log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      log(`🔐 Session store: PostgreSQL`);
+      log(`💬 WhatsApp webhook: /webhook/webhook`);
+      log(`🌐 API endpoint: /api`);
+      log(`\n✅ Environment Variables Check:`);
+      log(`   DATABASE_URL: ${process.env.DATABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
+      log(`   SESSION_SECRET: ${process.env.SESSION_SECRET ? '✅ Set' : '❌ NOT SET'}`);
+      log(`   SUPABASE_URL: ${process.env.SUPABASE_URL ? '✅ Set' : '❌ NOT SET'}`);
+      log(`   SUPABASE_ANON_KEY: ${process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ NOT SET'}`);
+      log(`   SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? '✅ Set' : '❌ NOT SET'}`);
+      if (!process.env.SESSION_SECRET && process.env.NODE_ENV === 'production') {
+        log(`\n⚠️  WARNING: SESSION_SECRET is required in production!`);
+      }
+    });
+  })();
+}
+
+// ============================================================================
+// EXPORT FOR VERCEL
+// ============================================================================
+
+// Export the Express app for Vercel serverless functions
+// This allows api/index.js to import and use the app
+export default app;
