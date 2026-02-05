@@ -45,16 +45,21 @@ const sessionStore = new pgStore({
 
 app.use(session({
   secret: process.env.SESSION_SECRET || (() => {
-    throw new Error('SESSION_SECRET must be set in production environment');
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SESSION_SECRET must be set in production environment');
+    }
+    console.warn('⚠️  Using default SESSION_SECRET in development. Set SESSION_SECRET environment variable for production.');
+    return 'jengatrack-dev-secret-' + Date.now();
   })(),
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: true, // Always secure in production (Vercel uses HTTPS)
+    secure: process.env.NODE_ENV === 'production', // Secure cookies in production (HTTPS required)
     maxAge: sessionTtl,
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax', // Use 'lax' for Vercel compatibility
+    domain: process.env.COOKIE_DOMAIN, // Optional: set if using custom domain
   },
   name: 'jengatrack.sid',
 }));
@@ -140,6 +145,7 @@ app.use('/api', apiRouter);
 app.use('/webhook', whatsappRouter);
 
 // Serve static files from the Vite build output
+// In Vercel, static files are served by the filesystem handler, but we need this for local dev
 const clientDistPath = path.join(__dirname, '..', 'dist', 'public');
 app.use(express.static(clientDistPath));
 
@@ -150,7 +156,20 @@ app.get('*', (req: Request, res: Response) => {
     return res.status(404).json({ error: 'Not found' });
   }
   
-  res.sendFile(path.join(clientDistPath, 'index.html'));
+  // Try to serve the file, fallback to index.html for SPA routing
+  const filePath = path.join(clientDistPath, req.path);
+  const indexPath = path.join(clientDistPath, 'index.html');
+  
+  // Check if file exists, otherwise serve index.html for SPA
+  import('fs').then((fs) => {
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      res.sendFile(filePath);
+    } else {
+      res.sendFile(indexPath);
+    }
+  }).catch(() => {
+    res.sendFile(indexPath);
+  });
 });
 
 // Error handling middleware

@@ -1,28 +1,31 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.ts": {
-      "includeFiles": "dist/public/**"
+      "runtime": "nodejs20.x"
     }
   },
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
     },
     {
-      "source": "/webhook/(.*)",
-      "destination": "/api/index"
+      "src": "/webhook/(.*)",
+      "dest": "/api/index.ts"
     },
     {
-      "source": "/health",
-      "destination": "/api/index"
+      "src": "/health",
+      "dest": "/api/index.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": "/api/index"
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.ts"
     }
   ],
   "env": {
