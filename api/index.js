@@ -194,13 +194,18 @@ app.get('/api/debug/session', async (req, res) => {
   }
 });
 
-// WhatsApp Webhook Endpoint (always available)
+// WhatsApp Webhook Endpoint (always available - BEFORE server app mounts)
+// This ensures it works even if compiled server doesn't load
 app.post('/webhook/webhook', async (req, res) => {
   try {
     console.log('[WhatsApp Webhook] Received request:', {
       method: req.method,
+      url: req.url,
       body: req.body,
-      headers: req.headers
+      headers: {
+        'content-type': req.headers['content-type'],
+        'x-twilio-signature': req.headers['x-twilio-signature'] ? 'present' : 'missing'
+      }
     });
     
     // Basic response for testing
@@ -219,7 +224,7 @@ app.post('/webhook/webhook', async (req, res) => {
   }
 });
 
-// WhatsApp Debug Endpoint (always available)
+// WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -229,7 +234,8 @@ app.get('/webhook/debug', async (req, res) => {
       total: 0,
       logs: [],
       message: 'WhatsApp debug endpoint reached (fallback mode - logs not available)',
-      limit
+      limit,
+      note: 'If compiled server loads, this will show actual WhatsApp logs'
     });
   } catch (error) {
     console.error('[WhatsApp Debug] Error:', error);
@@ -240,19 +246,21 @@ app.get('/webhook/debug', async (req, res) => {
   }
 });
 
-// Images Endpoint (always available, requires auth)
+// Images Endpoint (always available - BEFORE server app mounts)
 app.get('/api/images', async (req, res) => {
   try {
     // Check if user is authenticated
     if (!req.session || !req.session.userId) {
       return res.status(401).json({
         success: false,
-        error: 'Authentication required'
+        error: 'Authentication required',
+        message: 'Please login to access images'
       });
     }
     
     const limit = parseInt(req.query.limit) || 20;
     const offset = parseInt(req.query.offset) || 0;
+    const expenseId = req.query.expense_id;
     
     res.json({
       success: true,
@@ -263,7 +271,10 @@ app.get('/api/images', async (req, res) => {
         offset,
         hasMore: false
       },
-      message: 'Images endpoint reached (fallback mode - no images available)'
+      message: 'Images endpoint reached (fallback mode - no images available)',
+      filters: {
+        expenseId: expenseId || null
+      }
     });
   } catch (error) {
     console.error('[Images] Error:', error);
