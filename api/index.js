@@ -46,6 +46,7 @@ app.use((req, res, next) => {
   // Log all requests to webhook routes
   if (req.path.startsWith('/webhook')) {
     console.log(`[Request] ${req.method} ${req.path} - ${req.url}`);
+    console.log(`[Request] Route stack length: ${app._router?.stack?.length || 0}`);
   }
   next();
 });
@@ -177,27 +178,7 @@ app.post('/webhook', (req, res, next) => {
   return webhookHandler(req, res);
 });
 
-// WhatsApp Debug Endpoint
-app.get('/webhook/debug', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    
-    res.json({
-      success: true,
-      total: 0,
-      logs: [],
-      message: 'WhatsApp debug endpoint reached (fallback mode - logs not available)',
-      limit,
-      note: 'If compiled server loads, this will show actual WhatsApp logs'
-    });
-  } catch (error) {
-    console.error('[WhatsApp Debug] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
+// Debug endpoint is now in webhookRouter above
 
 // ============================================================================
 // IMPORT COMPILED ROUTES
