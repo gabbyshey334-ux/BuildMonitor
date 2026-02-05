@@ -38,7 +38,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!api|webhook|health|assets|.*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot)).*)",
+      "source": "/((?!api|webhook|health|assets).*)",
       "destination": "/index.html"
     }
   ],
