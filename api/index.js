@@ -7,6 +7,8 @@
 
 import 'dotenv/config';
 import express from 'express';
+import session from 'express-session';
+import connectPg from 'connect-pg-simple';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -38,6 +40,39 @@ app.use((req, res, next) => {
 
 // Trust proxy for Vercel
 app.set('trust proxy', 1);
+
+// ============================================================================
+// SESSION MIDDLEWARE (needed for debug/session endpoint)
+// ============================================================================
+
+// Session configuration
+const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+const pgStore = connectPg(session);
+const sessionStore = new pgStore({
+  conString: process.env.DATABASE_URL,
+  createTableIfMissing: true,
+  ttl: sessionTtl,
+  tableName: "sessions",
+});
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || (() => {
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('⚠️ SESSION_SECRET not set - sessions may not work properly');
+    }
+    return 'jengatrack-dev-secret-' + Date.now();
+  })(),
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: sessionTtl,
+    sameSite: 'lax',
+  },
+  name: 'jengatrack.sid',
+}));
 
 // ============================================================================
 // DATABASE CONNECTION (Direct connection for serverless)
@@ -279,6 +314,31 @@ if (!serverApp) {
         url: process.env.DATABASE_URL ? 'configured' : 'not configured'
       }
     });
+  });
+
+  app.get('/api/debug/session', async (req, res) => {
+    try {
+      res.json({
+        success: true,
+        session: {
+          sessionID: req.sessionID,
+          hasSession: !!req.session,
+          userId: req.session?.userId || null,
+          whatsappNumber: req.session?.whatsappNumber || null,
+        },
+        env: {
+          SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
+          NODE_ENV: process.env.NODE_ENV,
+        },
+        message: 'Debug endpoint (fallback mode)'
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Session check failed',
+        details: error.message
+      });
+    }
   });
 }
 
