@@ -10,18 +10,21 @@ import {
   Settings,
   HelpCircle,
   Building2,
-  FileText
+  FileText,
+  LogOut
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Budget & Costs', href: '/dashboard/budget', icon: Wallet },
   { name: 'Tasks', href: '/dashboard/tasks', icon: ClipboardList },
   { name: 'Materials', href: '/dashboard/materials', icon: Package },
-  { name: 'Issues & Risks', href: '/dashboard/issues', icon: AlertCircle, badge: 3 },
+  { name: 'Issues & Risks', href: '/dashboard/issues', icon: AlertCircle },
   { name: 'Site Photos', href: '/dashboard/photos', icon: Image },
   { name: 'Reports', href: '/dashboard/reports', icon: FileText },
 ];
@@ -33,7 +36,26 @@ const bottomNav = [
 
 export default function Sidebar() {
   const [location] = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  // Fetch issues count for badge
+  const { data: issuesData } = useQuery({
+    queryKey: ['/api/dashboard/issues'],
+    queryFn: async () => {
+      try {
+        const response = await fetch('/api/dashboard/issues', {
+          credentials: 'include',
+        });
+        if (!response.ok) return null;
+        return response.json();
+      } catch {
+        return null;
+      }
+    },
+    retry: false,
+  });
+
+  const openIssuesCount = issuesData?.todo?.length || 0;
 
   // Get user initials from fullName
   const getInitials = (name: string | undefined) => {
@@ -50,15 +72,17 @@ export default function Sidebar() {
     <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-64 lg:flex-col">
       <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-white border-r border-gray-200 px-6">
         {/* Logo */}
-        <div className="flex h-16 shrink-0 items-center gap-3 mt-4">
-          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-[#93C54E] to-[#218598]">
-            <Building2 className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">JengaTrack</h1>
-            <p className="text-xs text-gray-500">Construction Monitor</p>
-          </div>
-        </div>
+        <Link href="/dashboard">
+          <a className="flex h-16 shrink-0 items-center gap-3 mt-4 cursor-pointer">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-[#93C54E] to-[#218598]">
+              <Building2 className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">JengaTrack</h1>
+              <p className="text-xs text-gray-500">Construction Monitor</p>
+            </div>
+          </a>
+        </Link>
 
         {/* Navigation */}
         <nav className="flex flex-1 flex-col">
@@ -67,6 +91,7 @@ export default function Sidebar() {
               <ul role="list" className="-mx-2 space-y-1">
                 {navigation.map((item) => {
                   const isActive = location === item.href;
+                  const badge = item.name === 'Issues & Risks' ? openIssuesCount : null;
                   return (
                     <li key={item.name}>
                       <Link href={item.href}>
@@ -81,9 +106,9 @@ export default function Sidebar() {
                         >
                           <item.icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-white' : 'text-gray-400 group-hover:text-[#218598]'}`} />
                           {item.name}
-                          {item.badge && (
+                          {badge && badge > 0 && (
                             <Badge className="ml-auto bg-red-500 text-white">
-                              {item.badge}
+                              {badge}
                             </Badge>
                           )}
                         </a>
@@ -125,7 +150,7 @@ export default function Sidebar() {
 
         {/* User Profile */}
         <div className="border-t border-gray-200 pt-4 pb-4 -mx-6 px-6">
-          <div className="flex items-center gap-x-3">
+          <div className="flex items-center gap-x-3 mb-3">
             <Avatar className="h-10 w-10">
               <AvatarFallback className="bg-gradient-to-br from-[#93C54E] to-[#218598] text-white font-semibold">
                 {getInitials(user?.fullName)}
@@ -140,6 +165,16 @@ export default function Sidebar() {
               </p>
             </div>
           </div>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-center"
+            onClick={() => logout()}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
         </div>
       </div>
     </div>

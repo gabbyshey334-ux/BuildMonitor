@@ -7,7 +7,8 @@ import {
   AlertCircle,
   Image,
   TrendingUp,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,6 +25,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useLocation } from 'wouter';
 import { apiRequest } from '@/lib/queryClient';
 
 const features = [
@@ -67,6 +69,7 @@ const features = [
 
 export default function EmptyState() {
   const [showDialog, setShowDialog] = useState(false);
+  const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -91,11 +94,15 @@ export default function EmptyState() {
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
       toast({
-        title: "Success",
+        title: "Success!",
         description: "Project created successfully",
       });
       setFormData({ name: '', description: '', budget: '' });
       setShowDialog(false);
+      // Redirect to dashboard - will now show full dashboard instead of empty state
+      setTimeout(() => {
+        setLocation('/dashboard');
+      }, 500);
     },
     onError: (error: any) => {
       toast({
@@ -197,7 +204,14 @@ export default function EmptyState() {
                   className="flex-1 bg-gradient-to-r from-[#93C54E] to-[#218598]"
                   disabled={createProjectMutation.isPending}
                 >
-                  {createProjectMutation.isPending ? 'Creating...' : 'Create Project'}
+                  {createProjectMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    'Create Project'
+                  )}
                 </Button>
               </div>
             </form>

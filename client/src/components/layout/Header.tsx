@@ -5,10 +5,30 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from 'wouter';
+import { useQuery } from '@tanstack/react-query';
 
 export default function Header() {
   const { logout } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Fetch notification count
+  const { data: issuesData } = useQuery({
+    queryKey: ['/api/dashboard/issues'],
+    queryFn: async () => {
+      try {
+        const response = await fetch('/api/dashboard/issues', {
+          credentials: 'include',
+        });
+        if (!response.ok) return null;
+        return response.json();
+      } catch {
+        return null;
+      }
+    },
+    retry: false,
+  });
+
+  const notificationCount = issuesData?.todo?.length || 0;
 
   const handleLogout = async () => {
     await logout();
@@ -40,9 +60,11 @@ export default function Header() {
           {/* Notifications */}
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500">
-              3
-            </Badge>
+            {notificationCount > 0 && (
+              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500">
+                {notificationCount}
+              </Badge>
+            )}
           </Button>
 
           {/* Logout */}

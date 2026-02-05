@@ -6,6 +6,17 @@ import FullDashboard from '@/components/dashboard-new/DashboardPage';
 export default function DashboardPageWrapper() {
   const { data: projectsResponse, isLoading } = useQuery<{ success: boolean; projects: any[] }>({
     queryKey: ['/api/projects'],
+    queryFn: async () => {
+      const response = await fetch('/api/projects', {
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch projects');
+      }
+      
+      return response.json();
+    },
     retry: false,
   });
 
