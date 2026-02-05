@@ -4,31 +4,37 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Expand } from 'lucide-react';
 
-interface SiteReportsMediaSectionProps {
-  // TODO: Define props for data
+interface Photo {
+  id: string;
+  url: string;
+  description: string;
+  date: string | Date;
 }
 
-const recentPhotos = [
-  { id: 'p1', thumbnailUrl: 'https://via.placeholder.com/150/93C54E/FFFFFF?text=Site+1', caption: 'Foundation work in progress', date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) },
-  { id: 'p2', thumbnailUrl: 'https://via.placeholder.com/150/218598/FFFFFF?text=Site+2', caption: 'Steel reinforcement installation', date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
-  { id: 'p3', thumbnailUrl: 'https://via.placeholder.com/150/2D3748/FFFFFF?text=Site+3', caption: 'Concrete pouring - ground floor', date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) },
-  { id: 'p4', thumbnailUrl: 'https://via.placeholder.com/150/E2E8F0/000000?text=Site+4', caption: 'Roofing structure complete', date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) },
-  { id: 'p5', thumbnailUrl: 'https://via.placeholder.com/150/93C54E/FFFFFF?text=Site+5', caption: 'Interior finishing - painting', date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) },
-  { id: 'p6', thumbnailUrl: 'https://via.placeholder.com/150/218598/FFFFFF?text=Site+6', caption: 'Exterior facade complete', date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000) },
-];
+interface SiteReportsMediaSectionData {
+  recentPhotos: Photo[];
+  stats: {
+    dailyLogsThisWeek: number;
+    siteCondition: string;
+  };
+}
 
-const dailyLogsThisWeek = 5;
-const photosUploaded = 25;
-const totalPhotos = 50;
+const formatDate = (date: string | Date) => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
-const formatDate = (date: Date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-const openPhotoModal = (photo: any) => {
-  console.log('Open photo modal for:', photo.caption);
+const openPhotoModal = (photo: Photo) => {
+  console.log('Open photo modal for:', photo.description);
   // TODO: Implement actual modal opening logic
 };
 
-export function SiteReportsMediaSection(/* { data }: SiteReportsMediaSectionProps */) {
+export function SiteReportsMediaSection({ data }: { data?: SiteReportsMediaSectionData }) {
+  const { recentPhotos = [], stats } = data || {};
+  const dailyLogsThisWeek = stats?.dailyLogsThisWeek || 0;
+  const siteCondition = stats?.siteCondition || 'Good';
+  const photosUploaded = recentPhotos.length;
+  const totalPhotos = photosUploaded; // In real app, this would come from API
   return (
     <Card>
       <CardHeader>

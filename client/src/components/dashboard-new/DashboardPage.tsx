@@ -15,45 +15,52 @@ import { TrendsQuickInsightsSection } from './TrendsQuickInsightsSection';
 
 // Define fetcher functions for each endpoint
 const fetchSummary = async () => {
-  const res = await fetch('/api/dashboard/summary');
+  const res = await fetch('/api/dashboard/summary', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch summary');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchProgress = async () => {
-  const res = await fetch('/api/dashboard/progress');
+  const res = await fetch('/api/dashboard/progress', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch progress');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchBudget = async () => {
-  const res = await fetch('/api/dashboard/budget');
+  const res = await fetch('/api/dashboard/budget', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch budget');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchInventory = async () => {
-  const res = await fetch('/api/dashboard/inventory');
+  const res = await fetch('/api/dashboard/inventory', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch inventory');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchIssues = async () => {
-  const res = await fetch('/api/dashboard/issues');
+  const res = await fetch('/api/dashboard/issues', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch issues');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchMedia = async () => {
-  const res = await fetch('/api/dashboard/media');
+  const res = await fetch('/api/dashboard/media', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch media');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 const fetchTrends = async () => {
-  const res = await fetch('/api/dashboard/trends');
+  const res = await fetch('/api/dashboard/trends', { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch trends');
-  return res.json();
+  const data = await res.json();
+  return data;
 };
 
 export default function DashboardPage() {
