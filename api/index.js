@@ -41,6 +41,15 @@ app.use((req, res, next) => {
 // Trust proxy for Vercel
 app.set('trust proxy', 1);
 
+// Request logging middleware (for debugging)
+app.use((req, res, next) => {
+  // Log all requests to webhook routes
+  if (req.path.startsWith('/webhook')) {
+    console.log(`[Request] ${req.method} ${req.path} - ${req.url}`);
+  }
+  next();
+});
+
 // ============================================================================
 // SESSION MIDDLEWARE (needed for debug/session endpoint)
 // ============================================================================
@@ -144,13 +153,15 @@ try {
       // Mount it to handle all routes
       console.log('✅ Loaded compiled Express app from dist/server/index.js');
       
-      // Use the server app's routes by mounting it
-      // This will handle all routes including /api, /webhook, etc.
+      // IMPORTANT: Mount server app at root, but webhook routes defined above
+      // will be checked FIRST due to Express route matching order
       app.use('/', serverApp);
       
       // Re-register webhook route AFTER server app mounts to ensure it works
       // This is a safety net in case server app routes don't work correctly
-      app.post('/webhook/webhook', webhookHandler);
+      // Routes registered after app.use() will be checked AFTER the mounted app
+      // So we need to ensure webhook routes are registered BEFORE mounting
+      console.log('📝 Webhook routes should already be registered above');
     } else {
       console.warn('⚠️ Server module does not export an Express app');
       console.warn('   Type:', typeof serverApp);
