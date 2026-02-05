@@ -10,6 +10,9 @@ import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { sql } from 'drizzle-orm';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -35,6 +38,43 @@ app.use((req, res, next) => {
 
 // Trust proxy for Vercel
 app.set('trust proxy', 1);
+
+// ============================================================================
+// DATABASE CONNECTION (Direct connection for serverless)
+// ============================================================================
+
+// Initialize database connection directly (for use in api/index.js)
+// This avoids needing to import from dist/server/db.js which isn't available
+let db = null;
+let dbInitialized = false;
+
+function initializeDatabase() {
+  if (dbInitialized) return db;
+  
+  try {
+    if (!process.env.DATABASE_URL) {
+      console.warn('⚠️ DATABASE_URL not set - database features will be unavailable');
+      dbInitialized = true;
+      return null;
+    }
+
+    const queryClient = postgres(process.env.DATABASE_URL, {
+      max: 10,
+      idle_timeout: 20,
+      connect_timeout: 10,
+    });
+
+    // Initialize Drizzle with minimal schema (we'll use raw SQL for testing)
+    db = drizzle(queryClient);
+    dbInitialized = true;
+    console.log('✅ Database connection initialized');
+    return db;
+  } catch (error) {
+    console.error('❌ Failed to initialize database:', error);
+    dbInitialized = true;
+    return null;
+  }
+}
 
 // ============================================================================
 // HEALTH CHECK
@@ -139,71 +179,17 @@ app.get('/api/test/supabase', async (req, res) => {
       .limit(5);
 
     // Test Drizzle database connection
-    let drizzleTest = { connected: false, error: null, path: null, filesChecked: [] };
+    let drizzleTest = { connected: false, error: null, method: null };
     try {
-      // Try multiple possible paths for the db module
-      const possiblePaths = [
-        join(__dirname, '..', 'dist', 'server', 'db.js'),
-        join(process.cwd(), 'dist', 'server', 'db.js'),
-        '/var/task/dist/server/db.js',
-        './dist/server/db.js',
-      ];
+      // Initialize database connection directly (no need to import from dist/server)
+      const dbConnection = initializeDatabase();
       
-      let dbModule = null;
-      let dbPath = null;
-      
-      // Check which paths exist
-      for (const dbPathAttempt of possiblePaths) {
-        const exists = fs.existsSync(dbPathAttempt);
-        drizzleTest.filesChecked.push({ path: dbPathAttempt, exists });
-        
-        if (exists) {
-          dbPath = dbPathAttempt;
-          try {
-            // Try file:// protocol for absolute paths
-            if (dbPathAttempt.startsWith('/')) {
-              dbModule = await import('file://' + dbPathAttempt);
-            } else {
-              dbModule = await import(dbPathAttempt);
-            }
-            break;
-          } catch (importError) {
-            console.warn(`Failed to import from ${dbPathAttempt}:`, importError.message);
-            continue;
-          }
-        }
+      if (!dbConnection) {
+        throw new Error('Database connection not initialized - DATABASE_URL may be missing');
       }
       
-      if (!dbModule) {
-        // Try direct import as last resort
-        try {
-          dbModule = await import('../dist/server/db.js');
-          dbPath = '../dist/server/db.js (direct import)';
-        } catch (fallbackError) {
-          // List what files actually exist in dist/server
-          const distServerPath = join(__dirname, '..', 'dist', 'server');
-          let distContents = [];
-          try {
-            if (fs.existsSync(distServerPath)) {
-              distContents = fs.readdirSync(distServerPath);
-            }
-          } catch (e) {
-            // Ignore
-          }
-          
-          throw new Error(
-            `Could not find db.js. ` +
-            `Checked paths: ${possiblePaths.join(', ')}. ` +
-            `Files in dist/server: ${distContents.length > 0 ? distContents.join(', ') : 'directory not found'}. ` +
-            `Last error: ${fallbackError.message}`
-          );
-        }
-      }
-      
-      drizzleTest.path = dbPath;
-      const { db } = dbModule;
-      const { sql } = await import('drizzle-orm');
-      await db.execute(sql`SELECT 1`);
+      drizzleTest.method = 'direct_connection';
+      await dbConnection.execute(sql`SELECT 1`);
       drizzleTest.connected = true;
     } catch (dbError) {
       drizzleTest.error = dbError.message;
