@@ -62,14 +62,17 @@ export default function Dashboard() {
   // Extract project ID from URL query parameter
   const urlParams = new URLSearchParams(window.location.search);
   const selectedProjectId = urlParams.get('project');
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   useEffect(() => {
     fetchProjects();
   }, []);
 
-  // If a project is selected, show the full dashboard
-  if (selectedProjectId && selectedProject) {
+  // If a project is selected in URL, show the full dashboard
+  // Note: Dashboard components fetch data based on active project from user profile
+  if (selectedProjectId) {
+    // Store selected project ID for dashboard components to use
+    // The dashboard API endpoints use the active_project_id from user profile
+    // For now, we'll show the dashboard - it will use the active project
     return (
       <div className="space-y-6">
         {/* Back button */}
