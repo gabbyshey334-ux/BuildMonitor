@@ -194,6 +194,86 @@ app.get('/api/debug/session', async (req, res) => {
   }
 });
 
+// WhatsApp Webhook Endpoint (always available)
+app.post('/webhook/webhook', async (req, res) => {
+  try {
+    console.log('[WhatsApp Webhook] Received request:', {
+      method: req.method,
+      body: req.body,
+      headers: req.headers
+    });
+    
+    // Basic response for testing
+    res.type('text/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>✅ Webhook endpoint reached. Message received: ${req.body?.Body || 'No body'}</Message>
+</Response>`);
+  } catch (error) {
+    console.error('[WhatsApp Webhook] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Webhook processing failed',
+      details: error.message
+    });
+  }
+});
+
+// WhatsApp Debug Endpoint (always available)
+app.get('/webhook/debug', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    res.json({
+      success: true,
+      total: 0,
+      logs: [],
+      message: 'WhatsApp debug endpoint reached (fallback mode - logs not available)',
+      limit
+    });
+  } catch (error) {
+    console.error('[WhatsApp Debug] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Images Endpoint (always available, requires auth)
+app.get('/api/images', async (req, res) => {
+  try {
+    // Check if user is authenticated
+    if (!req.session || !req.session.userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+    }
+    
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    res.json({
+      success: true,
+      images: [],
+      pagination: {
+        total: 0,
+        limit,
+        offset,
+        hasMore: false
+      },
+      message: 'Images endpoint reached (fallback mode - no images available)'
+    });
+  } catch (error) {
+    console.error('[Images] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Test Supabase and Database connection
 app.get('/api/test/supabase', async (req, res) => {
   try {
