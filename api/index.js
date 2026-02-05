@@ -29,9 +29,11 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS
+// CORS - CRITICAL: Allow credentials for session cookies
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Origin', origin || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
@@ -43,6 +45,12 @@ app.set('trust proxy', 1);
 
 // Request logging middleware (for debugging)
 app.use((req, res, next) => {
+  // Log all API requests for debugging
+  if (req.path.startsWith('/api')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    console.log('  Session ID:', req.sessionID);
+    console.log('  User ID in session:', req.session?.userId || 'none');
+  }
   // Log all requests to webhook routes
   if (req.path.startsWith('/webhook')) {
     console.log(`[Request] ${req.method} ${req.path} - ${req.url}`);
@@ -79,7 +87,7 @@ app.use(session({
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: sessionTtl,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site cookies in production
   },
   name: 'jengatrack.sid',
 }));
@@ -302,20 +310,123 @@ app.get('/webhook/debug', async (req, res) => {
 });
 
 // ============================================================================
-// PROJECTS ENDPOINTS (always available - BEFORE server app mounts)
+// AUTHENTICATION ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================
 
 // Middleware to check authentication
 function requireAuth(req, res, next) {
+  console.log('[Auth Check] Session:', {
+    hasSession: !!req.session,
+    sessionID: req.sessionID,
+    userId: req.session?.userId || null,
+  });
+  
   if (!req.session || !req.session.userId) {
+    console.log('[Auth Check] ❌ FAILED - No user ID in session');
     return res.status(401).json({
       success: false,
-      error: 'Authentication required',
+      error: 'You need to log in to access this feature',
       message: 'Please log in to access this resource',
     });
   }
+  
+  console.log('[Auth Check] ✅ SUCCESS - User authenticated:', req.session.userId);
   next();
 }
+
+// GET /api/auth/me - Get current user
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    console.log('[Auth Me] User ID:', userId);
+    
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Use raw SQL to fetch user profile
+    const result = await dbConnection.execute(sql`
+      SELECT id, whatsapp_number as "whatsappNumber", full_name as "fullName", 
+             email, default_currency as "defaultCurrency", 
+             preferred_language as "preferredLanguage"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+
+    const user = Array.isArray(result) ? result[0] : (result.rows ? result.rows[0] : result);
+
+    if (!user) {
+      console.log('[Auth Me] User not found');
+      // Clear invalid session
+      req.session.destroy(() => {});
+      return res.status(404).json({
+        success: false,
+        error: 'User not found',
+      });
+    }
+
+    console.log('[Auth Me] ✅ Success:', user.id);
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email || null,
+        fullName: user.fullName,
+        whatsappNumber: user.whatsappNumber,
+        defaultCurrency: user.defaultCurrency || 'UGX',
+        preferredLanguage: user.preferredLanguage || 'en',
+      },
+    });
+  } catch (error) {
+    console.error('[Auth Me] ❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user',
+      details: error.message,
+    });
+  }
+});
+
+// POST /api/auth/logout - Logout user
+app.post('/api/auth/logout', (req, res) => {
+  console.log('[Logout] User:', req.session?.userId);
+  console.log('[Logout] Session ID:', req.sessionID);
+  
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('[Logout] ❌ Error destroying session:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Logout failed',
+        details: err.message,
+      });
+    }
+    
+    // Clear cookie
+    res.clearCookie('jengatrack.sid', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
+    
+    console.log('[Logout] ✅ Success');
+    res.json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  });
+});
+
+// ============================================================================
+// PROJECTS ENDPOINTS (always available - BEFORE server app mounts)
+// ============================================================================
 
 // GET all projects for current user
 app.get('/api/projects', requireAuth, async (req, res) => {
