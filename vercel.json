@@ -28,14 +28,6 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/assets/:path*",
-      "destination": "/dist/public/assets/:path*"
-    },
-    {
-      "source": "/:path*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot)",
-      "destination": "/dist/public/:path*.$1"
-    },
-    {
       "source": "/:path*",
       "destination": "/index.html"
     }
