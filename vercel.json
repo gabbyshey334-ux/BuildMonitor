@@ -16,11 +16,11 @@
   ],
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/:path*",
       "destination": "/api/index.js"
     },
     {
-      "source": "/webhook/(.*)",
+      "source": "/webhook/:path*",
       "destination": "/api/index.js"
     },
     {
@@ -28,15 +28,15 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/assets/(.*)",
-      "destination": "/dist/public/assets/$1"
+      "source": "/assets/:path*",
+      "destination": "/dist/public/assets/:path*"
     },
     {
-      "source": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot))",
-      "destination": "/dist/public/$1"
+      "source": "/:path*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot)",
+      "destination": "/dist/public/:path*.$1"
     },
     {
-      "source": "/((?!api|webhook|health|assets|.*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot)).*)",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ],
