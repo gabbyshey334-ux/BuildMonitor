@@ -221,8 +221,8 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
     // Other ports are firewalled. Default to 5000 if not specified.
     // This serves both the API and the client.
     const port = parseInt(process.env.PORT || '5000', 10);
+    const { log } = await import('./vite');
     app.listen(port, "0.0.0.0", () => {
-      const { log } = await import('./vite');
       log(`🚀 JengaTrack server running on port ${port}`);
       log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       log(`🔐 Session store: PostgreSQL`);
