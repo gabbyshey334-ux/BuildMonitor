@@ -889,10 +889,25 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     // Support both 'budget' and 'budgetAmount' for backward compatibility
     const budgetValue = budget || budgetAmount;
 
-    console.log('[Create Project] Request:', { name, description, budget: budgetValue, currency, status, userId });
+    console.log('[Create Project] ============================================');
+    console.log('[Create Project] Request received:', {
+      userId,
+      name,
+      description,
+      budget: budgetValue,
+      currency,
+      status,
+      bodyKeys: Object.keys(req.body),
+    });
+    console.log('[Create Project] Session:', {
+      hasSession: !!req.session,
+      sessionID: req.sessionID,
+      userId: req.session?.userId,
+    });
 
     // Check authentication
     if (!userId) {
+      console.error('[Create Project] ❌ No user ID in session');
       return res.status(401).json({ 
         success: false,
         error: 'Not authenticated',
@@ -902,6 +917,7 @@ app.post('/api/projects', requireAuth, async (req, res) => {
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim() === '') {
+      console.error('[Create Project] ❌ Validation failed: name is required');
       return res.status(400).json({
         success: false,
         error: 'Project name is required',
@@ -910,6 +926,7 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     }
 
     if (!budgetValue || parseFloat(budgetValue) <= 0) {
+      console.error('[Create Project] ❌ Validation failed: invalid budget');
       return res.status(400).json({
         success: false,
         error: 'Valid budget amount is required',
@@ -922,12 +939,23 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+    console.log('[Create Project] Environment check:', {
+      hasSupabaseUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceKey,
+      urlLength: supabaseUrl?.length || 0,
+      keyLength: supabaseServiceKey?.length || 0,
+    });
+
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('[Create Project] Missing Supabase credentials');
+      console.error('[Create Project] ❌ Missing Supabase credentials');
       return res.status(500).json({
         success: false,
         error: 'Server configuration error',
         message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured',
+        debug: {
+          hasUrl: !!supabaseUrl,
+          hasKey: !!supabaseServiceKey,
+        }
       });
     }
 
@@ -955,6 +983,7 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     // Parse budget amount
     const parsedBudget = parseFloat(budgetValue);
     if (isNaN(parsedBudget) || parsedBudget < 0) {
+      console.error('[Create Project] ❌ Invalid budget amount:', budgetValue);
       return res.status(400).json({
         success: false,
         error: 'Invalid budget amount',
@@ -962,31 +991,80 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
+    // Prepare insert data
+    const insertData = {
+      user_id: userId,
+      name: name.trim(),
+      description: description?.trim() || null,
+      budget: parsedBudget,
+      currency: currency || 'UGX',
+      status: normalizedStatus,
+      spent: 0, // Will be calculated automatically by trigger
+    };
+
+    console.log('[Create Project] Inserting project with data:', insertData);
+
     // Insert project
     const { data: project, error: insertError } = await supabase
       .from('projects')
-      .insert([{
-        user_id: userId,
-        name: name.trim(),
-        description: description?.trim() || null,
-        budget: parsedBudget,
-        currency: currency || 'UGX',
-        status: normalizedStatus,
-        spent: 0, // Will be calculated automatically by trigger
-      }])
+      .insert([insertData])
       .select()
       .single();
 
     if (insertError) {
-      console.error('[Create Project] Database error:', insertError);
-      return res.status(500).json({ 
+      console.error('[Create Project] ❌ Database error:', {
+        message: insertError.message,
+        code: insertError.code,
+        details: insertError.details,
+        hint: insertError.hint,
+        error: insertError,
+      });
+      
+      // Provide more specific error messages
+      let errorMessage = insertError.message || 'Failed to create project';
+      let statusCode = 500;
+      
+      if (insertError.code === '23505') { // Unique violation
+        errorMessage = 'A project with this name already exists';
+        statusCode = 409;
+      } else if (insertError.code === '23503') { // Foreign key violation
+        errorMessage = 'Invalid user ID - user not found';
+        statusCode = 400;
+      } else if (insertError.code === '42501') { // Insufficient privilege
+        errorMessage = 'Permission denied - check RLS policies';
+        statusCode = 403;
+      } else if (insertError.message?.includes('column') && insertError.message?.includes('does not exist')) {
+        errorMessage = 'Database schema mismatch - column not found. Please run migrations.';
+        statusCode = 500;
+      }
+      
+      return res.status(statusCode).json({ 
         success: false,
         error: 'Failed to create project',
-        message: insertError.message 
+        message: errorMessage,
+        details: insertError.details || insertError.hint,
+        code: insertError.code,
+        debug: process.env.NODE_ENV === 'development' ? {
+          fullError: insertError,
+          insertData,
+        } : undefined,
       });
     }
 
-    console.log('[Create Project] ✅ Successfully created project:', project.id);
+    if (!project) {
+      console.error('[Create Project] ❌ No project returned from insert');
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create project',
+        message: 'Project was not created - no data returned',
+      });
+    }
+
+    console.log('[Create Project] ✅ Successfully created project:', {
+      id: project.id,
+      name: project.name,
+      userId: project.user_id,
+    });
 
     // Transform to match frontend expectations
     const transformedProject = {
@@ -1009,12 +1087,16 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       message: 'Project created successfully',
     });
   } catch (error) {
-    console.error('[Create Project] ❌ Unexpected error:', error);
-    console.error('[Create Project] ❌ Error stack:', error.stack);
+    console.error('[Create Project] ❌ Unexpected error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
     res.status(500).json({
       success: false,
       error: 'Failed to create project',
-      details: error.message,
+      message: error.message || 'An unexpected error occurred',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
