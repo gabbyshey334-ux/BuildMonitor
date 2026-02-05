@@ -220,15 +220,21 @@ try {
       // Mount it to handle all routes
       console.log('✅ Loaded compiled Express app from dist/server/index.js');
       
-      // IMPORTANT: Mount server app at root, but webhook routes defined above
-      // will be checked FIRST due to Express route matching order
+      // Mount server app at root
+      // Webhook routes defined above (before this point) will be checked FIRST
       app.use('/', serverApp);
       
-      // Re-register webhook route AFTER server app mounts to ensure it works
-      // This is a safety net in case server app routes don't work correctly
-      // Routes registered after app.use() will be checked AFTER the mounted app
-      // So we need to ensure webhook routes are registered BEFORE mounting
-      console.log('📝 Webhook routes should already be registered above');
+      // Re-register webhook routes AFTER server app mounts as additional fallback
+      // This ensures they work even if server app routes fail
+      console.log('📝 Re-registering webhook routes after server app mount...');
+      app.post('/webhook/webhook', (req, res, next) => {
+        console.log('[Webhook Route] POST /webhook/webhook matched (after server app)');
+        return webhookHandler(req, res);
+      });
+      app.post('/webhook', (req, res, next) => {
+        console.log('[Webhook Route] POST /webhook matched (after server app)');
+        return webhookHandler(req, res);
+      });
     } else {
       console.warn('⚠️ Server module does not export an Express app');
       console.warn('   Type:', typeof serverApp);
@@ -275,48 +281,6 @@ app.get('/api/debug/session', async (req, res) => {
     });
   }
 });
-
-// WhatsApp Webhook Endpoint (always available)
-// Define it as a function so we can reuse it
-const webhookHandler = async (req, res) => {
-  try {
-    console.log('[WhatsApp Webhook] Received request:', {
-      method: req.method,
-      url: req.url,
-      path: req.path,
-      body: req.body,
-      headers: {
-        'content-type': req.headers['content-type'],
-        'x-twilio-signature': req.headers['x-twilio-signature'] ? 'present' : 'missing'
-      }
-    });
-    
-    // Basic response for testing
-    res.type('text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>✅ Webhook endpoint reached. Message received: ${req.body?.Body || 'No body'}</Message>
-</Response>`);
-  } catch (error) {
-    console.error('[WhatsApp Webhook] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Webhook processing failed',
-      details: error.message
-    });
-  }
-};
-
-// Register webhook route BEFORE server app mounts
-// Also register at /webhook (without the duplicate) in case that's what's expected
-app.post('/webhook/webhook', (req, res, next) => {
-  console.log('[Webhook Route] POST /webhook/webhook matched');
-  return webhookHandler(req, res);
-});
-app.post('/webhook', (req, res, next) => {
-  console.log('[Webhook Route] POST /webhook matched');
-  return webhookHandler(req, res);
-}); // Alternative path
 
 // WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
