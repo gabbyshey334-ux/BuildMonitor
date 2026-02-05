@@ -169,6 +169,31 @@ try {
 // TEST ENDPOINTS (available even when server app is loaded)
 // ============================================================================
 
+// Debug Session Endpoint (always available)
+app.get('/api/debug/session', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      session: {
+        sessionID: req.sessionID,
+        hasSession: !!req.session,
+        userId: req.session?.userId || null,
+        whatsappNumber: req.session?.whatsappNumber || null,
+      },
+      env: {
+        SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
+        NODE_ENV: process.env.NODE_ENV,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Session check failed',
+      details: error.message
+    });
+  }
+});
+
 // Test Supabase and Database connection
 app.get('/api/test/supabase', async (req, res) => {
   try {
@@ -316,30 +341,6 @@ if (!serverApp) {
     });
   });
 
-  app.get('/api/debug/session', async (req, res) => {
-    try {
-      res.json({
-        success: true,
-        session: {
-          sessionID: req.sessionID,
-          hasSession: !!req.session,
-          userId: req.session?.userId || null,
-          whatsappNumber: req.session?.whatsappNumber || null,
-        },
-        env: {
-          SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
-          NODE_ENV: process.env.NODE_ENV,
-        },
-        message: 'Debug endpoint (fallback mode)'
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: 'Session check failed',
-        details: error.message
-      });
-    }
-  });
 }
 
 // ============================================================================
