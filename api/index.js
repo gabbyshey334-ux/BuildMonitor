@@ -383,24 +383,35 @@ app.get('/webhook/debug', async (req, res) => {
 // AUTHENTICATION ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================
 
-// Middleware to check authentication
+// Middleware to check JWT authentication
 function requireAuth(req, res, next) {
-  console.log('[Auth Check] Session:', {
-    hasSession: !!req.session,
-    sessionID: req.sessionID,
-    userId: req.session?.userId || null,
-  });
-  
-  if (!req.session || !req.session.userId) {
-    console.log('[Auth Check] ❌ FAILED - No user ID in session');
+  const token = extractToken(req);
+
+  if (!token) {
+    console.log('[Auth Check] ❌ FAILED - No token provided');
     return res.status(401).json({
       success: false,
-      error: 'You need to log in to access this feature',
+      error: 'Not authenticated',
       message: 'Please log in to access this resource',
     });
   }
-  
-  console.log('[Auth Check] ✅ SUCCESS - User authenticated:', req.session.userId);
+
+  const decoded = verifyToken(token);
+
+  if (!decoded) {
+    console.log('[Auth Check] ❌ FAILED - Invalid or expired token');
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid token',
+      message: 'Please log in again',
+    });
+  }
+
+  // Attach user info to request
+  req.userId = decoded.userId;
+  req.userEmail = decoded.email;
+
+  console.log('[Auth Check] ✅ SUCCESS - User authenticated:', decoded.userId);
   next();
 }
 
@@ -487,43 +498,15 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Set session data
-    req.session.userId = authData.user.id;
-    req.session.email = authData.user.email || profile.email;
-    req.session.accessToken = authData.session?.access_token;
-    req.session.refreshToken = authData.session?.refresh_token;
-    
-    console.log('[Login] Session data set:', {
-      userId: req.session.userId,
-      email: req.session.email,
-      sessionID: req.sessionID,
-    });
-    
-    // CRITICAL: Save session explicitly and wait for it to complete
-    // Use promise wrapper to ensure session is saved before responding
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) {
-          console.error('[Login] ❌ Session save error:', err);
-          console.error('[Login] ❌ Session save error details:', {
-            message: err.message,
-            stack: err.stack,
-          });
-          return reject(err);
-        }
-        
-        console.log('[Login] ✅ Session saved successfully:', {
-          sessionID: req.sessionID,
-          userId: req.session.userId,
-        });
-        resolve();
-      });
-    });
+    // Generate JWT token
+    const token = generateToken(authData.user.id, authData.user.email || profile.email);
 
-    // After session is saved, send response
-    console.log('[Login] ✅ Sending success response for user:', authData.user.id);
+    console.log('[Login] ✅ Token generated for user:', authData.user.id);
+
+    // Return token and user data
     res.json({
       success: true,
+      token, // JWT token for frontend to store
       user: {
         id: profile.id,
         email: profile.email || authData.user.email,
@@ -532,10 +515,6 @@ app.post('/api/auth/login', async (req, res) => {
         defaultCurrency: profile.defaultCurrency || 'UGX',
         preferredLanguage: profile.preferredLanguage || 'en',
       },
-      session: authData.session ? {
-        access_token: authData.session.access_token,
-        refresh_token: authData.session.refresh_token,
-      } : null,
     });
   } catch (error) {
     console.error('[Login] ❌ Unexpected error:', error);
@@ -635,57 +614,21 @@ app.post('/api/auth/register', async (req, res) => {
       });
     }
 
-    // 3. Create session
-    const { data: sessionData, error: sessionError } = await adminClient.auth.admin.createSession({
-      user_id: authData.user.id,
-    });
+    // Generate JWT token
+    const token = generateToken(authData.user.id, email);
 
-    if (sessionError) {
-      console.error('[Register] ⚠️ Session creation error (non-critical):', sessionError.message);
-    }
+    console.log('[Register] ✅ Token generated for user:', authData.user.id);
 
-    // Set Express session
-    req.session.userId = authData.user.id;
-    req.session.email = email;
-    req.session.accessToken = sessionData?.session?.access_token;
-    req.session.refreshToken = sessionData?.session?.refresh_token;
-
-    console.log('[Register] Session data set:', {
-      userId: req.session.userId,
-      email: req.session.email,
-      sessionID: req.sessionID,
-    });
-
-    // CRITICAL: Save session explicitly and wait for it to complete
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) {
-          console.error('[Register] ❌ Session save error:', err);
-          return reject(err);
-        }
-        
-        console.log('[Register] ✅ Session saved successfully:', {
-          sessionID: req.sessionID,
-          userId: req.session.userId,
-        });
-        resolve();
-      });
-    });
-
-    // After session is saved, send response
-    console.log('[Register] ✅ Sending success response for user:', authData.user.id);
+    // Return token and user data
     res.status(201).json({
       success: true,
+      token, // JWT token for frontend to store
       user: {
         id: authData.user.id,
         email,
         fullName,
         whatsappNumber,
       },
-      session: sessionData?.session ? {
-        access_token: sessionData.session.access_token,
-        refresh_token: sessionData.session.refresh_token,
-      } : null,
     });
   } catch (error) {
     console.error('[Register] ❌ Unexpected error:', error);
@@ -698,43 +641,17 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// GET /api/auth/me - Get current user (using Supabase Auth)
+// GET /api/auth/me - Get current user (using JWT)
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
-    console.log('[Auth Me] User ID:', userId);
+    const userId = req.userId; // Set by requireAuth middleware
+    console.log('[Auth Me] User ID from token:', userId);
     
     if (!userId) {
       return res.status(401).json({
         success: false,
         error: 'Not authenticated',
       });
-    }
-
-    // Verify with Supabase Auth if we have an access token
-    if (req.session.accessToken) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-      if (supabaseUrl && supabaseAnonKey) {
-        const authClient = createClient(supabaseUrl, supabaseAnonKey);
-        authClient.auth.setSession({
-          access_token: req.session.accessToken,
-          refresh_token: req.session.refreshToken || '',
-        });
-
-        const { data: { user: authUser }, error: authError } = await authClient.auth.getUser();
-        
-        if (authError || !authUser || authUser.id !== userId) {
-          console.error('[Auth Me] ❌ Supabase Auth verification failed');
-          req.session.destroy(() => {});
-          return res.status(401).json({
-            success: false,
-            error: 'Session invalid',
-          });
-        }
-      }
     }
 
     // Get user profile from database
@@ -761,8 +678,6 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 
     if (!user) {
       console.log('[Auth Me] ❌ User profile not found');
-      // Clear invalid session
-      req.session.destroy(() => {});
       return res.status(404).json({
         success: false,
         error: 'User profile not found',
@@ -792,71 +707,15 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/auth/logout - Logout user (Supabase Auth)
-app.post('/api/auth/logout', async (req, res) => {
-  console.log('[Logout] User:', req.session?.userId);
-  console.log('[Logout] Session ID:', req.sessionID);
-  
-  try {
-    // Sign out from Supabase if we have an access token
-    if (req.session?.accessToken) {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-      if (supabaseUrl && supabaseServiceKey) {
-        const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        });
-
-        try {
-          // Sign out the user session
-          await adminClient.auth.admin.signOut(req.session.accessToken);
-          console.log('[Logout] ✅ Supabase session signed out');
-        } catch (supabaseError) {
-          console.error('[Logout] ⚠️ Supabase sign out error (non-critical):', supabaseError.message);
-        }
-      }
-    }
-
-    // Destroy Express session
-    req.session.destroy((err) => {
-      if (err) {
-        console.error('[Logout] ❌ Error destroying session:', err);
-        return res.status(500).json({
-          success: false,
-          error: 'Logout failed',
-          details: err.message,
-        });
-      }
-      
-      // Clear cookie
-      res.clearCookie('jengatrack.sid', {
-        httpOnly: true,
-        secure: true, // Always true for Vercel (HTTPS)
-        sameSite: 'none',
-      });
-      
-      console.log('[Logout] ✅ Success');
-      res.json({
-        success: true,
-        message: 'Logged out successfully',
-      });
-    });
-  } catch (error) {
-    console.error('[Logout] ❌ Error:', error);
-    // Still try to destroy session even if Supabase logout fails
-    req.session.destroy(() => {});
-    res.clearCookie('jengatrack.sid');
-    res.status(500).json({
-      success: false,
-      error: 'Logout failed',
-      details: error.message,
-    });
-  }
+// POST /api/auth/logout - Logout user (JWT - just clear token on frontend)
+app.post('/api/auth/logout', (req, res) => {
+  console.log('[Logout] Logout requested');
+  // With JWT, logout is handled on the frontend by removing the token
+  // No server-side action needed
+  res.json({
+    success: true,
+    message: 'Logged out successfully. Please clear token on frontend.',
+  });
 });
 
 // ============================================================================
@@ -866,7 +725,7 @@ app.post('/api/auth/logout', async (req, res) => {
 // GET all projects for current user
 app.get('/api/projects', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     
     if (!userId) {
       console.log('[Get Projects] No user ID in session');
@@ -963,7 +822,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
 // POST create new project
 app.post('/api/projects', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const { name, description, budget, budgetAmount, currency = 'UGX', status = 'active' } = req.body;
 
     // Support both 'budget' and 'budgetAmount' for backward compatibility
@@ -1188,7 +1047,7 @@ app.post('/api/projects', requireAuth, async (req, res) => {
 // GET /api/dashboard/summary
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -1284,7 +1143,7 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
 // GET /api/dashboard/progress
 app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -1366,7 +1225,7 @@ app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
 // GET /api/dashboard/budget
 app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -1516,7 +1375,7 @@ app.get('/api/dashboard/inventory', requireAuth, async (req, res) => {
 // GET /api/dashboard/issues
 app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -1632,7 +1491,7 @@ app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
 // GET /api/dashboard/media
 app.get('/api/dashboard/media', requireAuth, async (req, res) => {
   try {
-    const userId = req.session.userId;
+    const userId = req.userId; // Set by requireAuth middleware
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -1745,10 +1604,9 @@ app.get('/api/dashboard/trends', requireAuth, async (req, res) => {
 });
 
 // Images Endpoint (always available - BEFORE server app mounts)
-app.get('/api/images', async (req, res) => {
+app.get('/api/images', requireAuth, async (req, res) => {
   try {
-    // Check if user is authenticated
-    if (!req.session || !req.session.userId) {
+    const userId = req.userId; // Set by requireAuth middleware
       return res.status(401).json({
         success: false,
         error: 'Authentication required',

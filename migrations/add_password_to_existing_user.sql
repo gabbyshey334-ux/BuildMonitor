@@ -21,3 +21,4 @@
 -- Note: You need to enable pgcrypto extension first:
 -- CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+

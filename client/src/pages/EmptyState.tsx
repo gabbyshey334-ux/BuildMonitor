@@ -145,6 +145,10 @@ export default function EmptyState() {
             <Button
               size="lg"
               className="bg-gradient-to-r from-[#93C54E] to-[#218598] text-white hover:shadow-lg transition-all text-lg px-8 py-6"
+              onClick={(e) => {
+                e.preventDefault();
+                setShowDialog(true);
+              }}
             >
               Create Your First Project
               <ArrowRight className="ml-2 h-5 w-5" />

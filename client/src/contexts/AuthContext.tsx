@@ -2,6 +2,7 @@ import { createContext, useContext, ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { setToken, getToken, clearToken, hasToken } from "@/lib/authToken";
 
 // User interface matching backend API response
 export interface User {
@@ -42,12 +43,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/auth/me"],
     queryFn: async () => {
       try {
+        const token = getToken();
+        
+        if (!token) {
+          return null;
+        }
+
         const res = await fetch("/api/auth/me", {
-          credentials: "include",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
         });
 
-        // If unauthorized, user is not logged in (this is expected)
+        // If unauthorized, token is invalid - clear it
         if (res.status === 401) {
+          clearToken();
           return null;
         }
 
@@ -71,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: hasToken(), // Only fetch if we have a token
   });
 
   // Login mutation
@@ -87,19 +98,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Login failed");
+        throw new Error(errorData.message || errorData.error || "Login failed");
       }
 
       return await res.json();
     },
     onSuccess: (data) => {
       console.log("[Auth] Login successful:", data.user?.fullName);
+      
+      // Store JWT token
+      if (data.token) {
+        setToken(data.token);
+        console.log("[Auth] Token stored");
+      }
       
       // Update React Query cache with user data
       queryClient.setQueryData(["/api/auth/me"], data.user);
@@ -131,19 +147,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify(userData),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Registration failed");
+        throw new Error(errorData.message || errorData.error || "Registration failed");
       }
 
       return await res.json();
     },
     onSuccess: (data) => {
       console.log("[Auth] Registration successful:", data.user?.fullName);
+      
+      // Store JWT token
+      if (data.token) {
+        setToken(data.token);
+        console.log("[Auth] Token stored");
+      }
       
       queryClient.setQueryData(["/api/auth/me"], data.user);
       
@@ -167,19 +188,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Logout mutation
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      const token = getToken();
       const res = await fetch("/api/auth/logout", {
         method: "POST",
-        credentials: "include",
+        headers: token ? {
+          "Authorization": `Bearer ${token}`,
+        } : {},
       });
 
-      if (!res.ok) {
-        throw new Error("Logout failed");
-      }
-
-      return await res.json();
+      // Logout always succeeds on client side, even if server fails
+      return await res.json().catch(() => ({ success: true }));
     },
     onSuccess: () => {
       console.log("[Auth] Logout successful");
+      
+      // Clear token
+      clearToken();
       
       // Clear all React Query cache
       queryClient.clear();
@@ -200,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("[Auth] Logout error:", error);
       
       // Even if logout fails on server, clear client state
+      clearToken();
       queryClient.clear();
       queryClient.setQueryData(["/api/auth/me"], null);
       
