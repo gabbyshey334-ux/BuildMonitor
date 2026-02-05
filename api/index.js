@@ -1703,6 +1703,130 @@ app.get('/api/images', async (req, res) => {
   }
 });
 
+// Test Project Creation Setup
+app.get('/api/test/project-creation', async (req, res) => {
+  try {
+    const userId = req.session?.userId;
+    
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const checks = {
+      authenticated: !!userId,
+      userId: userId || null,
+      hasSupabaseUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceKey,
+      supabaseClient: null,
+      tableExists: false,
+      canInsert: false,
+      rlsEnabled: false,
+      error: null,
+    };
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.json({
+        success: false,
+        message: 'Missing Supabase credentials',
+        checks,
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    checks.supabaseClient = 'initialized';
+
+    // Check if projects table exists and get its structure
+    const { data: tableInfo, error: tableError } = await supabase
+      .from('projects')
+      .select('id')
+      .limit(0);
+
+    if (tableError) {
+      checks.error = {
+        message: tableError.message,
+        code: tableError.code,
+        details: tableError.details,
+        hint: tableError.hint,
+      };
+      
+      // Check if it's an RLS issue
+      if (tableError.code === '42501' || tableError.message?.includes('permission')) {
+        checks.rlsEnabled = true;
+        checks.error.rlsIssue = true;
+      }
+    } else {
+      checks.tableExists = true;
+    }
+
+    // Try a test insert (will be rolled back)
+    if (userId && checks.tableExists) {
+      const testData = {
+        user_id: userId,
+        name: 'TEST_PROJECT_DELETE_ME',
+        description: 'This is a test project - should be deleted',
+        budget: 1,
+        currency: 'UGX',
+        status: 'active',
+        spent: 0,
+      };
+
+      const { data: testProject, error: insertError } = await supabase
+        .from('projects')
+        .insert([testData])
+        .select()
+        .single();
+
+      if (insertError) {
+        checks.error = {
+          message: insertError.message,
+          code: insertError.code,
+          details: insertError.details,
+          hint: insertError.hint,
+        };
+      } else {
+        checks.canInsert = true;
+        
+        // Clean up test project
+        await supabase
+          .from('projects')
+          .delete()
+          .eq('id', testProject.id);
+      }
+    }
+
+    res.json({
+      success: checks.canInsert && checks.tableExists,
+      message: checks.canInsert 
+        ? 'Project creation should work!' 
+        : 'Project creation may fail - see checks below',
+      checks,
+      recommendations: !checks.authenticated 
+        ? ['User is not authenticated - please log in']
+        : !checks.hasSupabaseUrl || !checks.hasServiceKey
+        ? ['Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables']
+        : !checks.tableExists
+        ? ['Projects table does not exist - run migrations/create-schema.sql']
+        : checks.error?.rlsIssue
+        ? ['RLS is blocking inserts - check RLS policies in Supabase']
+        : !checks.canInsert
+        ? [`Cannot insert projects: ${checks.error?.message || 'Unknown error'}`]
+        : ['Everything looks good!'],
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
 // Test Supabase and Database connection
 app.get('/api/test/supabase', async (req, res) => {
   try {
