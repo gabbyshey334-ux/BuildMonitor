@@ -32,10 +32,29 @@ app.use(express.urlencoded({ extended: true }));
 // CORS - CRITICAL: Allow credentials for session cookies
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Origin', origin || '*');
+  // Allow specific Vercel domains or any origin in development
+  const allowedOrigins = [
+    'https://build-monitor-lac.vercel.app',
+    'https://build-monitor-lac-*.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:5000',
+  ];
+  
+  // Check if origin is allowed or matches Vercel pattern
+  const isAllowed = !origin || 
+    allowedOrigins.some(allowed => origin.includes(allowed.replace('*', ''))) ||
+    origin.includes('vercel.app') ||
+    process.env.NODE_ENV !== 'production';
+  
+  if (isAllowed) {
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Origin', origin || '*');
+  } else {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
 });
@@ -85,9 +104,10 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true, // Always true for Vercel (HTTPS)
     maxAge: sessionTtl,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' for cross-site cookies in production
+    sameSite: 'none', // Required for cross-site cookies on Vercel
+    domain: undefined, // Let browser set domain automatically
   },
   name: 'jengatrack.sid',
 }));
@@ -333,6 +353,94 @@ function requireAuth(req, res, next) {
   console.log('[Auth Check] ✅ SUCCESS - User authenticated:', req.session.userId);
   next();
 }
+
+// POST /api/auth/login - Login user
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    console.log('[Login] Attempt:', email);
+    
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required',
+      });
+    }
+
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Find user by email
+    const userResult = await dbConnection.execute(sql`
+      SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
+             whatsapp_number as "whatsappNumber"
+      FROM profiles
+      WHERE email = ${email} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+
+    const user = Array.isArray(userResult) ? userResult[0] : (userResult.rows ? userResult.rows[0] : userResult);
+
+    if (!user) {
+      console.log('[Login] ❌ User not found:', email);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+      });
+    }
+
+    // Verify password
+    const bcrypt = await import('bcryptjs');
+    const isValid = await bcrypt.default.compare(password, user.passwordHash);
+
+    if (!isValid) {
+      console.log('[Login] ❌ Invalid password for:', email);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+      });
+    }
+
+    // Set session
+    req.session.userId = user.id;
+    req.session.email = user.email;
+    
+    // Save session explicitly
+    req.session.save((err) => {
+      if (err) {
+        console.error('[Login] ❌ Session save error:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save session',
+        });
+      }
+
+      console.log('[Login] ✅ Success:', user.id);
+      res.json({
+        success: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          whatsappNumber: user.whatsappNumber,
+        },
+      });
+    });
+  } catch (error) {
+    console.error('[Login] ❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed',
+      details: error.message,
+    });
+  }
+});
 
 // GET /api/auth/me - Get current user
 app.get('/api/auth/me', requireAuth, async (req, res) => {
