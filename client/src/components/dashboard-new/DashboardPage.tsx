@@ -14,21 +14,21 @@ import { IssuesRisksSection } from './IssuesRisksSection';
 import { SiteReportsMediaSection } from './SiteReportsMediaSection';
 import { TrendsQuickInsightsSection } from './TrendsQuickInsightsSection';
 
-// Helper to get auth headers
-const getAuthHeaders = () => {
-  const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-};
-
 interface DashboardPageProps {
   projectId?: string;
 }
 
 export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
+  // Helper to get auth headers - defined inside component to avoid hoisting issues
+  const getAuthHeaders = React.useCallback(() => {
+    const token = getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+  }, []);
+
   // Define fetcher functions inside component to use projectId prop
   const fetchSummary = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/summary?projectId=${projectId}` : '/api/dashboard/summary';
@@ -39,7 +39,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchProgress = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/progress?projectId=${projectId}` : '/api/dashboard/progress';
@@ -50,7 +50,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchBudget = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/budget?projectId=${projectId}` : '/api/dashboard/budget';
@@ -61,7 +61,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchInventory = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/inventory?projectId=${projectId}` : '/api/dashboard/inventory';
@@ -72,7 +72,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchIssues = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/issues?projectId=${projectId}` : '/api/dashboard/issues';
@@ -83,7 +83,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchMedia = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/media?projectId=${projectId}` : '/api/dashboard/media';
@@ -94,7 +94,7 @@ export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
     }
     const data = await res.json();
     return data;
-  }, [projectId]);
+  }, [projectId, getAuthHeaders]);
 
   const fetchTrends = React.useCallback(async () => {
     const url = projectId ? `/api/dashboard/trends?projectId=${projectId}` : '/api/dashboard/trends';

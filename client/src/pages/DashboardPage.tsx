@@ -60,35 +60,13 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
 
   // Extract project ID from URL query parameter
+  // Must be declared after all hooks to follow Rules of Hooks
   const urlParams = new URLSearchParams(window.location.search);
   const selectedProjectId = urlParams.get('project');
 
   useEffect(() => {
     fetchProjects();
   }, []);
-
-  // If a project is selected in URL, show the full dashboard
-  // Note: Dashboard components fetch data based on active project from user profile
-  if (selectedProjectId) {
-    // Store selected project ID for dashboard components to use
-    // The dashboard API endpoints use the active_project_id from user profile
-    // For now, we'll show the dashboard - it will use the active project
-    return (
-      <div className="space-y-6">
-        {/* Back button */}
-        <Button
-          variant="ghost"
-          onClick={() => setLocation('/dashboard')}
-          className="mb-4"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back to Projects
-        </Button>
-        {/* Full Dashboard */}
-        <FullDashboard projectId={selectedProjectId} />
-      </div>
-    );
-  }
 
   const fetchProjects = async () => {
     try {
@@ -232,6 +210,26 @@ export default function Dashboard() {
       day: 'numeric'
     });
   };
+
+  // If a project is selected in URL, show the full dashboard
+  // This check must come AFTER all hooks are declared (Rules of Hooks)
+  if (selectedProjectId) {
+    return (
+      <div className="space-y-6">
+        {/* Back button */}
+        <Button
+          variant="ghost"
+          onClick={() => setLocation('/dashboard')}
+          className="mb-4"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Projects
+        </Button>
+        {/* Full Dashboard */}
+        <FullDashboard projectId={selectedProjectId} />
+      </div>
+    );
+  }
 
   // Loading State
   if (loading) {
