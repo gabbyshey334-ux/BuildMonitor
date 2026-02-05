@@ -32,30 +32,46 @@ app.use(express.urlencoded({ extended: true }));
 // CORS - CRITICAL: Allow credentials for session cookies
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  // Allow specific Vercel domains or any origin in development
-  const allowedOrigins = [
-    'https://build-monitor-lac.vercel.app',
-    'https://build-monitor-lac-*.vercel.app',
-    'http://localhost:5173',
-    'http://localhost:5000',
-  ];
   
-  // Check if origin is allowed or matches Vercel pattern
-  const isAllowed = !origin || 
-    allowedOrigins.some(allowed => origin.includes(allowed.replace('*', ''))) ||
-    origin.includes('vercel.app') ||
-    process.env.NODE_ENV !== 'production';
+  // In production, allow Vercel domains and specific origins
+  // In development, allow all origins
+  const isProduction = process.env.NODE_ENV === 'production';
   
-  if (isAllowed) {
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Origin', origin || '*');
+  if (isProduction) {
+    // Production: Only allow specific origins
+    const allowedOrigins = [
+      'https://build-monitor-lac.vercel.app',
+      'https://build-monitor-lac-git-',
+      'https://build-monitor-lac-',
+    ];
+    
+    const isAllowed = origin && (
+      allowedOrigins.some(allowed => origin.includes(allowed.replace('*', ''))) ||
+      origin.includes('vercel.app')
+    );
+    
+    if (isAllowed) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+    } else {
+      // Default to allowing the origin if it's a Vercel domain
+      res.header('Access-Control-Allow-Origin', origin || 'https://build-monitor-lac.vercel.app');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
   } else {
-    res.header('Access-Control-Allow-Origin', '*');
+    // Development: Allow all origins
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Credentials', 'true');
   }
   
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.header('Access-Control-Expose-Headers', 'Set-Cookie');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
   next();
 });
 
@@ -84,33 +100,67 @@ app.use((req, res, next) => {
 
 // Session configuration
 const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-const pgStore = connectPg(session);
-const sessionStore = new pgStore({
-  conString: process.env.DATABASE_URL,
-  createTableIfMissing: true,
-  ttl: sessionTtl,
-  tableName: "sessions",
-});
+
+// Initialize session store with PostgreSQL
+let sessionStore = null;
+try {
+  const pgStore = connectPg(session);
+  sessionStore = new pgStore({
+    conString: process.env.DATABASE_URL,
+    createTableIfMissing: true,
+    ttl: sessionTtl,
+    tableName: "sessions",
+    pruneSessionInterval: 60, // Prune expired sessions every 60 seconds
+  });
+  console.log('✅ Session store initialized with PostgreSQL');
+} catch (error) {
+  console.error('⚠️ Failed to initialize session store:', error.message);
+  console.warn('⚠️ Sessions will use memory store (not persistent across serverless invocations)');
+}
+
+// Get session secret
+const sessionSecret = process.env.SESSION_SECRET || (() => {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('❌ CRITICAL: SESSION_SECRET not set in production!');
+    console.error('   Sessions will NOT work properly. Set SESSION_SECRET in Vercel environment variables.');
+  } else {
+    console.warn('⚠️ SESSION_SECRET not set - using fallback (sessions may not persist)');
+  }
+  return 'jengatrack-dev-secret-' + Date.now();
+})();
 
 app.use(session({
-  secret: process.env.SESSION_SECRET || (() => {
-    if (process.env.NODE_ENV === 'production') {
-      console.warn('⚠️ SESSION_SECRET not set - sessions may not work properly');
-    }
-    return 'jengatrack-dev-secret-' + Date.now();
-  })(),
-  store: sessionStore,
-  resave: false,
-  saveUninitialized: false,
+  secret: sessionSecret,
+  store: sessionStore, // null = memory store (not ideal for serverless)
+  resave: false, // Don't save session if unmodified
+  saveUninitialized: false, // Don't create session until something is stored
+  name: 'buildmonitor.sid', // Custom session cookie name
+  proxy: true, // Trust proxy (required for Vercel)
+  rolling: true, // Reset expiration on every request
   cookie: {
-    httpOnly: true,
-    secure: true, // Always true for Vercel (HTTPS)
+    httpOnly: true, // Prevent XSS attacks
+    secure: true, // HTTPS only (always true on Vercel)
     maxAge: sessionTtl,
-    sameSite: 'none', // Required for cross-site cookies on Vercel
-    domain: undefined, // Let browser set domain automatically
+    sameSite: 'none', // CRITICAL: Required for cross-site cookies on Vercel
+    domain: undefined, // Let browser set domain automatically (don't restrict)
+    path: '/', // Available on all paths
   },
-  name: 'jengatrack.sid',
 }));
+
+// Session debug middleware
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    console.log('[Session Debug]', {
+      path: req.path,
+      method: req.method,
+      sessionID: req.sessionID,
+      hasSession: !!req.session,
+      userId: req.session?.userId || null,
+      cookie: req.headers.cookie ? 'present' : 'missing',
+    });
+  }
+  next();
+});
 
 // ============================================================================
 // DATABASE CONNECTION (Direct connection for serverless)
@@ -437,38 +487,55 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Set session
+    // Set session data
     req.session.userId = authData.user.id;
     req.session.email = authData.user.email || profile.email;
     req.session.accessToken = authData.session?.access_token;
     req.session.refreshToken = authData.session?.refresh_token;
     
-    // Save session explicitly
-    req.session.save((err) => {
-      if (err) {
-        console.error('[Login] ❌ Session save error:', err);
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to save session',
+    console.log('[Login] Session data set:', {
+      userId: req.session.userId,
+      email: req.session.email,
+      sessionID: req.sessionID,
+    });
+    
+    // CRITICAL: Save session explicitly and wait for it to complete
+    // Use promise wrapper to ensure session is saved before responding
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Login] ❌ Session save error:', err);
+          console.error('[Login] ❌ Session save error details:', {
+            message: err.message,
+            stack: err.stack,
+          });
+          return reject(err);
+        }
+        
+        console.log('[Login] ✅ Session saved successfully:', {
+          sessionID: req.sessionID,
+          userId: req.session.userId,
         });
-      }
-
-      console.log('[Login] ✅ Success:', authData.user.id);
-      res.json({
-        success: true,
-        user: {
-          id: profile.id,
-          email: profile.email || authData.user.email,
-          fullName: profile.fullName,
-          whatsappNumber: profile.whatsappNumber,
-          defaultCurrency: profile.defaultCurrency || 'UGX',
-          preferredLanguage: profile.preferredLanguage || 'en',
-        },
-        session: authData.session ? {
-          access_token: authData.session.access_token,
-          refresh_token: authData.session.refresh_token,
-        } : null,
+        resolve();
       });
+    });
+
+    // After session is saved, send response
+    console.log('[Login] ✅ Sending success response for user:', authData.user.id);
+    res.json({
+      success: true,
+      user: {
+        id: profile.id,
+        email: profile.email || authData.user.email,
+        fullName: profile.fullName,
+        whatsappNumber: profile.whatsappNumber,
+        defaultCurrency: profile.defaultCurrency || 'UGX',
+        preferredLanguage: profile.preferredLanguage || 'en',
+      },
+      session: authData.session ? {
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token,
+      } : null,
     });
   } catch (error) {
     console.error('[Login] ❌ Unexpected error:', error);
@@ -583,29 +650,42 @@ app.post('/api/auth/register', async (req, res) => {
     req.session.accessToken = sessionData?.session?.access_token;
     req.session.refreshToken = sessionData?.session?.refresh_token;
 
-    req.session.save((err) => {
-      if (err) {
-        console.error('[Register] ❌ Session save error:', err);
-        return res.status(500).json({
-          success: false,
-          error: 'Failed to save session',
-        });
-      }
+    console.log('[Register] Session data set:', {
+      userId: req.session.userId,
+      email: req.session.email,
+      sessionID: req.sessionID,
+    });
 
-      console.log('[Register] ✅ Success:', authData.user.id);
-      res.status(201).json({
-        success: true,
-        user: {
-          id: authData.user.id,
-          email,
-          fullName,
-          whatsappNumber,
-        },
-        session: sessionData?.session ? {
-          access_token: sessionData.session.access_token,
-          refresh_token: sessionData.session.refresh_token,
-        } : null,
+    // CRITICAL: Save session explicitly and wait for it to complete
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.error('[Register] ❌ Session save error:', err);
+          return reject(err);
+        }
+        
+        console.log('[Register] ✅ Session saved successfully:', {
+          sessionID: req.sessionID,
+          userId: req.session.userId,
+        });
+        resolve();
       });
+    });
+
+    // After session is saved, send response
+    console.log('[Register] ✅ Sending success response for user:', authData.user.id);
+    res.status(201).json({
+      success: true,
+      user: {
+        id: authData.user.id,
+        email,
+        fullName,
+        whatsappNumber,
+      },
+      session: sessionData?.session ? {
+        access_token: sessionData.session.access_token,
+        refresh_token: sessionData.session.refresh_token,
+      } : null,
     });
   } catch (error) {
     console.error('[Register] ❌ Unexpected error:', error);
