@@ -221,21 +221,16 @@ try {
       // Mount it to handle all routes
       console.log('✅ Loaded compiled Express app from dist/server/index.js');
       
-      // Mount server app at root
-      // Webhook routes are registered directly above, so they'll be checked FIRST
-      // Direct route registration (app.post) takes precedence over app.use()
-      app.use('/', serverApp);
-      
-      // Re-register webhook routes AFTER server app mounts as additional fallback
-      // This ensures they work even if server app routes fail
-      console.log('📝 Re-registering webhook routes after server app mount...');
-      app.post('/webhook/webhook', (req, res, next) => {
-        console.log('[Webhook Route] POST /webhook/webhook matched (after server app)');
-        return webhookHandler(req, res);
-      });
-      app.post('/webhook', (req, res, next) => {
-        console.log('[Webhook Route] POST /webhook matched (after server app)');
-        return webhookHandler(req, res);
+      // IMPORTANT: Mount server app conditionally to avoid webhook route conflicts
+      // The server app also has /webhook routes, so we need to skip it for webhook paths
+      app.use((req, res, next) => {
+        // Skip server app for webhook routes - they're handled by webhookRouter above
+        if (req.path.startsWith('/webhook')) {
+          console.log('[Server App] Skipping webhook route:', req.method, req.path);
+          return next('route'); // Skip to next route handler (webhookRouter)
+        }
+        // For all other routes, use the server app
+        return serverApp(req, res, next);
       });
     } else {
       console.warn('⚠️ Server module does not export an Express app');
