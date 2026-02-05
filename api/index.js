@@ -384,36 +384,38 @@ app.get('/webhook/debug', async (req, res) => {
 // AUTHENTICATION ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================
 
-// Middleware to check JWT authentication
+// Middleware to check authentication (supports both JWT token and session)
 function requireAuth(req, res, next) {
+  // Try JWT token first
   const token = extractToken(req);
-
-  if (!token) {
-    console.log('[Auth Check] ❌ FAILED - No token provided');
-    return res.status(401).json({
-      success: false,
-      error: 'Not authenticated',
-      message: 'Please log in to access this resource',
-    });
+  
+  if (token) {
+    const decoded = verifyToken(token);
+    if (decoded) {
+      // JWT token is valid
+      req.userId = decoded.userId;
+      req.userEmail = decoded.email;
+      console.log('[Auth Check] ✅ SUCCESS - JWT token authenticated:', decoded.userId);
+      return next();
+    }
+    console.log('[Auth Check] ⚠️ JWT token invalid, trying session fallback');
   }
 
-  const decoded = verifyToken(token);
-
-  if (!decoded) {
-    console.log('[Auth Check] ❌ FAILED - Invalid or expired token');
-    return res.status(401).json({
-      success: false,
-      error: 'Invalid token',
-      message: 'Please log in again',
-    });
+  // Fallback to session-based auth
+  if (req.session && req.session.userId) {
+    req.userId = req.session.userId;
+    req.userEmail = req.session.email;
+    console.log('[Auth Check] ✅ SUCCESS - Session authenticated:', req.session.userId);
+    return next();
   }
 
-  // Attach user info to request
-  req.userId = decoded.userId;
-  req.userEmail = decoded.email;
-
-  console.log('[Auth Check] ✅ SUCCESS - User authenticated:', decoded.userId);
-  next();
+  // No valid authentication found
+  console.log('[Auth Check] ❌ FAILED - No valid token or session');
+  return res.status(401).json({
+    success: false,
+    error: 'Not authenticated',
+    message: 'Please log in to access this resource',
+  });
 }
 
 // POST /api/auth/login - Login user with Supabase Auth
