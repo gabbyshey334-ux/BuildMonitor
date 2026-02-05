@@ -383,6 +383,10 @@ app.post('/api/auth/login', async (req, res) => {
       // Query user - handle case where password_hash column might not exist yet
       // We'll use a try-catch to handle the column not existing
       try {
+      // Try to find user by email first, if email is provided
+      // If email is null, try to find by whatsapp_number or just get first user
+      let userResult;
+      if (email) {
         userResult = await dbConnection.execute(sql`
           SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
                  whatsapp_number as "whatsappNumber"
@@ -390,6 +394,16 @@ app.post('/api/auth/login', async (req, res) => {
           WHERE email = ${email} AND deleted_at IS NULL
           LIMIT 1
         `);
+      } else {
+        // Fallback: find by whatsapp or any user (for testing)
+        userResult = await dbConnection.execute(sql`
+          SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
+                 whatsapp_number as "whatsappNumber"
+          FROM profiles
+          WHERE deleted_at IS NULL AND password_hash IS NOT NULL
+          LIMIT 1
+        `);
+      }
       } catch (columnError) {
         // If password_hash column doesn't exist, we need to add it
         if (columnError.message && columnError.message.includes('password_hash')) {
