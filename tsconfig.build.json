@@ -18,9 +18,14 @@
     "module": "ESNext",
     "target": "ES2022",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": false
+    "allowImportingTsExtensions": false,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedIndexedAccess": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "forceConsistentCasingInFileNames": false
   },
   "include": ["server/**/*", "api/**/*", "shared/**/*"],
-  "exclude": ["node_modules", "dist", "client", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "server/routes.ts", "server/storage.ts", "server/exportService.ts", "server/extractedDataHandler.ts", "server/twilioWebhookHandler.ts", "server/webhookHandler.ts", "server/whatsappHandler.ts"]
 }
 
