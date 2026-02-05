@@ -61,6 +61,9 @@ export default function Dashboard() {
 
   const fetchProjects = async () => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const response = await fetch('/api/projects', {
         credentials: 'include'
       });
@@ -70,6 +73,7 @@ export default function Dashboard() {
       }
 
       const data = await response.json();
+      console.log('[Dashboard] Fetched projects:', data.projects?.length || 0);
       setProjects(data.projects || []);
     } catch (err) {
       console.error('Error fetching projects:', err);
@@ -92,15 +96,31 @@ export default function Dashboard() {
       const result = await response.json();
       return result;
     },
-    onSuccess: (result: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+    onSuccess: async (result: any) => {
+      console.log('[Dashboard] Project created successfully:', result);
+      
+      // Reset form and close dialog first
+      setFormData({ name: '', description: '', budget: '' });
+      setShowDialog(false);
+      
+      // Show success toast
       toast({
         title: "Success!",
         description: "Project created successfully",
       });
-      setFormData({ name: '', description: '', budget: '' });
-      setShowDialog(false);
-      fetchProjects(); // Refresh the list
+      
+      // Immediately refresh the projects list
+      // The server should have the new project by now
+      try {
+        await fetchProjects();
+        console.log('[Dashboard] Projects list refreshed after creation');
+      } catch (err) {
+        console.error('[Dashboard] Error refreshing projects:', err);
+        // If immediate refresh fails, try again after a short delay
+        setTimeout(async () => {
+          await fetchProjects();
+        }, 500);
+      }
     },
     onError: (error: any) => {
       toast({
