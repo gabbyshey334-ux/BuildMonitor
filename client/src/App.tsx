@@ -12,6 +12,8 @@ import Signup from "@/pages/signup";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Home from "@/pages/home";
+import DemoPage from "@/pages/demo"; // Import the demo page
+import DashboardPage from "@/components/dashboard-new/DashboardPage"; // Import the new dashboard component
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -46,7 +48,10 @@ function Router() {
         {isAuthenticated ? <Home /> : <ResetPassword />}
       </Route>
       <Route path="/dashboard">
-        {isAuthenticated ? <Home /> : <Login />}
+        {isAuthenticated ? <DashboardPage /> : <Login />}
+      </Route>
+      <Route path="/demo">
+        <DemoPage />
       </Route>
       <Route component={NotFound} />
     </Switch>

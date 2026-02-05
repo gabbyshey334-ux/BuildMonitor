@@ -17,7 +17,10 @@ export default {
         "fresh-fern": "#93C54E",
         "ocean-pine": "#218598",
         graphite: "#2F3332",
-        "ash-gray": "#E0E0E0",
+        "ash-gray": "#E2E8F0", // Updated to match guidelines
+        "alert-red": "#E53E3E",       /* Alerts/overbudget */
+        "warning-yellow": "#ECC94B",  /* Warnings */
+        "success-green": "#48BB78",   /* On track */
         "moss-green": "#B4D68C",
         "aqua-breeze": "#6EC1C0",
 
