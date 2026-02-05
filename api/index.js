@@ -471,7 +471,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('[Login] ✅ Supabase Auth successful:', authData.user.id);
 
-    // Get user profile from profiles table
+    // Get user from users table
     const dbConnection = initializeDatabase();
     if (!dbConnection) {
       console.error('[Login] ❌ Database connection not available');
@@ -1904,16 +1904,16 @@ app.get('/api/test/supabase', async (req, res) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Test profiles table
-    const { data: profiles, error: profilesError } = await supabase
-      .from('profiles')
+    // Test users table
+    const { data: users, error: usersError } = await supabase
+      .from('users')
       .select('id, whatsapp_number, full_name')
       .limit(5);
 
     // Test projects table
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
-      .select('id, name, user_id, budget_amount')
+      .select('id, name, user_id, budget')
       .limit(5);
 
     // Test expenses table
@@ -1954,10 +1954,10 @@ app.get('/api/test/supabase', async (req, res) => {
         hasKey: !!supabaseKey,
       },
       data: {
-        profiles: { 
-          count: profiles?.length || 0, 
-          error: profilesError?.message || null, 
-          sample: profiles?.slice(0, 2) || []
+        users: { 
+          count: users?.length || 0, 
+          error: usersError?.message || null, 
+          sample: users?.slice(0, 2) || []
         },
         projects: { 
           count: projects?.length || 0, 
