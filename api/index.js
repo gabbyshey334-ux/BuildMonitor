@@ -380,13 +380,30 @@ app.post('/api/auth/login', async (req, res) => {
     // Find user by email
     let userResult;
     try {
-      userResult = await dbConnection.execute(sql`
-        SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
-               whatsapp_number as "whatsappNumber"
-        FROM profiles
-        WHERE email = ${email} AND deleted_at IS NULL
-        LIMIT 1
-      `);
+      // Query user - handle case where password_hash column might not exist yet
+      // We'll use a try-catch to handle the column not existing
+      try {
+        userResult = await dbConnection.execute(sql`
+          SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
+                 whatsapp_number as "whatsappNumber"
+          FROM profiles
+          WHERE email = ${email} AND deleted_at IS NULL
+          LIMIT 1
+        `);
+      } catch (columnError) {
+        // If password_hash column doesn't exist, we need to add it
+        if (columnError.message && columnError.message.includes('password_hash')) {
+          console.error('[Login] ❌ password_hash column does not exist in profiles table');
+          console.error('[Login] 💡 Run migration: migrations/add_password_hash.sql');
+          return res.status(500).json({
+            success: false,
+            error: 'Database schema missing password_hash column',
+            message: 'Please run the migration to add password_hash column to profiles table',
+            migration: 'migrations/add_password_hash.sql',
+          });
+        }
+        throw columnError; // Re-throw if it's a different error
+      }
     } catch (dbError) {
       console.error('[Login] ❌ Database query error:', dbError);
       return res.status(500).json({
