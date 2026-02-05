@@ -396,7 +396,23 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    const user = Array.isArray(userResult) ? userResult[0] : (userResult.rows ? userResult.rows[0] : userResult);
+    // Handle different result formats from postgres/drizzle
+    let user;
+    if (Array.isArray(userResult)) {
+      user = userResult[0];
+    } else if (userResult && userResult.rows) {
+      user = userResult.rows[0];
+    } else if (userResult && typeof userResult === 'object') {
+      user = userResult;
+    } else {
+      user = null;
+    }
+    
+    console.log('[Login] Query result format:', {
+      isArray: Array.isArray(userResult),
+      hasRows: userResult?.rows !== undefined,
+      userFound: !!user,
+    });
 
     if (!user) {
       console.log('[Login] ❌ User not found:', email);
@@ -462,11 +478,13 @@ app.post('/api/auth/login', async (req, res) => {
       });
     });
   } catch (error) {
-    console.error('[Login] ❌ Error:', error);
+    console.error('[Login] ❌ Unexpected error:', error);
+    console.error('[Login] ❌ Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Login failed',
-      details: error.message,
+      message: error.message || 'An unexpected error occurred',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
