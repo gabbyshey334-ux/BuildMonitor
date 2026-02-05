@@ -403,12 +403,21 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     const result = await dbConnection.execute(sql`
       INSERT INTO projects (user_id, name, description, budget_amount, status, created_at, updated_at)
       VALUES (${userId}, ${projectName}, ${projectDescription}, ${parsedBudgetAmount}, ${normalizedStatus}, NOW(), NOW())
-      RETURNING id, user_id as "userId", name, description, budget_amount as "budgetAmount", 
-                status, created_at as "createdAt", updated_at as "updatedAt", 
-                completed_at as "completedAt", deleted_at as "deletedAt"
+      RETURNING 
+        id, 
+        user_id as "userId", 
+        name, 
+        description, 
+        budget_amount as "budgetAmount", 
+        status, 
+        created_at as "createdAt", 
+        updated_at as "updatedAt", 
+        completed_at as "completedAt", 
+        deleted_at as "deletedAt"
     `);
 
-    const newProject = result.rows[0];
+    // Extract the first row from the result
+    const newProject = Array.isArray(result) ? result[0] : (result.rows ? result.rows[0] : result);
 
     console.log('[Create Project] ✅ Success:', {
       id: newProject.id,
