@@ -2,6 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import EmptyState from './EmptyState';
 import FullDashboard from '@/components/dashboard-new/DashboardPage';
+import ProjectsList from '@/components/ProjectsList';
 
 export default function DashboardPageWrapper() {
   const { data: projectsResponse, isLoading } = useQuery<{ success: boolean; projects: any[] }>({
@@ -36,7 +37,8 @@ export default function DashboardPageWrapper() {
     return <EmptyState />;
   }
 
-  // Show full dashboard with data
-  return <FullDashboard />;
+  // Show projects list instead of full dashboard
+  // User can click on a project to view its dashboard
+  return <ProjectsList />;
 }
 

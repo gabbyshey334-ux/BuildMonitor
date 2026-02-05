@@ -796,14 +796,27 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
-    // Use raw SQL query since schema import might be complex
+    // Use raw SQL query with calculated spent amount from expenses
     const result = await dbConnection.execute(sql`
-      SELECT id, user_id as "userId", name, description, budget_amount as "budgetAmount", 
-             status, created_at as "createdAt", updated_at as "updatedAt", 
-             completed_at as "completedAt", deleted_at as "deletedAt"
-      FROM projects
-      WHERE user_id = ${userId} AND deleted_at IS NULL
-      ORDER BY updated_at DESC
+      SELECT 
+        p.id, 
+        p.user_id as "userId", 
+        p.name, 
+        p.description, 
+        p.budget_amount as "budgetAmount", 
+        p.status, 
+        p.created_at as "createdAt", 
+        p.updated_at as "updatedAt", 
+        p.completed_at as "completedAt", 
+        p.deleted_at as "deletedAt",
+        COALESCE(SUM(e.amount), 0)::numeric as "spent",
+        'UGX' as "currency"
+      FROM projects p
+      LEFT JOIN expenses e ON e.project_id = p.id AND e.deleted_at IS NULL
+      WHERE p.user_id = ${userId} AND p.deleted_at IS NULL
+      GROUP BY p.id, p.user_id, p.name, p.description, p.budget_amount, 
+               p.status, p.created_at, p.updated_at, p.completed_at, p.deleted_at
+      ORDER BY p.updated_at DESC
     `);
 
     res.json({
