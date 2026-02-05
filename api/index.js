@@ -15,6 +15,7 @@ import fs from 'fs';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
+import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1638,7 +1639,9 @@ app.get('/api/images', requireAuth, async (req, res) => {
 // Test Project Creation Setup
 app.get('/api/test/project-creation', async (req, res) => {
   try {
-    const userId = req.session?.userId;
+    // Try to extract token if present (optional auth for test endpoint)
+    const token = extractToken(req);
+    const userId = token ? (verifyToken(token)?.userId || null) : null;
     
     const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;
