@@ -787,44 +787,91 @@ app.post('/api/auth/logout', async (req, res) => {
 app.get('/api/projects', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
-    const dbConnection = initializeDatabase();
     
-    if (!dbConnection) {
-      return res.status(500).json({
+    if (!userId) {
+      console.log('[Get Projects] No user ID in session');
+      return res.status(401).json({ 
         success: false,
-        error: 'Database connection not available',
+        error: 'Not authenticated',
+        message: 'Please log in to view projects'
       });
     }
 
-    // Use raw SQL query with calculated spent amount from expenses
-    const result = await dbConnection.execute(sql`
-      SELECT 
-        p.id, 
-        p.user_id as "userId", 
-        p.name, 
-        p.description, 
-        p.budget_amount as "budgetAmount", 
-        p.status, 
-        p.created_at as "createdAt", 
-        p.updated_at as "updatedAt", 
-        p.completed_at as "completedAt", 
-        p.deleted_at as "deletedAt",
-        COALESCE(SUM(e.amount), 0)::numeric as "spent",
-        'UGX' as "currency"
-      FROM projects p
-      LEFT JOIN expenses e ON e.project_id = p.id AND e.deleted_at IS NULL
-      WHERE p.user_id = ${userId} AND p.deleted_at IS NULL
-      GROUP BY p.id, p.user_id, p.name, p.description, p.budget_amount, 
-               p.status, p.created_at, p.updated_at, p.completed_at, p.deleted_at
-      ORDER BY p.updated_at DESC
-    `);
+    console.log('[Get Projects] Fetching projects for user:', userId);
+
+    // Initialize Supabase client
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Get Projects] Missing Supabase credentials');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured',
+      });
+    }
+
+    // Create Supabase client with service role key (bypasses RLS)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Fetch projects from database using Supabase client
+    const { data: projects, error } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        user_id,
+        name,
+        description,
+        budget,
+        spent,
+        currency,
+        status,
+        created_at,
+        updated_at
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[Get Projects] Database error:', error);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to fetch projects',
+        message: error.message 
+      });
+    }
+
+    console.log('[Get Projects] Successfully fetched', projects?.length || 0, 'projects');
+
+    // Transform to match frontend expectations
+    const transformedProjects = (projects || []).map(project => ({
+      id: project.id,
+      userId: project.user_id,
+      name: project.name,
+      description: project.description,
+      budget: parseFloat(project.budget || 0),
+      budgetAmount: parseFloat(project.budget || 0), // Keep for backward compatibility
+      spent: parseFloat(project.spent || 0),
+      currency: project.currency || 'UGX',
+      status: project.status || 'active',
+      createdAt: project.created_at,
+      updatedAt: project.updated_at,
+    }));
 
     res.json({
       success: true,
-      projects: result.rows || [],
+      projects: transformedProjects,
     });
   } catch (error) {
-    console.error('[Get Projects] Error:', error);
+    console.error('[Get Projects] Unexpected error:', error);
+    console.error('[Get Projects] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch projects',
@@ -837,9 +884,21 @@ app.get('/api/projects', requireAuth, async (req, res) => {
 app.post('/api/projects', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
-    const { name, description, budgetAmount, status = 'active' } = req.body;
+    const { name, description, budget, budgetAmount, currency = 'UGX', status = 'active' } = req.body;
 
-    console.log('[Create Project] Request:', { name, description, budgetAmount, status, userId });
+    // Support both 'budget' and 'budgetAmount' for backward compatibility
+    const budgetValue = budget || budgetAmount;
+
+    console.log('[Create Project] Request:', { name, description, budget: budgetValue, currency, status, userId });
+
+    // Check authentication
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false,
+        error: 'Not authenticated',
+        message: 'Please log in to create projects'
+      });
+    }
 
     // Validation
     if (!name || typeof name !== 'string' || name.trim() === '') {
@@ -850,7 +909,7 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
-    if (!budgetAmount || parseFloat(budgetAmount) <= 0) {
+    if (!budgetValue || parseFloat(budgetValue) <= 0) {
       return res.status(400).json({
         success: false,
         error: 'Valid budget amount is required',
@@ -858,58 +917,100 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
-    const dbConnection = initializeDatabase();
-    
-    if (!dbConnection) {
+    // Initialize Supabase client
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Create Project] Missing Supabase credentials');
       return res.status(500).json({
         success: false,
-        error: 'Database connection not available',
+        error: 'Server configuration error',
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured',
       });
     }
 
-    // Normalize status
-    const validStatuses = ['active', 'completed', 'paused'];
-    const normalizedStatus = validStatuses.includes(status?.toLowerCase()) 
-      ? status.toLowerCase() 
-      : 'active';
+    // Create Supabase client with service role key
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Normalize status - new schema uses 'active', 'completed', 'on_hold'
+    const validStatuses = ['active', 'completed', 'on_hold'];
+    let normalizedStatus = 'active';
+    if (status && typeof status === 'string') {
+      const lowerStatus = status.toLowerCase().trim();
+      // Map old status values to new ones
+      if (lowerStatus === 'paused') {
+        normalizedStatus = 'on_hold';
+      } else if (validStatuses.includes(lowerStatus)) {
+        normalizedStatus = lowerStatus;
+      }
+    }
 
     // Parse budget amount
-    const parsedBudgetAmount = parseFloat(budgetAmount).toFixed(2);
-    const projectName = name.trim();
-    const projectDescription = description?.trim() || null;
+    const parsedBudget = parseFloat(budgetValue);
+    if (isNaN(parsedBudget) || parsedBudget < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid budget amount',
+        message: 'Budget must be a valid positive number',
+      });
+    }
 
-    // Create project using raw SQL
-    const result = await dbConnection.execute(sql`
-      INSERT INTO projects (user_id, name, description, budget_amount, status, created_at, updated_at)
-      VALUES (${userId}, ${projectName}, ${projectDescription}, ${parsedBudgetAmount}, ${normalizedStatus}, NOW(), NOW())
-      RETURNING 
-        id, 
-        user_id as "userId", 
-        name, 
-        description, 
-        budget_amount as "budgetAmount", 
-        status, 
-        created_at as "createdAt", 
-        updated_at as "updatedAt", 
-        completed_at as "completedAt", 
-        deleted_at as "deletedAt"
-    `);
+    // Insert project
+    const { data: project, error: insertError } = await supabase
+      .from('projects')
+      .insert([{
+        user_id: userId,
+        name: name.trim(),
+        description: description?.trim() || null,
+        budget: parsedBudget,
+        currency: currency || 'UGX',
+        status: normalizedStatus,
+        spent: 0, // Will be calculated automatically by trigger
+      }])
+      .select()
+      .single();
 
-    // Extract the first row from the result
-    const newProject = Array.isArray(result) ? result[0] : (result.rows ? result.rows[0] : result);
+    if (insertError) {
+      console.error('[Create Project] Database error:', insertError);
+      return res.status(500).json({ 
+        success: false,
+        error: 'Failed to create project',
+        message: insertError.message 
+      });
+    }
 
-    console.log('[Create Project] ✅ Success:', {
-      id: newProject.id,
-      name: newProject.name,
-    });
+    console.log('[Create Project] ✅ Successfully created project:', project.id);
+
+    // Transform to match frontend expectations
+    const transformedProject = {
+      id: project.id,
+      userId: project.user_id,
+      name: project.name,
+      description: project.description,
+      budget: parseFloat(project.budget || 0),
+      budgetAmount: parseFloat(project.budget || 0), // Keep for backward compatibility
+      spent: parseFloat(project.spent || 0),
+      currency: project.currency || 'UGX',
+      status: project.status || 'active',
+      createdAt: project.created_at,
+      updatedAt: project.updated_at,
+    };
 
     res.status(201).json({
       success: true,
-      project: newProject,
+      project: transformedProject,
       message: 'Project created successfully',
     });
   } catch (error) {
-    console.error('[Create Project] ❌ Error:', error);
+    console.error('[Create Project] ❌ Unexpected error:', error);
+    console.error('[Create Project] ❌ Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to create project',
