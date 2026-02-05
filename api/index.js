@@ -1368,34 +1368,8 @@ app.get('/api/test/supabase', async (req, res) => {
 // ============================================================================
 
 if (!serverApp) {
-  // Basic auth routes for testing
-  app.post('/api/auth/login', async (req, res) => {
-    try {
-      const { email, password } = req.body;
-      console.log('[Login] Attempt:', { email });
-      
-      res.json({ 
-        success: true, 
-        user: { email },
-        message: 'Login endpoint reached (fallback mode)'
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ 
-        success: false,
-        error: 'Login failed', 
-        details: error.message 
-      });
-    }
-  });
-
-  app.get('/api/auth/me', (req, res) => {
-    res.json({ 
-      user: null, 
-      authenticated: false,
-      message: 'Auth endpoint reached (fallback mode)'
-    });
-  });
+  // Note: Auth endpoints are defined above, before this fallback section
+  // This section only contains non-auth fallback routes
 
   app.get('/api/debug/db', async (req, res) => {
     res.json({
