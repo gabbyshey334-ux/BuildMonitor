@@ -197,7 +197,11 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 // doesn't interfere with the other routes
 (async () => {
   if (app.get("env") === "development") {
-    await setupVite(app, app);
+    // setupVite requires a Server instance, but in production this won't run
+    // Type assertion is safe here since this code path is dev-only
+    const http = await import("http");
+    const server = http.createServer(app);
+    await setupVite(app, server);
   } else {
     serveStatic(app);
   }
