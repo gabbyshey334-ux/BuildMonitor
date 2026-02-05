@@ -440,11 +440,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Verify password
-    if (!user.passwordHash) {
+    if (!user.passwordHash || user.passwordHash === '') {
       console.log('[Login] ❌ No password hash for user:', email);
       return res.status(401).json({
         success: false,
-        error: 'Invalid credentials',
+        error: 'Account not set up. Please set a password first.',
+        message: 'This account does not have a password set. Please contact support or use password reset.',
       });
     }
 
