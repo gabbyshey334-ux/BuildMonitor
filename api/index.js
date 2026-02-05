@@ -481,28 +481,72 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Fetch user profile
-    const profileResult = await dbConnection.execute(sql`
-      SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber",
-             default_currency as "defaultCurrency", preferred_language as "preferredLanguage"
-      FROM profiles
-      WHERE id = ${authData.user.id} AND deleted_at IS NULL
+    // Fetch user from users table (new schema)
+    const userResult = await dbConnection.execute(sql`
+      SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber"
+      FROM users
+      WHERE id = ${authData.user.id}
       LIMIT 1
     `);
 
-    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const user = Array.isArray(userResult) ? userResult[0] : (userResult.rows ? userResult.rows[0] : userResult);
 
-    if (!profile) {
-      console.error('[Login] ❌ Profile not found for user:', authData.user.id);
-      return res.status(404).json({
-        success: false,
-        error: 'User profile not found',
-        message: 'Please contact support to set up your profile',
-      });
+    // If user doesn't exist in users table, create it from Supabase Auth data
+    if (!user) {
+      console.log('[Login] User not found in users table, creating from Supabase Auth...');
+      
+      // Try to get metadata from Supabase Auth
+      const fullName = authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'User';
+      const whatsappNumber = authData.user.user_metadata?.whatsapp_number || '';
+      
+      // Insert user into users table
+      try {
+        await dbConnection.execute(sql`
+          INSERT INTO users (id, email, full_name, whatsapp_number, created_at, updated_at)
+          VALUES (${authData.user.id}, ${authData.user.email}, ${fullName}, ${whatsappNumber}, NOW(), NOW())
+          ON CONFLICT (id) DO NOTHING
+        `);
+        
+        // Fetch the newly created user
+        const newUserResult = await dbConnection.execute(sql`
+          SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber"
+          FROM users
+          WHERE id = ${authData.user.id}
+          LIMIT 1
+        `);
+        const newUser = Array.isArray(newUserResult) ? newUserResult[0] : (newUserResult.rows ? newUserResult.rows[0] : newUserResult);
+        
+        if (!newUser) {
+          throw new Error('Failed to create user record');
+        }
+        
+        console.log('[Login] ✅ User created in users table');
+        
+        // Generate JWT token
+        const token = generateToken(authData.user.id, authData.user.email);
+        
+        return res.json({
+          success: true,
+          token,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            fullName: newUser.fullName,
+            whatsappNumber: newUser.whatsappNumber,
+          },
+        });
+      } catch (createError) {
+        console.error('[Login] ❌ Failed to create user in users table:', createError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to create user record',
+          message: 'Please contact support',
+        });
+      }
     }
 
     // Generate JWT token
-    const token = generateToken(authData.user.id, authData.user.email || profile.email);
+    const token = generateToken(authData.user.id, user.email || authData.user.email);
 
     console.log('[Login] ✅ Token generated for user:', authData.user.id);
 
@@ -511,12 +555,10 @@ app.post('/api/auth/login', async (req, res) => {
       success: true,
       token, // JWT token for frontend to store
       user: {
-        id: profile.id,
-        email: profile.email || authData.user.email,
-        fullName: profile.fullName,
-        whatsappNumber: profile.whatsappNumber,
-        defaultCurrency: profile.defaultCurrency || 'UGX',
-        preferredLanguage: profile.preferredLanguage || 'en',
+        id: user.id,
+        email: user.email || authData.user.email,
+        fullName: user.fullName,
+        whatsappNumber: user.whatsappNumber,
       },
     });
   } catch (error) {
@@ -588,7 +630,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     console.log('[Register] ✅ Supabase Auth user created:', authData.user.id);
 
-    // 2. Create user profile in profiles table
+    // 2. Create user in users table (new schema)
     const dbConnection = initializeDatabase();
     if (!dbConnection) {
       // Clean up auth user if database connection fails
@@ -601,19 +643,31 @@ app.post('/api/auth/register', async (req, res) => {
 
     try {
       await dbConnection.execute(sql`
-        INSERT INTO profiles (id, email, whatsapp_number, full_name, created_at, updated_at)
-        VALUES (${authData.user.id}, ${email}, ${whatsappNumber}, ${fullName}, NOW(), NOW())
+        INSERT INTO users (id, email, full_name, whatsapp_number, created_at, updated_at)
+        VALUES (${authData.user.id}, ${email}, ${fullName}, ${whatsappNumber}, NOW(), NOW())
         ON CONFLICT (id) DO NOTHING
       `);
-      console.log('[Register] ✅ User profile created');
-    } catch (profileError) {
-      console.error('[Register] ❌ Profile creation error:', profileError);
-      // Clean up auth user if profile creation fails
+      console.log('[Register] ✅ User created in users table');
+      
+      // Also create default user_settings
+      try {
+        await dbConnection.execute(sql`
+          INSERT INTO user_settings (user_id, language, currency, created_at, updated_at)
+          VALUES (${authData.user.id}, 'en', 'UGX', NOW(), NOW())
+          ON CONFLICT (user_id) DO NOTHING
+        `);
+        console.log('[Register] ✅ User settings created');
+      } catch (settingsError) {
+        console.warn('[Register] ⚠️ Failed to create user settings (non-critical):', settingsError.message);
+      }
+    } catch (userError) {
+      console.error('[Register] ❌ User creation error:', userError);
+      // Clean up auth user if user creation fails
       await adminClient.auth.admin.deleteUser(authData.user.id);
       return res.status(500).json({
         success: false,
-        error: 'Failed to create user profile',
-        details: profileError.message,
+        error: 'Failed to create user record',
+        details: userError.message,
       });
     }
 
@@ -667,13 +721,14 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
       });
     }
 
-    // Use raw SQL to fetch user profile
+    // Use raw SQL to fetch user from users table
     const result = await dbConnection.execute(sql`
-      SELECT id, whatsapp_number as "whatsappNumber", full_name as "fullName", 
-             email, default_currency as "defaultCurrency", 
-             preferred_language as "preferredLanguage"
-      FROM profiles
-      WHERE id = ${userId} AND deleted_at IS NULL
+      SELECT u.id, u.whatsapp_number as "whatsappNumber", u.full_name as "fullName", 
+             u.email, us.currency as "defaultCurrency", 
+             us.language as "preferredLanguage"
+      FROM users u
+      LEFT JOIN user_settings us ON us.user_id = u.id
+      WHERE u.id = ${userId}
       LIMIT 1
     `);
 
@@ -931,6 +986,36 @@ app.post('/api/projects', requireAuth, async (req, res) => {
         error: 'Invalid budget amount',
         message: 'Budget must be a valid positive number',
       });
+    }
+
+    // Verify user exists in users table before creating project
+    const dbConnection = initializeDatabase();
+    if (dbConnection) {
+      try {
+        const userCheckResult = await dbConnection.execute(sql`
+          SELECT id FROM users WHERE id = ${userId} LIMIT 1
+        `);
+        const userExists = Array.isArray(userCheckResult) 
+          ? userCheckResult.length > 0 
+          : (userCheckResult.rows ? userCheckResult.rows.length > 0 : !!userCheckResult);
+        
+        if (!userExists) {
+          console.error('[Create Project] ❌ User does not exist in users table:', userId);
+          return res.status(400).json({
+            success: false,
+            error: 'User account not found',
+            message: 'Your user account is not properly set up. Please log out and register again, or contact support.',
+            debug: {
+              userId,
+              suggestion: 'User may need to be migrated from old schema or re-registered'
+            }
+          });
+        }
+        console.log('[Create Project] ✅ User verified in users table');
+      } catch (userCheckError) {
+        console.error('[Create Project] ⚠️ Could not verify user (non-critical):', userCheckError.message);
+        // Continue anyway - let database foreign key constraint catch it if user doesn't exist
+      }
     }
 
     // Prepare insert data
