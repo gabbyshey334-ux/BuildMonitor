@@ -297,7 +297,6 @@ BEGIN
         SELECT SUM(amount)
         FROM expenses
         WHERE project_id = COALESCE(NEW.project_id, OLD.project_id)
-        AND deleted_at IS NULL
     ), 0),
     updated_at = NOW()
     WHERE id = COALESCE(NEW.project_id, OLD.project_id);
