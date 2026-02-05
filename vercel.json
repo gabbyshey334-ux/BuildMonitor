@@ -34,10 +34,12 @@
     {
       "src": "/(.*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot))",
       "dest": "/dist/public/$1"
-    },
+    }
+  ],
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "/dist/public/index.html"
+      "source": "/((?!api|webhook|health|assets|.*\\.(js|css|png|jpg|jpeg|svg|ico|json|woff|woff2|ttf|eot)).*)",
+      "destination": "/index.html"
     }
   ],
   "env": {
