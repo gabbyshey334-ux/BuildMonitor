@@ -25,7 +25,7 @@
     "noFallthroughCasesInSwitch": false,
     "forceConsistentCasingInFileNames": false
   },
-  "include": ["server/**/*", "api/**/*", "shared/**/*"],
-  "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "server/routes.ts", "server/storage.ts", "server/exportService.ts", "server/extractedDataHandler.ts", "server/twilioWebhookHandler.ts", "server/webhookHandler.ts", "server/whatsappHandler.ts"]
+  "include": ["server/**/*", "api/**/*"],
+  "exclude": ["node_modules", "dist", "client", "shared/**/*", "**/*.test.ts", "server/routes.ts", "server/storage.ts", "server/exportService.ts", "server/extractedDataHandler.ts", "server/twilioWebhookHandler.ts", "server/webhookHandler.ts", "server/whatsappHandler.ts"]
 }
 
