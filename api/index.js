@@ -222,7 +222,8 @@ try {
       console.log('✅ Loaded compiled Express app from dist/server/index.js');
       
       // Mount server app at root
-      // Webhook router is already mounted above, so webhook routes will be checked FIRST
+      // Webhook routes are registered directly above, so they'll be checked FIRST
+      // Direct route registration (app.post) takes precedence over app.use()
       app.use('/', serverApp);
       
       // Re-register webhook routes AFTER server app mounts as additional fallback
