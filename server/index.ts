@@ -198,15 +198,17 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
 
 // Only start server if not in Vercel serverless environment
 // In Vercel, the app is exported and used by api/index.js
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
   (async () => {
     if (app.get("env") === "development") {
       // setupVite requires a Server instance, but in production this won't run
       // Type assertion is safe here since this code path is dev-only
+      const { setupVite } = await import('./vite');
       const http = await import("http");
       const server = http.createServer(app);
       await setupVite(app, server);
     } else {
+      const { serveStatic } = await import('./static');
       serveStatic(app);
     }
 
