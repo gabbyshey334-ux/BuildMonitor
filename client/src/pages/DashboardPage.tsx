@@ -22,12 +22,16 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Loader2
+  Loader2,
+  ArrowLeft
 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { getToken } from '@/lib/authToken';
+// Import the full dashboard component
+import FullDashboard from '@/components/dashboard-new/DashboardPage';
 
 interface Project {
   id: string;
@@ -51,21 +55,51 @@ export default function Dashboard() {
     description: '',
     budget: '',
   });
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Extract project ID from URL query parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const selectedProjectId = urlParams.get('project');
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   useEffect(() => {
     fetchProjects();
   }, []);
+
+  // If a project is selected, show the full dashboard
+  if (selectedProjectId && selectedProject) {
+    return (
+      <div className="space-y-6">
+        {/* Back button */}
+        <Button
+          variant="ghost"
+          onClick={() => setLocation('/dashboard')}
+          className="mb-4"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Projects
+        </Button>
+        {/* Full Dashboard */}
+        <FullDashboard />
+      </div>
+    );
+  }
 
   const fetchProjects = async () => {
     try {
       setLoading(true);
       setError(null);
       
+      const token = getToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/projects', {
-        credentials: 'include'
+        headers,
       });
 
       if (!response.ok) {

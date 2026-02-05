@@ -13,51 +13,61 @@ import { IssuesRisksSection } from './IssuesRisksSection';
 import { SiteReportsMediaSection } from './SiteReportsMediaSection';
 import { TrendsQuickInsightsSection } from './TrendsQuickInsightsSection';
 
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 // Define fetcher functions for each endpoint
 const fetchSummary = async () => {
-  const res = await fetch('/api/dashboard/summary', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/summary', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch summary');
   const data = await res.json();
   return data;
 };
 
 const fetchProgress = async () => {
-  const res = await fetch('/api/dashboard/progress', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/progress', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch progress');
   const data = await res.json();
   return data;
 };
 
 const fetchBudget = async () => {
-  const res = await fetch('/api/dashboard/budget', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/budget', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch budget');
   const data = await res.json();
   return data;
 };
 
 const fetchInventory = async () => {
-  const res = await fetch('/api/dashboard/inventory', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/inventory', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch inventory');
   const data = await res.json();
   return data;
 };
 
 const fetchIssues = async () => {
-  const res = await fetch('/api/dashboard/issues', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/issues', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch issues');
   const data = await res.json();
   return data;
 };
 
 const fetchMedia = async () => {
-  const res = await fetch('/api/dashboard/media', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/media', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch media');
   const data = await res.json();
   return data;
 };
 
 const fetchTrends = async () => {
-  const res = await fetch('/api/dashboard/trends', { credentials: 'include' });
+  const res = await fetch('/api/dashboard/trends', { headers: getAuthHeaders() });
   if (!res.ok) throw new Error('Failed to fetch trends');
   const data = await res.json();
   return data;
