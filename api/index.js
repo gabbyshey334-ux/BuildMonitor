@@ -1607,12 +1607,6 @@ app.get('/api/dashboard/trends', requireAuth, async (req, res) => {
 app.get('/api/images', requireAuth, async (req, res) => {
   try {
     const userId = req.userId; // Set by requireAuth middleware
-      return res.status(401).json({
-        success: false,
-        error: 'Authentication required',
-        message: 'Please login to access images'
-      });
-    }
     
     const limit = parseInt(req.query.limit) || 20;
     const offset = parseInt(req.query.offset) || 0;
