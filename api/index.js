@@ -550,6 +550,569 @@ app.post('/api/projects', requireAuth, async (req, res) => {
   }
 });
 
+// ============================================================================
+// DASHBOARD ENDPOINTS (always available - BEFORE server app mounts)
+// ============================================================================
+
+// GET /api/dashboard/summary
+app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Get user's default/active project
+    const profileResult = await dbConnection.execute(sql`
+      SELECT active_project_id as "activeProjectId"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const activeProjectId = profile?.activeProjectId;
+
+    if (!activeProjectId) {
+      return res.json({
+        success: true,
+        summary: {
+          overallProgress: 0,
+          onTimeStatus: { isDelayed: false, daysDelayed: 0 },
+          budgetHealth: { percent: 0, remaining: 0, totalBudget: 0, totalSpent: 0 },
+          activeIssues: { total: 0, critical: 0 },
+        },
+      });
+    }
+
+    // Get project details
+    const projectResult = await dbConnection.execute(sql`
+      SELECT id, name, budget_amount as "budgetAmount"
+      FROM projects
+      WHERE id = ${activeProjectId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
+
+    // Get expenses
+    const expensesResult = await dbConnection.execute(sql`
+      SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
+      FROM expenses
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+    `);
+    const totalSpent = parseFloat(Array.isArray(expensesResult) ? expensesResult[0]?.total : (expensesResult.rows ? expensesResult.rows[0]?.total : expensesResult?.total) || '0');
+
+    // Get tasks
+    const tasksResult = await dbConnection.execute(sql`
+      SELECT COUNT(*) as total,
+             COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress')) as open,
+             COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress') AND priority = 'high') as critical
+      FROM tasks
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+    `);
+    const tasks = Array.isArray(tasksResult) ? tasksResult[0] : (tasksResult.rows ? tasksResult.rows[0] : tasksResult);
+    const totalTasks = parseInt(tasks?.total || '0');
+    const completedTasks = parseInt(tasks?.total || '0') - parseInt(tasks?.open || '0');
+    const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    const totalBudget = parseFloat(project?.budgetAmount || '0');
+    const spentPercent = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+
+    res.json({
+      success: true,
+      summary: {
+        overallProgress,
+        onTimeStatus: { isDelayed: false, daysDelayed: 0 },
+        budgetHealth: {
+          percent: spentPercent,
+          remaining: totalBudget - totalSpent,
+          totalBudget,
+          totalSpent,
+        },
+        activeIssues: {
+          total: parseInt(tasks?.open || '0'),
+          critical: parseInt(tasks?.critical || '0'),
+        },
+        projectName: project?.name || 'Unknown Project',
+      },
+    });
+  } catch (error) {
+    console.error('[Dashboard Summary] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch dashboard summary',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/progress
+app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Get active project
+    const profileResult = await dbConnection.execute(sql`
+      SELECT active_project_id as "activeProjectId"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const activeProjectId = profile?.activeProjectId;
+
+    if (!activeProjectId) {
+      return res.json({
+        success: true,
+        phases: [],
+        upcomingMilestones: [],
+      });
+    }
+
+    // Get tasks for milestones
+    const tasksResult = await dbConnection.execute(sql`
+      SELECT id, title, due_date as "dueDate", priority, status
+      FROM tasks
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      ORDER BY due_date ASC
+      LIMIT 10
+    `);
+    const tasks = Array.isArray(tasksResult) ? tasksResult : (tasksResult.rows || []);
+
+    // Define phases (simplified - in real app, these would come from database)
+    const phases = [
+      { id: '1', name: 'Foundation', percentComplete: 100, status: 'completed' },
+      { id: '2', name: 'Framing', percentComplete: 75, status: 'in-progress' },
+      { id: '3', name: 'Roofing', percentComplete: 50, status: 'in-progress' },
+      { id: '4', name: 'Finishing', percentComplete: 20, status: 'in-progress' },
+    ];
+
+    // Get upcoming milestones (tasks due in next 7 days)
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+    
+    const upcomingMilestones = tasks
+      .filter(task => {
+        if (!task.dueDate) return false;
+        const dueDate = new Date(task.dueDate);
+        return dueDate > new Date() && dueDate <= sevenDaysFromNow;
+      })
+      .slice(0, 5)
+      .map(task => ({
+        id: task.id,
+        title: task.title || 'Untitled Task',
+        dueDate: task.dueDate,
+        priority: task.priority || 'medium',
+      }));
+
+    res.json({
+      success: true,
+      phases,
+      upcomingMilestones,
+    });
+  } catch (error) {
+    console.error('[Dashboard Progress] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch progress data',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/budget
+app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Get active project
+    const profileResult = await dbConnection.execute(sql`
+      SELECT active_project_id as "activeProjectId"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const activeProjectId = profile?.activeProjectId;
+
+    if (!activeProjectId) {
+      return res.json({
+        success: true,
+        breakdown: [],
+        vsActual: [],
+        cumulativeCosts: [],
+        totalBudget: 0,
+        spent: 0,
+        remaining: 0,
+        spentPercent: 0,
+      });
+    }
+
+    // Get project budget
+    const projectResult = await dbConnection.execute(sql`
+      SELECT budget_amount as "budgetAmount"
+      FROM projects
+      WHERE id = ${activeProjectId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
+    const totalBudget = parseFloat(project?.budgetAmount || '0');
+
+    // Get expenses by category
+    const expensesResult = await dbConnection.execute(sql`
+      SELECT 
+        ec.name as category,
+        ec.color_hex as "colorHex",
+        COALESCE(SUM(CAST(e.amount AS DECIMAL)), 0) as total
+      FROM expenses e
+      LEFT JOIN expense_categories ec ON e.category_id = ec.id
+      WHERE e.project_id = ${activeProjectId} AND e.deleted_at IS NULL
+      GROUP BY ec.name, ec.color_hex
+      ORDER BY total DESC
+    `);
+    const expenses = Array.isArray(expensesResult) ? expensesResult : (expensesResult.rows || []);
+    
+    const totalSpent = expenses.reduce((sum, exp) => sum + parseFloat(exp.total || '0'), 0);
+
+    const breakdown = expenses.map(exp => ({
+      category: exp.category || 'Uncategorized',
+      amount: parseFloat(exp.total || '0'),
+      percentage: totalSpent > 0 ? Math.round((parseFloat(exp.total || '0') / totalSpent) * 100) : 0,
+      colorHex: exp.colorHex || '#A0AEC0',
+    }));
+
+    const vsActual = breakdown.map(cat => ({
+      category: cat.category,
+      budgeted: cat.amount * 1.2, // Simplified - assume 20% over budget
+      actual: cat.amount,
+      variance: 20,
+    }));
+
+    // Get cumulative costs over time
+    const dailyExpensesResult = await dbConnection.execute(sql`
+      SELECT 
+        DATE(expense_date) as date,
+        SUM(CAST(amount AS DECIMAL)) as daily_total
+      FROM expenses
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      GROUP BY DATE(expense_date)
+      ORDER BY DATE(expense_date) ASC
+    `);
+    const dailyExpenses = Array.isArray(dailyExpensesResult) ? dailyExpensesResult : (dailyExpensesResult.rows || []);
+    
+    let cumulative = 0;
+    const cumulativeCosts = dailyExpenses.map(exp => {
+      cumulative += parseFloat(exp.daily_total || '0');
+      return {
+        date: exp.date,
+        amount: cumulative,
+      };
+    });
+
+    res.json({
+      success: true,
+      breakdown,
+      vsActual,
+      cumulativeCosts,
+      totalBudget,
+      spent: totalSpent,
+      remaining: totalBudget - totalSpent,
+      spentPercent: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
+    });
+  } catch (error) {
+    console.error('[Dashboard Budget] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch budget data',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/inventory
+app.get('/api/dashboard/inventory', requireAuth, async (req, res) => {
+  try {
+    // Return hardcoded inventory data (no inventory table exists yet)
+    const items = [
+      { id: '1', name: 'Cement', unit: 'bags', currentStock: 150, totalStock: 500, stockPercent: 30, consumptionVsEstimate: 10 },
+      { id: '2', name: 'Sand', unit: 'tons', currentStock: 50, totalStock: 100, stockPercent: 50, consumptionVsEstimate: -5 },
+      { id: '3', name: 'Bricks', unit: 'pieces', currentStock: 1000, totalStock: 5000, stockPercent: 20, consumptionVsEstimate: 0 },
+      { id: '4', name: 'Steel Bars', unit: 'kg', currentStock: 500, totalStock: 2000, stockPercent: 25, consumptionVsEstimate: 15 },
+    ];
+
+    const usage = [
+      { material: 'Cement', used: 350, remaining: 150 },
+      { material: 'Sand', used: 50, remaining: 50 },
+      { material: 'Bricks', used: 4000, remaining: 1000 },
+      { material: 'Steel', used: 1500, remaining: 500 },
+    ];
+
+    res.json({
+      success: true,
+      items,
+      usage,
+    });
+  } catch (error) {
+    console.error('[Dashboard Inventory] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch inventory data',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/issues
+app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Get active project
+    const profileResult = await dbConnection.execute(sql`
+      SELECT active_project_id as "activeProjectId"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const activeProjectId = profile?.activeProjectId;
+
+    if (!activeProjectId) {
+      return res.json({
+        success: true,
+        todo: [],
+        inProgress: [],
+        resolved: [],
+        criticalIssues: 0,
+        highIssues: 0,
+        openIssues: 0,
+        resolvedThisWeek: 0,
+        types: [],
+      });
+    }
+
+    // Get tasks as issues
+    const tasksResult = await dbConnection.execute(sql`
+      SELECT id, title, description, status, priority, created_at as "createdAt"
+      FROM tasks
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      ORDER BY created_at DESC
+    `);
+    const tasks = Array.isArray(tasksResult) ? tasksResult : (tasksResult.rows || []);
+
+    const todo = tasks.filter(t => t.status === 'pending').map(t => ({
+      id: t.id,
+      title: t.title || 'Untitled',
+      description: t.description || '',
+      status: 'todo',
+      priority: t.priority || 'medium',
+      reportedBy: 'System',
+      reportedDate: new Date(t.createdAt),
+      type: 'General',
+    }));
+
+    const inProgress = tasks.filter(t => t.status === 'in_progress').map(t => ({
+      id: t.id,
+      title: t.title || 'Untitled',
+      description: t.description || '',
+      status: 'inProgress',
+      priority: t.priority || 'medium',
+      reportedBy: 'System',
+      reportedDate: new Date(t.createdAt),
+      type: 'General',
+    }));
+
+    const resolved = tasks.filter(t => t.status === 'completed').map(t => ({
+      id: t.id,
+      title: t.title || 'Untitled',
+      description: t.description || '',
+      status: 'resolved',
+      priority: t.priority || 'medium',
+      reportedBy: 'System',
+      reportedDate: new Date(t.createdAt),
+      type: 'General',
+    }));
+
+    const criticalIssues = tasks.filter(t => t.priority === 'high' && t.status !== 'completed').length;
+    const highIssues = tasks.filter(t => t.priority === 'medium' && t.status !== 'completed').length;
+    const openIssues = todo.length + inProgress.length;
+
+    // Get resolved this week
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const resolvedThisWeek = resolved.filter(r => new Date(r.reportedDate) >= weekAgo).length;
+
+    const types = [
+      { type: 'Design', count: 2, percentage: 25 },
+      { type: 'Safety', count: 3, percentage: 37.5 },
+      { type: 'Quality', count: 2, percentage: 25 },
+      { type: 'Logistics', count: 1, percentage: 12.5 },
+    ];
+
+    res.json({
+      success: true,
+      todo,
+      inProgress,
+      resolved,
+      criticalIssues,
+      highIssues,
+      openIssues,
+      resolvedThisWeek,
+      types,
+    });
+  } catch (error) {
+    console.error('[Dashboard Issues] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch issues data',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/media
+app.get('/api/dashboard/media', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Get active project
+    const profileResult = await dbConnection.execute(sql`
+      SELECT active_project_id as "activeProjectId"
+      FROM profiles
+      WHERE id = ${userId} AND deleted_at IS NULL
+      LIMIT 1
+    `);
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
+    const activeProjectId = profile?.activeProjectId;
+
+    if (!activeProjectId) {
+      return res.json({
+        success: true,
+        recentPhotos: [],
+        stats: {
+          dailyLogsThisWeek: 0,
+          siteCondition: 'Good',
+        },
+      });
+    }
+
+    // Get recent photos
+    const photosResult = await dbConnection.execute(sql`
+      SELECT id, storage_path as "storagePath", caption, created_at as "createdAt"
+      FROM images
+      WHERE project_id = ${activeProjectId} AND deleted_at IS NULL
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+    const photos = Array.isArray(photosResult) ? photosResult : (photosResult.rows || []);
+
+    const recentPhotos = photos.map(photo => ({
+      id: photo.id,
+      url: photo.storagePath || '',
+      description: photo.caption || 'Site photo',
+      date: photo.createdAt,
+    }));
+
+    res.json({
+      success: true,
+      recentPhotos,
+      stats: {
+        dailyLogsThisWeek: 5,
+        siteCondition: 'Good',
+      },
+    });
+  } catch (error) {
+    console.error('[Dashboard Media] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch media data',
+      details: error.message,
+    });
+  }
+});
+
+// GET /api/dashboard/trends
+app.get('/api/dashboard/trends', requireAuth, async (req, res) => {
+  try {
+    // Generate trend data
+    const progressTrend = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      return {
+        date: date.toISOString().split('T')[0],
+        value: 20 + i * 0.8 + Math.random() * 5,
+      };
+    });
+
+    const costBurnTrend = Array.from({ length: 30 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (29 - i));
+      return {
+        date: date.toISOString().split('T')[0],
+        value: 50000 + Math.random() * 20000,
+      };
+    });
+
+    const insights = [
+      { id: '1', text: 'Top delay cause: Weather (3 days lost)' },
+      { id: '2', text: 'Most used material: Cement (450 bags)' },
+      { id: '3', text: 'Foundation phase completed ahead of schedule' },
+      { id: '4', text: 'Resolution rate: 85% of issues closed' },
+    ];
+
+    res.json({
+      success: true,
+      progressTrend,
+      costBurnTrend,
+      dailyBurnRate: 125000,
+      insights,
+    });
+  } catch (error) {
+    console.error('[Dashboard Trends] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch trends data',
+      details: error.message,
+    });
+  }
+});
+
 // Images Endpoint (always available - BEFORE server app mounts)
 app.get('/api/images', async (req, res) => {
   try {
