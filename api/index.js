@@ -370,6 +370,7 @@ app.post('/api/auth/login', async (req, res) => {
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
+      console.error('[Login] ❌ Database connection not available');
       return res.status(500).json({
         success: false,
         error: 'Database connection not available',
@@ -377,13 +378,23 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Find user by email
-    const userResult = await dbConnection.execute(sql`
-      SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
-             whatsapp_number as "whatsappNumber"
-      FROM profiles
-      WHERE email = ${email} AND deleted_at IS NULL
-      LIMIT 1
-    `);
+    let userResult;
+    try {
+      userResult = await dbConnection.execute(sql`
+        SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
+               whatsapp_number as "whatsappNumber"
+        FROM profiles
+        WHERE email = ${email} AND deleted_at IS NULL
+        LIMIT 1
+      `);
+    } catch (dbError) {
+      console.error('[Login] ❌ Database query error:', dbError);
+      return res.status(500).json({
+        success: false,
+        error: 'Database query failed',
+        details: dbError.message,
+      });
+    }
 
     const user = Array.isArray(userResult) ? userResult[0] : (userResult.rows ? userResult.rows[0] : userResult);
 
@@ -396,8 +407,26 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Verify password
-    const bcrypt = await import('bcryptjs');
-    const isValid = await bcrypt.default.compare(password, user.passwordHash);
+    if (!user.passwordHash) {
+      console.log('[Login] ❌ No password hash for user:', email);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+      });
+    }
+
+    let isValid = false;
+    try {
+      const bcrypt = await import('bcryptjs');
+      isValid = await bcrypt.default.compare(password, user.passwordHash);
+    } catch (bcryptError) {
+      console.error('[Login] ❌ Bcrypt error:', bcryptError);
+      return res.status(500).json({
+        success: false,
+        error: 'Password verification failed',
+        details: bcryptError.message,
+      });
+    }
 
     if (!isValid) {
       console.log('[Login] ❌ Invalid password for:', email);
