@@ -354,7 +354,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// POST /api/auth/login - Login user
+// POST /api/auth/login - Login user with Supabase Auth
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -367,8 +367,48 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
+    // Initialize Supabase client for authentication
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[Login] ❌ Missing Supabase credentials');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'SUPABASE_URL and SUPABASE_ANON_KEY must be configured',
+      });
+    }
+
+    // Create auth client with anon key for user authentication
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Sign in with Supabase Auth
+    console.log('[Login] Attempting Supabase sign in...');
+    const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !authData.user) {
+      console.error('[Login] ❌ Supabase Auth error:', authError?.message);
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        message: authError?.message || 'Authentication failed',
+      });
+    }
+
+    console.log('[Login] ✅ Supabase Auth successful:', authData.user.id);
+
+    // Get user profile from profiles table
     const dbConnection = initializeDatabase();
-    
     if (!dbConnection) {
       console.error('[Login] ❌ Database connection not available');
       return res.status(500).json({
@@ -377,116 +417,31 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Find user by email
-    let userResult;
-    try {
-      // Query user - handle case where password_hash column might not exist yet
-      // We'll use a try-catch to handle the column not existing
-      try {
-      // Try to find user by email first, if email is provided
-      // If email is null, try to find by whatsapp_number or just get first user
-      let userResult;
-      if (email) {
-        userResult = await dbConnection.execute(sql`
-          SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
-                 whatsapp_number as "whatsappNumber"
-          FROM profiles
-          WHERE email = ${email} AND deleted_at IS NULL
-          LIMIT 1
-        `);
-      } else {
-        // Fallback: find by whatsapp or any user (for testing)
-        userResult = await dbConnection.execute(sql`
-          SELECT id, email, password_hash as "passwordHash", full_name as "fullName", 
-                 whatsapp_number as "whatsappNumber"
-          FROM profiles
-          WHERE deleted_at IS NULL AND password_hash IS NOT NULL
-          LIMIT 1
-        `);
-      }
-      } catch (columnError) {
-        // If password_hash column doesn't exist, we need to add it
-        if (columnError.message && columnError.message.includes('password_hash')) {
-          console.error('[Login] ❌ password_hash column does not exist in profiles table');
-          console.error('[Login] 💡 Run migration: migrations/add_password_hash.sql');
-          return res.status(500).json({
-            success: false,
-            error: 'Database schema missing password_hash column',
-            message: 'Please run the migration to add password_hash column to profiles table',
-            migration: 'migrations/add_password_hash.sql',
-          });
-        }
-        throw columnError; // Re-throw if it's a different error
-      }
-    } catch (dbError) {
-      console.error('[Login] ❌ Database query error:', dbError);
-      return res.status(500).json({
-        success: false,
-        error: 'Database query failed',
-        details: dbError.message,
-      });
-    }
+    // Fetch user profile
+    const profileResult = await dbConnection.execute(sql`
+      SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber",
+             default_currency as "defaultCurrency", preferred_language as "preferredLanguage"
+      FROM profiles
+      WHERE id = ${authData.user.id} AND deleted_at IS NULL
+      LIMIT 1
+    `);
 
-    // Handle different result formats from postgres/drizzle
-    let user;
-    if (Array.isArray(userResult)) {
-      user = userResult[0];
-    } else if (userResult && userResult.rows) {
-      user = userResult.rows[0];
-    } else if (userResult && typeof userResult === 'object') {
-      user = userResult;
-    } else {
-      user = null;
-    }
-    
-    console.log('[Login] Query result format:', {
-      isArray: Array.isArray(userResult),
-      hasRows: userResult?.rows !== undefined,
-      userFound: !!user,
-    });
+    const profile = Array.isArray(profileResult) ? profileResult[0] : (profileResult.rows ? profileResult.rows[0] : profileResult);
 
-    if (!user) {
-      console.log('[Login] ❌ User not found:', email);
-      return res.status(401).json({
+    if (!profile) {
+      console.error('[Login] ❌ Profile not found for user:', authData.user.id);
+      return res.status(404).json({
         success: false,
-        error: 'Invalid credentials',
-      });
-    }
-
-    // Verify password
-    if (!user.passwordHash || user.passwordHash === '') {
-      console.log('[Login] ❌ No password hash for user:', email);
-      return res.status(401).json({
-        success: false,
-        error: 'Account not set up. Please set a password first.',
-        message: 'This account does not have a password set. Please contact support or use password reset.',
-      });
-    }
-
-    let isValid = false;
-    try {
-      const bcrypt = await import('bcryptjs');
-      isValid = await bcrypt.default.compare(password, user.passwordHash);
-    } catch (bcryptError) {
-      console.error('[Login] ❌ Bcrypt error:', bcryptError);
-      return res.status(500).json({
-        success: false,
-        error: 'Password verification failed',
-        details: bcryptError.message,
-      });
-    }
-
-    if (!isValid) {
-      console.log('[Login] ❌ Invalid password for:', email);
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid credentials',
+        error: 'User profile not found',
+        message: 'Please contact support to set up your profile',
       });
     }
 
     // Set session
-    req.session.userId = user.id;
-    req.session.email = user.email;
+    req.session.userId = authData.user.id;
+    req.session.email = authData.user.email || profile.email;
+    req.session.accessToken = authData.session?.access_token;
+    req.session.refreshToken = authData.session?.refresh_token;
     
     // Save session explicitly
     req.session.save((err) => {
@@ -498,15 +453,21 @@ app.post('/api/auth/login', async (req, res) => {
         });
       }
 
-      console.log('[Login] ✅ Success:', user.id);
+      console.log('[Login] ✅ Success:', authData.user.id);
       res.json({
         success: true,
         user: {
-          id: user.id,
-          email: user.email,
-          fullName: user.fullName,
-          whatsappNumber: user.whatsappNumber,
+          id: profile.id,
+          email: profile.email || authData.user.email,
+          fullName: profile.fullName,
+          whatsappNumber: profile.whatsappNumber,
+          defaultCurrency: profile.defaultCurrency || 'UGX',
+          preferredLanguage: profile.preferredLanguage || 'en',
         },
+        session: authData.session ? {
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token,
+        } : null,
       });
     });
   } catch (error) {
@@ -521,12 +482,182 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me - Get current user
+// POST /api/auth/register - Register new user with Supabase Auth
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { fullName, whatsappNumber, email, password } = req.body;
+    console.log('[Register] Attempt:', email);
+
+    if (!fullName || !whatsappNumber || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'All fields are required: fullName, whatsappNumber, email, password',
+      });
+    }
+
+    // Initialize Supabase client
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[Register] ❌ Missing Supabase credentials');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured',
+      });
+    }
+
+    // Create admin client for user creation
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // 1. Create user in Supabase Auth
+    console.log('[Register] Creating Supabase Auth user...');
+    const { data: authData, error: authError } = await adminClient.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // Auto-confirm for MVP
+      user_metadata: {
+        full_name: fullName,
+        whatsapp_number: whatsappNumber,
+      },
+    });
+
+    if (authError || !authData.user) {
+      console.error('[Register] ❌ Supabase Auth error:', authError?.message);
+      return res.status(400).json({
+        success: false,
+        error: authError?.message || 'Failed to create user',
+      });
+    }
+
+    console.log('[Register] ✅ Supabase Auth user created:', authData.user.id);
+
+    // 2. Create user profile in profiles table
+    const dbConnection = initializeDatabase();
+    if (!dbConnection) {
+      // Clean up auth user if database connection fails
+      await adminClient.auth.admin.deleteUser(authData.user.id);
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    try {
+      await dbConnection.execute(sql`
+        INSERT INTO profiles (id, email, whatsapp_number, full_name, created_at, updated_at)
+        VALUES (${authData.user.id}, ${email}, ${whatsappNumber}, ${fullName}, NOW(), NOW())
+        ON CONFLICT (id) DO NOTHING
+      `);
+      console.log('[Register] ✅ User profile created');
+    } catch (profileError) {
+      console.error('[Register] ❌ Profile creation error:', profileError);
+      // Clean up auth user if profile creation fails
+      await adminClient.auth.admin.deleteUser(authData.user.id);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to create user profile',
+        details: profileError.message,
+      });
+    }
+
+    // 3. Create session
+    const { data: sessionData, error: sessionError } = await adminClient.auth.admin.createSession({
+      user_id: authData.user.id,
+    });
+
+    if (sessionError) {
+      console.error('[Register] ⚠️ Session creation error (non-critical):', sessionError.message);
+    }
+
+    // Set Express session
+    req.session.userId = authData.user.id;
+    req.session.email = email;
+    req.session.accessToken = sessionData?.session?.access_token;
+    req.session.refreshToken = sessionData?.session?.refresh_token;
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('[Register] ❌ Session save error:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save session',
+        });
+      }
+
+      console.log('[Register] ✅ Success:', authData.user.id);
+      res.status(201).json({
+        success: true,
+        user: {
+          id: authData.user.id,
+          email,
+          fullName,
+          whatsappNumber,
+        },
+        session: sessionData?.session ? {
+          access_token: sessionData.session.access_token,
+          refresh_token: sessionData.session.refresh_token,
+        } : null,
+      });
+    });
+  } catch (error) {
+    console.error('[Register] ❌ Unexpected error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Registration failed',
+      message: error.message || 'An unexpected error occurred',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
+// GET /api/auth/me - Get current user (using Supabase Auth)
 app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const userId = req.session.userId;
     console.log('[Auth Me] User ID:', userId);
     
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated',
+      });
+    }
+
+    // Verify with Supabase Auth if we have an access token
+    if (req.session.accessToken) {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+
+      if (supabaseUrl && supabaseAnonKey) {
+        const authClient = createClient(supabaseUrl, supabaseAnonKey);
+        authClient.auth.setSession({
+          access_token: req.session.accessToken,
+          refresh_token: req.session.refreshToken || '',
+        });
+
+        const { data: { user: authUser }, error: authError } = await authClient.auth.getUser();
+        
+        if (authError || !authUser || authUser.id !== userId) {
+          console.error('[Auth Me] ❌ Supabase Auth verification failed');
+          req.session.destroy(() => {});
+          return res.status(401).json({
+            success: false,
+            error: 'Session invalid',
+          });
+        }
+      }
+    }
+
+    // Get user profile from database
     const dbConnection = initializeDatabase();
     
     if (!dbConnection) {
@@ -549,12 +680,12 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
     const user = Array.isArray(result) ? result[0] : (result.rows ? result.rows[0] : result);
 
     if (!user) {
-      console.log('[Auth Me] User not found');
+      console.log('[Auth Me] ❌ User profile not found');
       // Clear invalid session
       req.session.destroy(() => {});
       return res.status(404).json({
         success: false,
-        error: 'User not found',
+        error: 'User profile not found',
       });
     }
 
