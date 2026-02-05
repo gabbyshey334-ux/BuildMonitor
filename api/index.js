@@ -231,8 +231,14 @@ const webhookHandler = async (req, res) => {
 
 // Register webhook route BEFORE server app mounts
 // Also register at /webhook (without the duplicate) in case that's what's expected
-app.post('/webhook/webhook', webhookHandler);
-app.post('/webhook', webhookHandler); // Alternative path
+app.post('/webhook/webhook', (req, res, next) => {
+  console.log('[Webhook Route] POST /webhook/webhook matched');
+  return webhookHandler(req, res);
+});
+app.post('/webhook', (req, res, next) => {
+  console.log('[Webhook Route] POST /webhook matched');
+  return webhookHandler(req, res);
+}); // Alternative path
 
 // WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
@@ -460,8 +466,11 @@ if (fs.existsSync(publicPath)) {
 // SPA CATCH-ALL
 // ============================================================================
 
+// Catch-all route for SPA (GET requests only)
+// POST requests should be handled by specific routes above
 app.get('*', (req, res) => {
-  // Don't serve index.html for API routes
+  // Don't serve index.html for API routes or webhook routes
+  // This only affects GET requests, POST requests are handled by routes above
   if (req.path.startsWith('/api') || req.path.startsWith('/webhook')) {
     return res.status(404).json({ error: 'Not found' });
   }
