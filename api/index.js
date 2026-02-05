@@ -301,6 +301,135 @@ app.get('/webhook/debug', async (req, res) => {
   }
 });
 
+// ============================================================================
+// PROJECTS ENDPOINTS (always available - BEFORE server app mounts)
+// ============================================================================
+
+// Middleware to check authentication
+function requireAuth(req, res, next) {
+  if (!req.session || !req.session.userId) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      message: 'Please log in to access this resource',
+    });
+  }
+  next();
+}
+
+// GET all projects for current user
+app.get('/api/projects', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Use raw SQL query since schema import might be complex
+    const result = await dbConnection.execute(sql`
+      SELECT id, user_id as "userId", name, description, budget_amount as "budgetAmount", 
+             status, created_at as "createdAt", updated_at as "updatedAt", 
+             completed_at as "completedAt", deleted_at as "deletedAt"
+      FROM projects
+      WHERE user_id = ${userId} AND deleted_at IS NULL
+      ORDER BY updated_at DESC
+    `);
+
+    res.json({
+      success: true,
+      projects: result.rows || [],
+    });
+  } catch (error) {
+    console.error('[Get Projects] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch projects',
+      details: error.message,
+    });
+  }
+});
+
+// POST create new project
+app.post('/api/projects', requireAuth, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const { name, description, budgetAmount, status = 'active' } = req.body;
+
+    console.log('[Create Project] Request:', { name, description, budgetAmount, status, userId });
+
+    // Validation
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        error: 'Project name is required',
+        message: 'Please provide a project name',
+      });
+    }
+
+    if (!budgetAmount || parseFloat(budgetAmount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Valid budget amount is required',
+        message: 'Budget amount must be greater than 0',
+      });
+    }
+
+    const dbConnection = initializeDatabase();
+    
+    if (!dbConnection) {
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection not available',
+      });
+    }
+
+    // Normalize status
+    const validStatuses = ['active', 'completed', 'paused'];
+    const normalizedStatus = validStatuses.includes(status?.toLowerCase()) 
+      ? status.toLowerCase() 
+      : 'active';
+
+    // Parse budget amount
+    const parsedBudgetAmount = parseFloat(budgetAmount).toFixed(2);
+    const projectName = name.trim();
+    const projectDescription = description?.trim() || null;
+
+    // Create project using raw SQL
+    const result = await dbConnection.execute(sql`
+      INSERT INTO projects (user_id, name, description, budget_amount, status, created_at, updated_at)
+      VALUES (${userId}, ${projectName}, ${projectDescription}, ${parsedBudgetAmount}, ${normalizedStatus}, NOW(), NOW())
+      RETURNING id, user_id as "userId", name, description, budget_amount as "budgetAmount", 
+                status, created_at as "createdAt", updated_at as "updatedAt", 
+                completed_at as "completedAt", deleted_at as "deletedAt"
+    `);
+
+    const newProject = result.rows[0];
+
+    console.log('[Create Project] ✅ Success:', {
+      id: newProject.id,
+      name: newProject.name,
+    });
+
+    res.status(201).json({
+      success: true,
+      project: newProject,
+      message: 'Project created successfully',
+    });
+  } catch (error) {
+    console.error('[Create Project] ❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create project',
+      details: error.message,
+    });
+  }
+});
+
 // Images Endpoint (always available - BEFORE server app mounts)
 app.get('/api/images', async (req, res) => {
   try {
