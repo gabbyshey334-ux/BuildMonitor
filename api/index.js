@@ -230,7 +230,9 @@ const webhookHandler = async (req, res) => {
 };
 
 // Register webhook route BEFORE server app mounts
+// Also register at /webhook (without the duplicate) in case that's what's expected
 app.post('/webhook/webhook', webhookHandler);
+app.post('/webhook', webhookHandler); // Alternative path
 
 // WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
