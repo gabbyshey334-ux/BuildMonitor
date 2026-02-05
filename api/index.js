@@ -712,34 +712,71 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/auth/logout - Logout user
-app.post('/api/auth/logout', (req, res) => {
+// POST /api/auth/logout - Logout user (Supabase Auth)
+app.post('/api/auth/logout', async (req, res) => {
   console.log('[Logout] User:', req.session?.userId);
   console.log('[Logout] Session ID:', req.sessionID);
   
-  req.session.destroy((err) => {
-    if (err) {
-      console.error('[Logout] ❌ Error destroying session:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Logout failed',
-        details: err.message,
-      });
+  try {
+    // Sign out from Supabase if we have an access token
+    if (req.session?.accessToken) {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+      if (supabaseUrl && supabaseServiceKey) {
+        const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        });
+
+        try {
+          // Sign out the user session
+          await adminClient.auth.admin.signOut(req.session.accessToken);
+          console.log('[Logout] ✅ Supabase session signed out');
+        } catch (supabaseError) {
+          console.error('[Logout] ⚠️ Supabase sign out error (non-critical):', supabaseError.message);
+        }
+      }
     }
-    
-    // Clear cookie
-    res.clearCookie('jengatrack.sid', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+
+    // Destroy Express session
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('[Logout] ❌ Error destroying session:', err);
+        return res.status(500).json({
+          success: false,
+          error: 'Logout failed',
+          details: err.message,
+        });
+      }
+      
+      // Clear cookie
+      res.clearCookie('jengatrack.sid', {
+        httpOnly: true,
+        secure: true, // Always true for Vercel (HTTPS)
+        sameSite: 'none',
+      });
+      
+      console.log('[Logout] ✅ Success');
+      res.json({
+        success: true,
+        message: 'Logged out successfully',
+      });
     });
-    
-    console.log('[Logout] ✅ Success');
-    res.json({
-      success: true,
-      message: 'Logged out successfully',
+  } catch (error) {
+    console.error('[Logout] ❌ Error:', error);
+    // Still try to destroy session even if Supabase logout fails
+    req.session.destroy(() => {});
+    res.clearCookie('jengatrack.sid');
+    res.status(500).json({
+      success: false,
+      error: 'Logout failed',
+      details: error.message,
     });
-  });
+  }
 });
 
 // ============================================================================
