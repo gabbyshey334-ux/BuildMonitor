@@ -512,6 +512,8 @@ if (fs.existsSync(publicPath)) {
 
 // Catch-all route for SPA (GET requests only)
 // POST requests should be handled by specific routes above
+// Catch-all route for SPA (GET requests only)
+// IMPORTANT: This must come AFTER all other routes including server app
 app.get('*', (req, res) => {
   // Don't serve index.html for API routes or webhook routes
   // This only affects GET requests, POST requests are handled by routes above
