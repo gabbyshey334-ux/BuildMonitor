@@ -13,12 +13,12 @@
     "strictPropertyInitialization": false,
     "noImplicitThis": false,
     "alwaysStrict": false,
-    "suppressImplicitAnyIndexErrors": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "module": "ESNext",
     "target": "ES2022",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false
   },
   "include": ["server/**/*", "api/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "client", "**/*.test.ts"]
