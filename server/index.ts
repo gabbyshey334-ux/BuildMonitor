@@ -3,7 +3,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 // import { registerRoutes } from "./routes"; // Legacy routes - commented out for now
-import { setupVite, serveStatic, log } from "./vite";
+// Vite imports are conditional - only needed in development
+// import { setupVite, serveStatic, log } from "./vite";
 import whatsappRouter from "./routes/whatsapp";
 import apiRouter from "./routes/api";
 
@@ -221,6 +222,7 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
     // This serves both the API and the client.
     const port = parseInt(process.env.PORT || '5000', 10);
     app.listen(port, "0.0.0.0", () => {
+      const { log } = await import('./vite');
       log(`🚀 JengaTrack server running on port ${port}`);
       log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
       log(`🔐 Session store: PostgreSQL`);
