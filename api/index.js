@@ -167,18 +167,38 @@ const webhookHandler = async (req, res) => {
   }
 };
 
-// Register webhook routes EARLY (before server app loads)
-app.post('/webhook/webhook', (req, res, next) => {
-  console.log('[Webhook Route] POST /webhook/webhook matched');
+// Register webhook routes EARLY using a dedicated router
+// This ensures they're checked before the server app routes
+const webhookRouter = express.Router();
+
+webhookRouter.post('/webhook', (req, res, next) => {
+  console.log('[Webhook Router] POST /webhook/webhook matched');
   return webhookHandler(req, res);
 });
 
-app.post('/webhook', (req, res, next) => {
-  console.log('[Webhook Route] POST /webhook matched');
+webhookRouter.post('/', (req, res, next) => {
+  console.log('[Webhook Router] POST /webhook matched');
   return webhookHandler(req, res);
 });
 
-// Debug endpoint is now in webhookRouter above
+webhookRouter.get('/debug', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    res.json({
+      success: true,
+      total: 0,
+      logs: [],
+      message: 'WhatsApp debug endpoint reached',
+      limit
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mount webhook router BEFORE server app
+// Routes registered before app.use() are checked FIRST
+app.use('/webhook', webhookRouter);
 
 // ============================================================================
 // IMPORT COMPILED ROUTES
