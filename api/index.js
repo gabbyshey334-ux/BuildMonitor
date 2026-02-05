@@ -139,14 +139,75 @@ app.get('/api/test/supabase', async (req, res) => {
       .limit(5);
 
     // Test Drizzle database connection
-    let drizzleTest = { connected: false, error: null };
+    let drizzleTest = { connected: false, error: null, path: null, filesChecked: [] };
     try {
-      const { db } = await import('../dist/server/db.js');
+      // Try multiple possible paths for the db module
+      const possiblePaths = [
+        join(__dirname, '..', 'dist', 'server', 'db.js'),
+        join(process.cwd(), 'dist', 'server', 'db.js'),
+        '/var/task/dist/server/db.js',
+        './dist/server/db.js',
+      ];
+      
+      let dbModule = null;
+      let dbPath = null;
+      
+      // Check which paths exist
+      for (const dbPathAttempt of possiblePaths) {
+        const exists = fs.existsSync(dbPathAttempt);
+        drizzleTest.filesChecked.push({ path: dbPathAttempt, exists });
+        
+        if (exists) {
+          dbPath = dbPathAttempt;
+          try {
+            // Try file:// protocol for absolute paths
+            if (dbPathAttempt.startsWith('/')) {
+              dbModule = await import('file://' + dbPathAttempt);
+            } else {
+              dbModule = await import(dbPathAttempt);
+            }
+            break;
+          } catch (importError) {
+            console.warn(`Failed to import from ${dbPathAttempt}:`, importError.message);
+            continue;
+          }
+        }
+      }
+      
+      if (!dbModule) {
+        // Try direct import as last resort
+        try {
+          dbModule = await import('../dist/server/db.js');
+          dbPath = '../dist/server/db.js (direct import)';
+        } catch (fallbackError) {
+          // List what files actually exist in dist/server
+          const distServerPath = join(__dirname, '..', 'dist', 'server');
+          let distContents = [];
+          try {
+            if (fs.existsSync(distServerPath)) {
+              distContents = fs.readdirSync(distServerPath);
+            }
+          } catch (e) {
+            // Ignore
+          }
+          
+          throw new Error(
+            `Could not find db.js. ` +
+            `Checked paths: ${possiblePaths.join(', ')}. ` +
+            `Files in dist/server: ${distContents.length > 0 ? distContents.join(', ') : 'directory not found'}. ` +
+            `Last error: ${fallbackError.message}`
+          );
+        }
+      }
+      
+      drizzleTest.path = dbPath;
+      const { db } = dbModule;
       const { sql } = await import('drizzle-orm');
       await db.execute(sql`SELECT 1`);
       drizzleTest.connected = true;
     } catch (dbError) {
       drizzleTest.error = dbError.message;
+      drizzleTest.stack = process.env.NODE_ENV === 'development' ? dbError.stack : undefined;
     }
 
     res.json({
