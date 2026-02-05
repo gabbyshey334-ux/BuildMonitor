@@ -133,6 +133,73 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================================
+// WEBHOOK ROUTES (Register EARLY to ensure they work)
+// ============================================================================
+
+// WhatsApp Webhook Handler Function
+const webhookHandler = async (req, res) => {
+  try {
+    console.log('[WhatsApp Webhook] Received request:', {
+      method: req.method,
+      url: req.url,
+      path: req.path,
+      body: req.body,
+      headers: {
+        'content-type': req.headers['content-type'],
+        'x-twilio-signature': req.headers['x-twilio-signature'] ? 'present' : 'missing'
+      }
+    });
+    
+    // Basic response for testing
+    res.type('text/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Message>✅ Webhook endpoint reached. Message received: ${req.body?.Body || 'No body'}</Message>
+</Response>`);
+  } catch (error) {
+    console.error('[WhatsApp Webhook] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Webhook processing failed',
+      details: error.message
+    });
+  }
+};
+
+// Register webhook routes EARLY (before server app loads)
+app.post('/webhook/webhook', (req, res, next) => {
+  console.log('[Webhook Route] POST /webhook/webhook matched');
+  return webhookHandler(req, res);
+});
+
+app.post('/webhook', (req, res, next) => {
+  console.log('[Webhook Route] POST /webhook matched');
+  return webhookHandler(req, res);
+});
+
+// WhatsApp Debug Endpoint
+app.get('/webhook/debug', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    
+    res.json({
+      success: true,
+      total: 0,
+      logs: [],
+      message: 'WhatsApp debug endpoint reached (fallback mode - logs not available)',
+      limit,
+      note: 'If compiled server loads, this will show actual WhatsApp logs'
+    });
+  } catch (error) {
+    console.error('[WhatsApp Debug] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================================================
 // IMPORT COMPILED ROUTES
 // ============================================================================
 
