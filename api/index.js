@@ -147,6 +147,10 @@ try {
       // Use the server app's routes by mounting it
       // This will handle all routes including /api, /webhook, etc.
       app.use('/', serverApp);
+      
+      // Re-register webhook route AFTER server app mounts to ensure it works
+      // This is a safety net in case server app routes don't work correctly
+      app.post('/webhook/webhook', webhookHandler);
     } else {
       console.warn('⚠️ Server module does not export an Express app');
       console.warn('   Type:', typeof serverApp);
@@ -194,13 +198,14 @@ app.get('/api/debug/session', async (req, res) => {
   }
 });
 
-// WhatsApp Webhook Endpoint (always available - BEFORE server app mounts)
-// This ensures it works even if compiled server doesn't load
-app.post('/webhook/webhook', async (req, res) => {
+// WhatsApp Webhook Endpoint (always available)
+// Define it as a function so we can reuse it
+const webhookHandler = async (req, res) => {
   try {
     console.log('[WhatsApp Webhook] Received request:', {
       method: req.method,
       url: req.url,
+      path: req.path,
       body: req.body,
       headers: {
         'content-type': req.headers['content-type'],
@@ -222,7 +227,10 @@ app.post('/webhook/webhook', async (req, res) => {
       details: error.message
     });
   }
-});
+};
+
+// Register webhook route BEFORE server app mounts
+app.post('/webhook/webhook', webhookHandler);
 
 // WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
