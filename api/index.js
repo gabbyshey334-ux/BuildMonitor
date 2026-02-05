@@ -1378,18 +1378,25 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
     const totalBudget = parseFloat(project?.budget || '0');
 
     // Get expenses by category
-    const expensesResult = await dbConnection.execute(sql`
-      SELECT 
-        ec.name as category,
-        ec.color_hex as "colorHex",
-        COALESCE(SUM(CAST(e.amount AS DECIMAL)), 0) as total
-      FROM expenses e
-      LEFT JOIN expense_categories ec ON e.category_id = ec.id
-      WHERE e.project_id = ${activeProjectId}
-      GROUP BY ec.name, ec.color_hex
-      ORDER BY total DESC
-    `);
-    const expenses = Array.isArray(expensesResult) ? expensesResult : (expensesResult.rows || []);
+    let expensesResult;
+    try {
+      expensesResult = await dbConnection.execute(sql`
+        SELECT 
+          COALESCE(ec.name, 'Uncategorized') as category,
+          ec.color as "colorHex",
+          COALESCE(SUM(CAST(e.amount AS DECIMAL)), 0) as total
+        FROM expenses e
+        LEFT JOIN expense_categories ec ON e.category_id = ec.id
+        WHERE e.project_id = ${activeProjectId}
+        GROUP BY ec.name, ec.color
+        ORDER BY total DESC
+      `);
+    } catch (dbError) {
+      console.error('[Dashboard Budget] Database query error:', dbError);
+      // Return empty breakdown if query fails
+      expensesResult = [];
+    }
+    const expenses = Array.isArray(expensesResult) ? expensesResult : (expensesResult?.rows || []);
     
     const totalSpent = expenses.reduce((sum, exp) => sum + parseFloat(exp.total || '0'), 0);
 
@@ -1408,16 +1415,22 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
     }));
 
     // Get cumulative costs over time
-    const dailyExpensesResult = await dbConnection.execute(sql`
-      SELECT 
-        DATE(expense_date) as date,
-        SUM(CAST(amount AS DECIMAL)) as daily_total
-      FROM expenses
-      WHERE project_id = ${activeProjectId}
-      GROUP BY DATE(expense_date)
-      ORDER BY DATE(expense_date) ASC
-    `);
-    const dailyExpenses = Array.isArray(dailyExpensesResult) ? dailyExpensesResult : (dailyExpensesResult.rows || []);
+    let dailyExpensesResult;
+    try {
+      dailyExpensesResult = await dbConnection.execute(sql`
+        SELECT 
+          DATE(expense_date) as date,
+          SUM(CAST(amount AS DECIMAL)) as daily_total
+        FROM expenses
+        WHERE project_id = ${activeProjectId}
+        GROUP BY DATE(expense_date)
+        ORDER BY DATE(expense_date) ASC
+      `);
+    } catch (dbError) {
+      console.error('[Dashboard Budget] Daily expenses query error:', dbError);
+      dailyExpensesResult = [];
+    }
+    const dailyExpenses = Array.isArray(dailyExpensesResult) ? dailyExpensesResult : (dailyExpensesResult?.rows || []);
     
     let cumulative = 0;
     const cumulativeCosts = dailyExpenses.map(exp => {
@@ -1646,19 +1659,27 @@ app.get('/api/dashboard/media', requireAuth, async (req, res) => {
     }
 
     // Get recent photos
-    const photosResult = await dbConnection.execute(sql`
-      SELECT id, storage_path as "storagePath", caption, created_at as "createdAt"
-      FROM images
-      WHERE project_id = ${activeProjectId}
-      ORDER BY created_at DESC
-      LIMIT 10
-    `);
-    const photos = Array.isArray(photosResult) ? photosResult : (photosResult.rows || []);
+    // Note: images table may not have caption column, use filename as description
+    let photosResult;
+    try {
+      photosResult = await dbConnection.execute(sql`
+        SELECT id, storage_path as "storagePath", filename, created_at as "createdAt"
+        FROM images
+        WHERE project_id = ${activeProjectId}
+        ORDER BY created_at DESC
+        LIMIT 10
+      `);
+    } catch (dbError) {
+      console.error('[Dashboard Media] Database query error:', dbError);
+      // Return empty photos if query fails
+      photosResult = [];
+    }
+    const photos = Array.isArray(photosResult) ? photosResult : (photosResult?.rows || []);
 
     const recentPhotos = photos.map(photo => ({
       id: photo.id,
       url: photo.storagePath || '',
-      description: photo.caption || 'Site photo',
+      description: photo.filename || 'Site photo',
       date: photo.createdAt,
     }));
 

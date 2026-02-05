@@ -24,84 +24,138 @@ const getAuthHeaders = () => {
   return headers;
 };
 
-// Helper to get project ID from URL
-const getProjectIdFromUrl = () => {
-  const urlParams = new URLSearchParams(window.location.search);
-  return urlParams.get('project') || urlParams.get('projectId');
-};
+interface DashboardPageProps {
+  projectId?: string;
+}
 
-// Define fetcher functions for each endpoint
-const fetchSummary = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/summary?projectId=${projectId}` : '/api/dashboard/summary';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch summary');
-  const data = await res.json();
-  return data;
-};
+export default function DashboardPage({ projectId }: DashboardPageProps = {}) {
+  // Define fetcher functions inside component to use projectId prop
+  const fetchSummary = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/summary?projectId=${projectId}` : '/api/dashboard/summary';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch summary');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchProgress = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/progress?projectId=${projectId}` : '/api/dashboard/progress';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch progress');
-  const data = await res.json();
-  return data;
-};
+  const fetchProgress = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/progress?projectId=${projectId}` : '/api/dashboard/progress';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch progress');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchBudget = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/budget?projectId=${projectId}` : '/api/dashboard/budget';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch budget');
-  const data = await res.json();
-  return data;
-};
+  const fetchBudget = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/budget?projectId=${projectId}` : '/api/dashboard/budget';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch budget');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchInventory = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/inventory?projectId=${projectId}` : '/api/dashboard/inventory';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch inventory');
-  const data = await res.json();
-  return data;
-};
+  const fetchInventory = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/inventory?projectId=${projectId}` : '/api/dashboard/inventory';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch inventory');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchIssues = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/issues?projectId=${projectId}` : '/api/dashboard/issues';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch issues');
-  const data = await res.json();
-  return data;
-};
+  const fetchIssues = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/issues?projectId=${projectId}` : '/api/dashboard/issues';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch issues');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchMedia = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/media?projectId=${projectId}` : '/api/dashboard/media';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch media');
-  const data = await res.json();
-  return data;
-};
+  const fetchMedia = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/media?projectId=${projectId}` : '/api/dashboard/media';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch media');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-const fetchTrends = async () => {
-  const projectId = getProjectIdFromUrl();
-  const url = projectId ? `/api/dashboard/trends?projectId=${projectId}` : '/api/dashboard/trends';
-  const res = await fetch(url, { headers: getAuthHeaders() });
-  if (!res.ok) throw new Error('Failed to fetch trends');
-  const data = await res.json();
-  return data;
-};
+  const fetchTrends = React.useCallback(async () => {
+    const url = projectId ? `/api/dashboard/trends?projectId=${projectId}` : '/api/dashboard/trends';
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to fetch trends');
+    }
+    const data = await res.json();
+    return data;
+  }, [projectId]);
 
-export default function DashboardPage() {
-  const { data: summaryData, isLoading: isLoadingSummary, isError: isErrorSummary, error: errorSummary } = useQuery({ queryKey: ['dashboardSummary'], queryFn: fetchSummary });
-  const { data: progressData, isLoading: isLoadingProgress, isError: isErrorProgress, error: errorProgress } = useQuery({ queryKey: ['dashboardProgress'], queryFn: fetchProgress });
-  const { data: budgetData, isLoading: isLoadingBudget, isError: isErrorBudget, error: errorBudget } = useQuery({ queryKey: ['dashboardBudget'], queryFn: fetchBudget });
-  const { data: inventoryData, isLoading: isLoadingInventory, isError: isErrorInventory, error: errorInventory } = useQuery({ queryKey: ['dashboardInventory'], queryFn: fetchInventory });
-  const { data: issuesData, isLoading: isLoadingIssues, isError: isErrorIssues, error: errorIssues } = useQuery({ queryKey: ['dashboardIssues'], queryFn: fetchIssues });
-  const { data: mediaData, isLoading: isLoadingMedia, isError: isErrorMedia, error: errorMedia } = useQuery({ queryKey: ['dashboardMedia'], queryFn: fetchMedia });
-  const { data: trendsData, isLoading: isLoadingTrends, isError: isErrorTrends, error: errorTrends } = useQuery({ queryKey: ['dashboardTrends'], queryFn: fetchTrends });
+  const { data: summaryData, isLoading: isLoadingSummary, isError: isErrorSummary, error: errorSummary } = useQuery({ 
+    queryKey: ['dashboardSummary', projectId], 
+    queryFn: fetchSummary,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId, // Only fetch if projectId is provided
+  });
+  const { data: progressData, isLoading: isLoadingProgress, isError: isErrorProgress, error: errorProgress } = useQuery({ 
+    queryKey: ['dashboardProgress', projectId], 
+    queryFn: fetchProgress,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
+  const { data: budgetData, isLoading: isLoadingBudget, isError: isErrorBudget, error: errorBudget } = useQuery({ 
+    queryKey: ['dashboardBudget', projectId], 
+    queryFn: fetchBudget,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
+  const { data: inventoryData, isLoading: isLoadingInventory, isError: isErrorInventory, error: errorInventory } = useQuery({ 
+    queryKey: ['dashboardInventory', projectId], 
+    queryFn: fetchInventory,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
+  const { data: issuesData, isLoading: isLoadingIssues, isError: isErrorIssues, error: errorIssues } = useQuery({ 
+    queryKey: ['dashboardIssues', projectId], 
+    queryFn: fetchIssues,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
+  const { data: mediaData, isLoading: isLoadingMedia, isError: isErrorMedia, error: errorMedia } = useQuery({ 
+    queryKey: ['dashboardMedia', projectId], 
+    queryFn: fetchMedia,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
+  const { data: trendsData, isLoading: isLoadingTrends, isError: isErrorTrends, error: errorTrends } = useQuery({ 
+    queryKey: ['dashboardTrends', projectId], 
+    queryFn: fetchTrends,
+    retry: 2,
+    retryDelay: 1000,
+    enabled: !!projectId,
+  });
 
   const isLoading = isLoadingSummary || isLoadingProgress || isLoadingBudget || isLoadingInventory || isLoadingIssues || isLoadingMedia || isLoadingTrends;
   const isError = isErrorSummary || isErrorProgress || isErrorBudget || isErrorInventory || isErrorIssues || isErrorMedia || isErrorTrends;
@@ -127,17 +181,39 @@ export default function DashboardPage() {
     );
   }
 
+  if (!projectId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md">
+          <CardContent className="pt-6 text-center">
+            <AlertCircle className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+            <h2 className="text-2xl font-bold mb-2">No Project Selected</h2>
+            <p className="text-muted-foreground mb-4">
+              Please select a project from the projects list to view the dashboard.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center text-alert-red">
-          <AlertCircle className="w-16 h-16 mx-auto mb-4" />
-          <p className="text-2xl font-bold mb-2">Error Loading Dashboard</p>
-          <p className="text-lg">{errorMessage}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4">
-            Retry
-          </Button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md">
+          <CardContent className="pt-6">
+            <div className="text-center text-alert-red">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4" />
+              <h2 className="text-2xl font-bold mb-2">Error Loading Dashboard</h2>
+              <p className="text-muted-foreground mb-4">{errorMessage}</p>
+              <div className="space-y-2">
+                <Button onClick={() => window.location.reload()} className="w-full">
+                  Retry
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

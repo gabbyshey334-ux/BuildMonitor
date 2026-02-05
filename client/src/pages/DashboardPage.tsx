@@ -85,7 +85,7 @@ export default function Dashboard() {
           Back to Projects
         </Button>
         {/* Full Dashboard */}
-        <FullDashboard />
+        <FullDashboard projectId={selectedProjectId} />
       </div>
     );
   }
