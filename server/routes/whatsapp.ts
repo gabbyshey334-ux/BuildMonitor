@@ -14,8 +14,22 @@ import {
   getUserDefaultProject, 
   logWhatsAppMessage 
 } from '../lib/supabase';
-import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage } from '../twilio';
+import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage, sendInteractiveButtons, parseButtonResponse } from '../twilio';
 import { parseIntent, isValidIntent, meetsConfidenceThreshold } from '../services/intentParser';
+import { 
+  getOnboardingState, 
+  needsOnboarding, 
+  sendWelcomeMessage,
+  handleProjectTypeSelection,
+  handleLocationInput,
+  handleStartDateInput,
+  handleBudgetInput,
+  createProjectFromOnboarding,
+  sendPostCreationMessage,
+  updateOnboardingState,
+} from '../services/onboardingService';
+import { parseUpdateWithAI, generateClarificationMessage } from '../services/aiUpdateParser';
+import { aiService } from '../aiService';
 import { 
   profiles,
   projects, 
@@ -98,6 +112,132 @@ function logWhatsAppInteraction(log: WhatsAppLog): void {
   if (log.metadata) {
     console.log(`   Metadata:`, JSON.stringify(log.metadata, null, 2));
   }
+}
+
+// ============================================================================
+// ONBOARDING FLOW HANDLER
+// ============================================================================
+
+/**
+ * Handle onboarding flow for new users
+ * Returns true if onboarding was handled, false if user should proceed to normal flow
+ */
+async function handleOnboardingFlow(
+  userId: string,
+  whatsappNumber: string,
+  message: string,
+  mediaUrl: string | undefined,
+  currentState: string | null,
+  onboardingData: any,
+  requestId: string
+): Promise<boolean> {
+  const normalizedMessage = message.trim().toLowerCase();
+  
+  // Check for greeting triggers ("hey Jenga", "hi", "hello", etc.)
+  const greetingPatterns = /^(hey|hi|hello|hallo|start|begin|jenga)/i;
+  const isGreeting = greetingPatterns.test(normalizedMessage);
+  
+  // If no state and user sends greeting, start onboarding
+  if (!currentState && isGreeting) {
+    console.log(`[Onboarding] ${requestId} - Starting onboarding for user ${userId}`);
+    await sendWelcomeMessage(whatsappNumber);
+    await updateOnboardingState(userId, 'awaiting_project_type');
+    return true;
+  }
+  
+  // Handle button responses and state transitions
+  if (currentState === 'awaiting_project_type') {
+    const buttons = [
+      { id: 'btn_residential', title: 'Residential home' },
+      { id: 'btn_commercial', title: 'Commercial building' },
+      { id: 'btn_other', title: 'Other / Skip for now' },
+    ];
+    
+    const buttonId = parseButtonResponse(message, buttons);
+    if (buttonId) {
+      await handleProjectTypeSelection(userId, whatsappNumber, buttonId);
+      return true;
+    }
+    
+    // If not a button response, treat as project type text
+    if (normalizedMessage && !normalizedMessage.includes('skip')) {
+      await handleProjectTypeSelection(userId, whatsappNumber, 'btn_other');
+      return true;
+    }
+  }
+  
+  if (currentState === 'awaiting_location') {
+    await handleLocationInput(userId, whatsappNumber, message);
+    return true;
+  }
+  
+  if (currentState === 'awaiting_start_date') {
+    await handleStartDateInput(userId, whatsappNumber, message);
+    return true;
+  }
+  
+  if (currentState === 'awaiting_budget') {
+    await handleBudgetInput(userId, whatsappNumber, message);
+    return true;
+  }
+  
+  if (currentState === 'confirmation') {
+    const buttons = [
+      { id: 'btn_confirm', title: 'Yes – Create project! 🎉' },
+      { id: 'btn_edit', title: 'Edit something' },
+      { id: 'btn_later', title: 'Add more details later' },
+    ];
+    
+    const buttonId = parseButtonResponse(message, buttons);
+    
+    if (buttonId === 'btn_confirm') {
+      // Create project
+      const projectId = await createProjectFromOnboarding(userId);
+      await sendPostCreationMessage(whatsappNumber, projectId);
+      return true;
+    } else if (buttonId === 'btn_edit' || buttonId === 'btn_later') {
+      // Skip for now, mark as completed anyway
+      await updateOnboardingState(userId, 'completed');
+      await sendWhatsAppMessage(
+        whatsappNumber,
+        `No problem! You can add more details later from your dashboard: ${DASHBOARD_URL}/dashboard\n\nFor now, just send me updates anytime (e.g., "Used 50 bags cement" or "Paid workers 2M today").`
+      );
+      return true;
+    }
+    
+    // If not a button, treat as confirmation
+    if (normalizedMessage.includes('yes') || normalizedMessage.includes('confirm') || normalizedMessage === '1') {
+      const projectId = await createProjectFromOnboarding(userId);
+      await sendPostCreationMessage(whatsappNumber, projectId);
+      return true;
+    }
+  }
+  
+  // If user is in onboarding but message doesn't match any state, prompt them
+  if (currentState && currentState !== 'completed') {
+    // Re-send the appropriate prompt based on state
+    if (currentState === 'awaiting_project_type') {
+      await sendWelcomeMessage(whatsappNumber);
+    } else if (currentState === 'awaiting_location') {
+      await sendWhatsAppMessage(
+        whatsappNumber,
+        `Where's the site? (e.g., Kampala Road, Entebbe, or even plot number)\n\nJust type it – or tap Skip`
+      );
+    } else if (currentState === 'awaiting_start_date') {
+      await sendWhatsAppMessage(
+        whatsappNumber,
+        `Rough start date?\n\n(Type like: Today, 15 Feb 2026, or skip for now)`
+      );
+    } else if (currentState === 'awaiting_budget') {
+      await sendWhatsAppMessage(
+        whatsappNumber,
+        `Any rough total budget? (UGX – e.g., 150,000,000 or skip)\n\nThis helps us set up your budget tracker right away.`
+      );
+    }
+    return true;
+  }
+  
+  return false; // Not in onboarding, proceed to normal flow
 }
 
 // ============================================================================
@@ -190,7 +330,58 @@ router.post('/webhook', async (req: Request, res: Response) => {
     
     console.log(`[WhatsApp Webhook] ${requestId} - User found: ${profile.fullName} (${profile.id})`);
     
-    // 3. Log incoming message
+    // 3. Check if user needs onboarding
+    // Get full profile with onboarding fields from database
+    const [fullProfile] = await db.select({
+      id: profiles.id,
+      onboardingState: profiles.onboardingState,
+      onboardingData: profiles.onboardingData,
+    })
+      .from(profiles)
+      .where(eq(profiles.id, profile.id))
+      .limit(1);
+    
+    const needsOnboardingCheck = await needsOnboarding(profile.id);
+    const onboardingState = fullProfile ? {
+      state: fullProfile.onboardingState as string | null,
+      data: (fullProfile.onboardingData as any) || {},
+    } : { state: null, data: {} };
+    
+    if (needsOnboardingCheck || onboardingState.state !== 'completed') {
+      console.log(`[WhatsApp Webhook] ${requestId} - User needs onboarding, state: ${onboardingState.state}`);
+      
+      // Handle onboarding flow
+      const onboardingHandled = await handleOnboardingFlow(
+        profile.id,
+        data.From,
+        messageBody,
+        mediaUrl,
+        onboardingState.state,
+        onboardingState.data,
+        requestId
+      );
+      
+      if (onboardingHandled) {
+        // Mark message as processed
+        const incomingMessage = await logWhatsAppMessage({
+          userId: profile.id,
+          whatsappMessageId: data.MessageSid || null,
+          direction: 'inbound',
+          messageBody: messageBody || null,
+          mediaUrl: mediaUrl || null,
+          intent: 'onboarding',
+          processed: true,
+          aiUsed: false,
+          errorMessage: null,
+          receivedAt: new Date(),
+          processedAt: new Date(),
+        });
+        
+        return res.status(200).send('<Response></Response>');
+      }
+    }
+    
+    // 4. Log incoming message
     const incomingMessage = await logWhatsAppMessage({
       userId: profile.id,
       whatsappMessageId: data.MessageSid || null,
@@ -207,8 +398,50 @@ router.post('/webhook', async (req: Request, res: Response) => {
     
     console.log(`[WhatsApp Webhook] ${requestId} - Message logged: ${incomingMessage.id}`);
     
-    // 4. Parse user intent
-    const parsed = parseIntent(messageBody, mediaUrl);
+    // 5. Use AI for natural language processing (Phase 2)
+    // For now, fallback to rule-based parser if AI is not available
+    let parsed;
+    let useAI = process.env.USE_AI_PARSING === 'true' && aiService.isConfigured();
+    
+    if (useAI) {
+      console.log(`[WhatsApp Webhook] ${requestId} - Using AI for natural language processing...`);
+      const aiParsed = await parseUpdateWithAI(profile.id, messageBody, mediaUrl);
+      
+      // Convert AI parsed result to intent parser format for compatibility
+      parsed = {
+        intent: aiParsed.type === 'expense' ? 'log_expense' 
+          : aiParsed.type === 'task' ? 'create_task'
+          : aiParsed.type === 'unknown' ? 'unknown'
+          : 'unknown',
+        confidence: aiParsed.confidence / 100, // Convert 0-100 to 0-1
+        originalMessage: messageBody,
+        amount: aiParsed.value,
+        description: aiParsed.notes,
+        currency: 'UGX',
+      };
+      
+      // If requires clarification, send clarification message
+      if (aiParsed.requiresClarification) {
+        const clarificationMsg = generateClarificationMessage(aiParsed);
+        await sendInteractiveButtons(data.From, clarificationMsg, [
+          { id: 'btn_yes', title: 'Yes' },
+          { id: 'btn_no', title: 'No' },
+        ]);
+        
+        await db.update(whatsappMessages)
+          .set({ 
+            processed: true, 
+            processedAt: new Date(),
+            aiUsed: true,
+          })
+          .where(eq(whatsappMessages.id, incomingMessage.id));
+        
+        return res.status(200).send('<Response></Response>');
+      }
+    } else {
+      // Fallback to rule-based parser
+      parsed = parseIntent(messageBody, mediaUrl);
+    }
     
     logWhatsAppInteraction({
       phoneNumber,
@@ -232,10 +465,13 @@ router.post('/webhook', async (req: Request, res: Response) => {
     
     // Update message with detected intent
     await db.update(whatsappMessages)
-      .set({ intent: parsed.intent })
+      .set({ 
+        intent: parsed.intent,
+        aiUsed: useAI || false,
+      })
       .where(eq(whatsappMessages.id, incomingMessage.id));
     
-    // 5. Validate intent and check confidence
+    // 6. Validate intent and check confidence
     if (!isValidIntent(parsed)) {
       console.log(`[WhatsApp Webhook] ${requestId} - Invalid intent or missing required fields`);
       const reply = await handleUnknown(profile.id, parsed, incomingMessage.id, data.From, requestId);
@@ -308,7 +544,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
       return res.status(200).send('<Response></Response>');
     }
     
-    // 6. Route to appropriate intent handler
+    // 7. Route to appropriate intent handler
     let replyMessage: string;
     let handlerSuccess = false;
     let handlerError: string | undefined;

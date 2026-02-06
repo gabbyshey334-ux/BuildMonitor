@@ -53,6 +53,9 @@ export const profiles = pgTable("profiles", {
   fullName: varchar("full_name", { length: 255 }).notNull(),
   defaultCurrency: varchar("default_currency", { length: 3 }).default('UGX'),
   preferredLanguage: varchar("preferred_language", { length: 10 }).default('en'),
+  onboardingState: text("onboarding_state"), // WhatsApp onboarding state
+  onboardingData: jsonb("onboarding_data").default('{}'), // Stored onboarding responses
+  onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
@@ -60,6 +63,7 @@ export const profiles = pgTable("profiles", {
 }, (table) => [
   index("idx_profiles_whatsapp_number").on(table.whatsappNumber),
   index("idx_profiles_deleted_at").on(table.deletedAt),
+  index("idx_profiles_onboarding_state").on(table.onboardingState),
 ]);
 
 // ============================================================================

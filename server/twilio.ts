@@ -176,4 +176,93 @@ export function formatWhatsAppNumber(number: string): string {
   return number.startsWith('whatsapp:') ? number : `whatsapp:${number}`;
 }
 
+/**
+ * Send WhatsApp message with interactive buttons
+ * 
+ * Note: Twilio sandbox has limited support for interactive messages.
+ * For production, use WhatsApp Business API with approved templates.
+ * 
+ * This implementation uses numbered options for sandbox mode.
+ * In production with WhatsApp Business API, we can use proper interactive buttons.
+ */
+export async function sendInteractiveButtons(
+  to: string,
+  message: string,
+  buttons: Array<{ id: string; title: string }>
+): Promise<{ success: boolean; messageSid?: string; error?: string }> {
+  if (!twilioClient) {
+    return {
+      success: false,
+      error: 'Twilio is not configured. Check your environment variables.',
+    };
+  }
+
+  try {
+    const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
+    
+    // Limit to 3 buttons (WhatsApp Business API limit)
+    const limitedButtons = buttons.slice(0, 3);
+    
+    // For Twilio sandbox, we'll send the message with numbered options
+    // Format: "1. Option 1\n2. Option 2\n3. Option 3"
+    const buttonList = limitedButtons
+      .map((btn, index) => `${index + 1}. ${btn.title}`)
+      .join('\n');
+    
+    const fullMessage = `${message}\n\n${buttonList}\n\n(Reply with the number or button text)`;
+    
+    const result = await twilioClient.messages.create({
+      body: fullMessage,
+      from: TWILIO_WHATSAPP_NUMBER,
+      to: toNumber,
+    });
+
+    console.log(`✅ WhatsApp interactive message sent: ${result.sid}`);
+    console.log(`   Buttons: ${limitedButtons.map(b => b.title).join(', ')}`);
+    
+    return {
+      success: true,
+      messageSid: result.sid,
+    };
+  } catch (error: any) {
+    console.error('❌ Failed to send WhatsApp interactive message:', error.message);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+}
+
+/**
+ * Parse button response from user message
+ * Handles both numeric responses (1, 2, 3) and button IDs
+ */
+export function parseButtonResponse(
+  message: string,
+  buttons: Array<{ id: string; title: string }>
+): string | null {
+  const trimmed = message.trim().toLowerCase();
+  
+  // Check for numeric response (1, 2, 3, etc.)
+  const numberMatch = trimmed.match(/^(\d+)/);
+  if (numberMatch) {
+    const index = parseInt(numberMatch[1]) - 1;
+    if (index >= 0 && index < buttons.length) {
+      return buttons[index].id;
+    }
+  }
+  
+  // Check for button ID match
+  const buttonId = buttons.find(btn => 
+    btn.id.toLowerCase() === trimmed || 
+    btn.title.toLowerCase() === trimmed
+  );
+  
+  if (buttonId) {
+    return buttonId.id;
+  }
+  
+  return null;
+}
+
 
