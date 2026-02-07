@@ -5,8 +5,8 @@
  * Replaces rule-based intent parsing with AI-powered understanding.
  */
 
-import { aiService } from '../aiService';
-import { db } from '../db';
+import { aiService } from '../aiService.js';
+import { db } from '../db.js';
 import { projects, expenses, tasks } from '@shared/schema';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 

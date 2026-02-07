@@ -9,8 +9,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { eq, and, isNull, sql, desc, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
-import { db } from '../db';
-import { getUserByWhatsApp, getUserDefaultProject } from '../lib/supabase';
+import { db } from '../db.js';
+import { getUserByWhatsApp, getUserDefaultProject } from '../lib/supabase.js';
 import {
   profiles,
   projects,
@@ -302,7 +302,7 @@ router.post('/auth/register', async (req: Request, res: Response) => {
     }
 
     // Use Supabase client for auth (needs service role key for admin operations)
-    const { supabase } = await import('../db');
+    const { supabase } = await import('../db.js');
     
     // Check if user already exists by email or WhatsApp number using Drizzle
     console.log('[AUTH SIGNUP] Checking for existing users...');
@@ -741,7 +741,7 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 router.post('/auth/forgot-password', async (req: Request, res: Response) => {
   try {
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
-    const { supabase } = await import('../db');
+    const { supabase } = await import('../db.js');
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password`,
@@ -777,7 +777,7 @@ router.post('/auth/forgot-password', async (req: Request, res: Response) => {
 router.post('/auth/reset-password', async (req: Request, res: Response) => {
   try {
     const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
-    const { supabase } = await import('../db');
+    const { supabase } = await import('../db.js');
 
     // This requires the user to be authenticated via the token in the URL
     // The client should have handled the exchange of code for session

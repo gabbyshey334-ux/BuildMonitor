@@ -8,15 +8,15 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { eq, and, isNull, sql, desc } from 'drizzle-orm';
-import { db } from '../db';
+import { db } from '../db.js';
 import { 
   getUserByWhatsApp, 
   getUserDefaultProject, 
   logWhatsAppMessage,
   createUserProfile
-} from '../lib/supabase';
-import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage, sendInteractiveButtons, parseButtonResponse } from '../twilio';
-import { parseIntent, isValidIntent, meetsConfidenceThreshold } from '../services/intentParser';
+} from '../lib/supabase.js';
+import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage, sendInteractiveButtons, parseButtonResponse } from '../twilio.js';
+import { parseIntent, isValidIntent, meetsConfidenceThreshold } from '../services/intentParser.js';
 import { 
   getOnboardingState, 
   needsOnboarding, 
@@ -28,9 +28,9 @@ import {
   createProjectFromOnboarding,
   sendPostCreationMessage,
   updateOnboardingState,
-} from '../services/onboardingService';
-import { parseUpdateWithAI, generateClarificationMessage } from '../services/aiUpdateParser';
-import { aiService } from '../aiService';
+} from '../services/onboardingService.js';
+import { parseUpdateWithAI, generateClarificationMessage } from '../services/aiUpdateParser.js';
+import { aiService } from '../aiService.js';
 import { 
   profiles,
   projects, 

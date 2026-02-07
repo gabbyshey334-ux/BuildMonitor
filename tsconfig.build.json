@@ -23,7 +23,11 @@
     "noUncheckedIndexedAccess": false,
     "noImplicitReturns": false,
     "noFallthroughCasesInSwitch": false,
-    "forceConsistentCasingInFileNames": false
+    "forceConsistentCasingInFileNames": false,
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["./shared/*"]
+    }
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
   "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "**/*.test.tsx"]

@@ -5,8 +5,8 @@ import connectPg from "connect-pg-simple";
 // import { registerRoutes } from "./routes"; // Legacy routes - commented out for now
 // Vite imports are conditional - only needed in development
 // import { setupVite, serveStatic, log } from "./vite";
-import whatsappRouter from "./routes/whatsapp";
-import apiRouter from "./routes/api";
+import whatsappRouter from "./routes/whatsapp.js";
+import apiRouter from "./routes/api.js";
 
 // Production environment validation
 function validateProductionEnvironment() {
@@ -145,7 +145,7 @@ app.get('/health', async (req: Request, res: Response) => {
 
   try {
     // Test database connection
-    const { db } = await import('./db');
+    const { db } = await import('./db.js');
     const { sql } = await import('drizzle-orm');
     
     await db.execute(sql`SELECT 1`);
@@ -204,12 +204,12 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
     if (app.get("env") === "development") {
       // setupVite requires a Server instance, but in production this won't run
       // Type assertion is safe here since this code path is dev-only
-      const { setupVite } = await import('./vite');
+      const { setupVite } = await import('./vite.js');
       const http = await import("http");
       const server = http.createServer(app);
       await setupVite(app, server);
     } else {
-      const { serveStatic } = await import('./static');
+      const { serveStatic } = await import('./static.js');
       serveStatic(app);
     }
 
@@ -221,7 +221,7 @@ if (!process.env.VERCEL && process.env.NODE_ENV !== 'production') {
     // Other ports are firewalled. Default to 5000 if not specified.
     // This serves both the API and the client.
     const port = parseInt(process.env.PORT || '5000', 10);
-    const { log } = await import('./vite');
+    const { log } = await import('./vite.js');
     app.listen(port, "0.0.0.0", () => {
       log(`🚀 JengaTrack server running on port ${port}`);
       log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);

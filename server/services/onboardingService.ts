@@ -4,10 +4,10 @@
  * Handles the button-driven onboarding flow for new WhatsApp users
  */
 
-import { db } from '../db';
+import { db } from '../db.js';
 import { profiles, projects } from '@shared/schema';
 import { eq } from 'drizzle-orm';
-import { sendWhatsAppMessage, sendInteractiveButtons } from '../twilio';
+import { sendWhatsAppMessage, sendInteractiveButtons } from '../twilio.js';
 
 export type OnboardingState = 
   | null
