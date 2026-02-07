@@ -23,7 +23,7 @@ import {
   InsertImage,
   Expense,
   Task,
-} from '@shared/schema';
+} from '../../shared/schema.js';
 
 const router = Router();
 

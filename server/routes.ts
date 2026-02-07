@@ -17,7 +17,7 @@ import {
   insertConstructionPhaseSchema,
   insertHistoricalExpenseSchema,
   insertUserPreferencesSchema,
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { z } from "zod";
 import { handleError, createSuccessResponse } from "./errorHandler.js";
 import { exportService, ExportOptions } from "./exportService.js";

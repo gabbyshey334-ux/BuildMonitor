@@ -43,7 +43,7 @@ import {
   InsertTask,
   InsertImage,
   InsertWhatsappMessage,
-} from '@shared/schema';
+} from '../../shared/schema.js';
 
 const router = Router();
 

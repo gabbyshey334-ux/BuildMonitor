@@ -7,7 +7,7 @@
 
 import { aiService } from '../aiService.js';
 import { db } from '../db.js';
-import { projects, expenses, tasks } from '@shared/schema';
+import { projects, expenses, tasks } from '../../shared/schema.js';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 
 export interface ParsedUpdate {

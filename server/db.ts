@@ -3,7 +3,7 @@ import { join } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import * as schema from "@shared/schema";
+import * as schema from "../shared/schema.js";
 
 // Load .env file from project root
 // Note: Env vars may already be loaded by server/index.ts

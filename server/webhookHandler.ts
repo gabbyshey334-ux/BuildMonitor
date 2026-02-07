@@ -8,7 +8,7 @@ import {
   insertDailyLedgerLineSchema,
   insertDailyLedgerSchema,
   insertSupplierSchema,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 // Webhook authentication token (in production, this should be an environment variable)
 const WEBHOOK_SECRET = process.env.N8N_WEBHOOK_SECRET || "n8n-webhook-secret-change-in-production";

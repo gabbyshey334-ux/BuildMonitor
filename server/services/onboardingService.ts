@@ -5,7 +5,7 @@
  */
 
 import { db } from '../db.js';
-import { profiles, projects } from '@shared/schema';
+import { profiles, projects } from '../../shared/schema.js';
 import { eq } from 'drizzle-orm';
 import { sendWhatsAppMessage, sendInteractiveButtons } from '../twilio.js';
 
