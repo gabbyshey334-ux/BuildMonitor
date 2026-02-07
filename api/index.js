@@ -213,71 +213,11 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================================
-// WEBHOOK ROUTES (Register EARLY to ensure they work)
+// WEBHOOK ROUTES
 // ============================================================================
-
-// WhatsApp Webhook Handler Function
-const webhookHandler = async (req, res) => {
-  try {
-    console.log('[WhatsApp Webhook] Received request:', {
-      method: req.method,
-      url: req.url,
-      path: req.path,
-      body: req.body,
-      headers: {
-        'content-type': req.headers['content-type'],
-        'x-twilio-signature': req.headers['x-twilio-signature'] ? 'present' : 'missing'
-      }
-    });
-    
-    // Basic response for testing
-    res.type('text/xml');
-    res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Message>✅ Webhook endpoint reached. Message received: ${req.body?.Body || 'No body'}</Message>
-</Response>`);
-  } catch (error) {
-    console.error('[WhatsApp Webhook] Error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Webhook processing failed',
-      details: error.message
-    });
-  }
-};
-
-// Register webhook routes EARLY using a dedicated router
-// This ensures they're checked before the server app routes
-const webhookRouter = express.Router();
-
-webhookRouter.post('/webhook', (req, res, next) => {
-  console.log('[Webhook Router] POST /webhook/webhook matched');
-  return webhookHandler(req, res);
-});
-
-webhookRouter.post('/', (req, res, next) => {
-  console.log('[Webhook Router] POST /webhook matched');
-  return webhookHandler(req, res);
-});
-
-webhookRouter.get('/debug', async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 50;
-    res.json({
-      success: true,
-      total: 0,
-      logs: [],
-      message: 'WhatsApp debug endpoint reached',
-      limit
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Mount webhook router BEFORE server app
-// Routes registered before app.use() are checked FIRST
-app.use('/webhook', webhookRouter);
+// NOTE: Webhook routes are handled by the server app's whatsapp router
+// which has proper onboarding logic. We don't mount a webhook router here
+// to avoid conflicts. The server app mounts whatsappRouter at /webhook
 
 // ============================================================================
 // IMPORT COMPILED ROUTES
@@ -300,15 +240,11 @@ try {
       // Mount it to handle all routes
       console.log('✅ Loaded compiled Express app from dist/server/index.js');
       
-      // IMPORTANT: Mount server app conditionally to avoid webhook route conflicts
-      // The server app also has /webhook routes, so we need to skip it for webhook paths
+      // IMPORTANT: Mount server app for ALL routes including /webhook
+      // The server app has the proper WhatsApp router with onboarding logic at /webhook
       app.use((req, res, next) => {
-        // Skip server app for webhook routes - they're handled by webhookRouter above
-        if (req.path.startsWith('/webhook')) {
-          console.log('[Server App] Skipping webhook route:', req.method, req.path);
-          return next('route'); // Skip to next route handler (webhookRouter)
-        }
-        // For all other routes, use the server app
+        // Let the server app handle all routes including /webhook
+        // The server app mounts whatsappRouter at /webhook which has proper onboarding
         return serverApp(req, res, next);
       });
     } else {

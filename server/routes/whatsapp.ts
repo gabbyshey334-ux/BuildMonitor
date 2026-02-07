@@ -12,7 +12,8 @@ import { db } from '../db';
 import { 
   getUserByWhatsApp, 
   getUserDefaultProject, 
-  logWhatsAppMessage 
+  logWhatsAppMessage,
+  createUserProfile
 } from '../lib/supabase';
 import { twilioClient, TWILIO_WHATSAPP_NUMBER, sendWhatsAppMessage, sendInteractiveButtons, parseButtonResponse } from '../twilio';
 import { parseIntent, isValidIntent, meetsConfidenceThreshold } from '../services/intentParser';
@@ -133,13 +134,9 @@ async function handleOnboardingFlow(
 ): Promise<boolean> {
   const normalizedMessage = message.trim().toLowerCase();
   
-  // Check for greeting triggers ("hey Jenga", "hi", "hello", etc.)
-  const greetingPatterns = /^(hey|hi|hello|hallo|start|begin|jenga)/i;
-  const isGreeting = greetingPatterns.test(normalizedMessage);
-  
-  // If no state and user sends greeting, start onboarding
-  if (!currentState && isGreeting) {
-    console.log(`[Onboarding] ${requestId} - Starting onboarding for user ${userId}`);
+  // If no state, start onboarding immediately (user hasn't started yet)
+  if (!currentState) {
+    console.log(`[Onboarding] ${requestId} - Starting onboarding for user ${userId} (first message)`);
     await sendWelcomeMessage(whatsappNumber);
     await updateOnboardingState(userId, 'awaiting_project_type');
     return true;
@@ -247,8 +244,9 @@ async function handleOnboardingFlow(
 /**
  * POST /webhook
  * Main Twilio WhatsApp webhook endpoint
+ * Note: This router is mounted at /webhook, so this route handles POST /webhook
  */
-router.post('/webhook', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const startTime = Date.now();
   const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   
@@ -294,41 +292,62 @@ router.post('/webhook', async (req: Request, res: Response) => {
     });
     
     // 2. Look up user profile
-    const profile = await getUserByWhatsApp(phoneNumber);
+    const profileResponse = await getUserByWhatsApp(phoneNumber);
     
-    if (!profile) {
+    // Check if user exists
+    if (!profileResponse.data) {
       console.log(`[WhatsApp Webhook] ${requestId} - User not found: ${phoneNumber}`);
       
-      const welcomeMessage = `👋 Welcome to JengaTrack!\n\n` +
-        `Please register at ${DASHBOARD_URL} to get started.\n\n` +
-        `Once registered, you can track expenses, manage tasks, and monitor your construction projects via WhatsApp.`;
+      // Create user profile automatically and start onboarding
+      console.log(`[WhatsApp Webhook] ${requestId} - Creating new user profile...`);
+      const createResponse = await createUserProfile(phoneNumber);
       
-      console.log(`[WhatsApp Webhook] ${requestId} - Sending welcome message to unregistered user...`);
-      const sendResult = await sendWhatsAppMessage(data.From, welcomeMessage);
-      
-      if (sendResult.success) {
-        console.log(`[WhatsApp Webhook] ${requestId} - ✅ Welcome message sent: ${sendResult.messageSid}`);
-      } else {
-        console.error(`[WhatsApp Webhook] ${requestId} - ❌ Failed to send welcome message:`, sendResult.error);
+      if (!createResponse.data || createResponse.error) {
+        console.error(`[WhatsApp Webhook] ${requestId} - Failed to create user:`, createResponse.error);
+        const errorMessage = `Sorry, we encountered an error. Please try again later or contact support at ${DASHBOARD_URL}`;
+        await sendWhatsAppMessage(data.From, errorMessage);
+        return res.status(200).send('<Response></Response>');
       }
       
-      await logUnregisteredUserMessage(phoneNumber, messageBody, data.MessageSid);
+      const newProfile = createResponse.data;
+      console.log(`[WhatsApp Webhook] ${requestId} - User created: ${newProfile.id}`);
+      
+      // Start onboarding immediately for new users
+      console.log(`[WhatsApp Webhook] ${requestId} - Starting onboarding for new user...`);
+      await sendWelcomeMessage(data.From);
+      await updateOnboardingState(newProfile.id, 'awaiting_project_type');
+      
+      // Log the message
+      await logWhatsAppMessage({
+        userId: newProfile.id,
+        whatsappMessageId: data.MessageSid || null,
+        direction: 'inbound',
+        messageBody: messageBody || null,
+        mediaUrl: mediaUrl || null,
+        intent: 'onboarding',
+        processed: true,
+        aiUsed: false,
+        errorMessage: null,
+        receivedAt: new Date(),
+        processedAt: new Date(),
+      });
       
       logWhatsAppInteraction({
         phoneNumber,
+        userId: newProfile.id,
         direction: 'outbound',
-        messageBody: welcomeMessage,
-        intent: 'registration_required',
-        action: 'Sent welcome message',
-        success: sendResult.success,
-        error: sendResult.error,
-        metadata: { requestId, messageSid: sendResult.messageSid },
+        messageBody: 'Welcome message with project type buttons',
+        intent: 'onboarding',
+        action: 'Started onboarding',
+        success: true,
+        metadata: { requestId },
       });
       
       return res.status(200).send('<Response></Response>');
     }
     
-    console.log(`[WhatsApp Webhook] ${requestId} - User found: ${profile.fullName} (${profile.id})`);
+    const profile = profileResponse.data;
+    console.log(`[WhatsApp Webhook] ${requestId} - User found: ${profile.full_name} (${profile.id})`);
     
     // 3. Check if user needs onboarding
     // Get full profile with onboarding fields from database
@@ -336,19 +355,30 @@ router.post('/webhook', async (req: Request, res: Response) => {
       id: profiles.id,
       onboardingState: profiles.onboardingState,
       onboardingData: profiles.onboardingData,
+      onboardingCompletedAt: profiles.onboardingCompletedAt,
     })
       .from(profiles)
       .where(eq(profiles.id, profile.id))
       .limit(1);
     
+    if (!fullProfile) {
+      console.error(`[WhatsApp Webhook] ${requestId} - Profile not found in database: ${profile.id}`);
+      return res.status(200).send('<Response></Response>');
+    }
+    
     const needsOnboardingCheck = await needsOnboarding(profile.id);
-    const onboardingState = fullProfile ? {
+    const onboardingState = {
       state: fullProfile.onboardingState as string | null,
       data: (fullProfile.onboardingData as any) || {},
-    } : { state: null, data: {} };
+      completedAt: fullProfile.onboardingCompletedAt,
+    };
     
-    if (needsOnboardingCheck || onboardingState.state !== 'completed') {
-      console.log(`[WhatsApp Webhook] ${requestId} - User needs onboarding, state: ${onboardingState.state}`);
+    // Check if onboarding is needed (no completion timestamp or state is not 'completed')
+    const shouldOnboard = !onboardingState.completedAt && 
+      (needsOnboardingCheck || onboardingState.state !== 'completed');
+    
+    if (shouldOnboard) {
+      console.log(`[WhatsApp Webhook] ${requestId} - User needs onboarding, state: ${onboardingState.state || 'null'}`);
       
       // Handle onboarding flow
       const onboardingHandled = await handleOnboardingFlow(
