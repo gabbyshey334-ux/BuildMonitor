@@ -1,4 +1,4 @@
-import { IStorage } from './storage';
+import { IStorage } from './storage.js';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 

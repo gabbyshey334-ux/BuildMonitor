@@ -50,7 +50,7 @@ import {
   type WhatsappMessage,
   type InsertWhatsappMessage,
 } from "@shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq, desc, and, sum, sql } from "drizzle-orm";
 
 export interface IStorage {

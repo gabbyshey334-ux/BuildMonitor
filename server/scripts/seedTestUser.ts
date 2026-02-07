@@ -8,7 +8,7 @@ import { config } from 'dotenv';
 import { join } from 'path';
 config({ path: join(process.cwd(), '.env') });
 
-import { db, supabase } from '../db';
+import { db, supabase } from '../db.js';
 import { 
   profiles, 
   projects, 

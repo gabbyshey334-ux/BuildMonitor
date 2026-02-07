@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { storage } from "./storage";
-import { aiService, AIService } from "./aiService";
+import { storage } from "./storage.js";
+import { aiService, AIService } from "./aiService.js";
 import { z } from "zod";
 
 /**

@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
-import { setupSimpleAuth, isAuthenticated } from "./simpleAuth";
+import { storage } from "./storage.js";
+import { setupSimpleAuth, isAuthenticated } from "./simpleAuth.js";
 import {
   insertProjectSchema,
   insertTaskSchema,
@@ -19,13 +19,13 @@ import {
   insertUserPreferencesSchema,
 } from "@shared/schema";
 import { z } from "zod";
-import { handleError, createSuccessResponse } from "./errorHandler";
-import { exportService, ExportOptions } from "./exportService";
-import { validateWebhookToken, handleWebhook, handleWebhookTest } from "./webhookHandler";
-import { handleWhatsAppWebhook, handleRAGQuery, handleAIAnswer } from "./whatsappHandler";
-import { createExtractedDataRoutes } from "./extractedDataHandler";
-import whatsappRouter from "./routes/whatsapp";
-import { db } from "./db";
+import { handleError, createSuccessResponse } from "./errorHandler.js";
+import { exportService, ExportOptions } from "./exportService.js";
+import { validateWebhookToken, handleWebhook, handleWebhookTest } from "./webhookHandler.js";
+import { handleWhatsAppWebhook, handleRAGQuery, handleAIAnswer } from "./whatsappHandler.js";
+import { createExtractedDataRoutes } from "./extractedDataHandler.js";
+import whatsappRouter from "./routes/whatsapp.js";
+import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 
 // WebSocket connection manager

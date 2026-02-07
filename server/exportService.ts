@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { storage } from './storage';
+import { storage } from './storage.js';
 
 export interface ExportOptions {
   projectId: string;
