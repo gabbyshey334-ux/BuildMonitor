@@ -227,11 +227,49 @@ app.get('/health', (req, res) => {
 // If it fails, we'll use basic routes
 let serverApp = null;
 try {
-  // Import the compiled server
-  const serverPath = join(__dirname, '..', 'dist', 'server', 'index.js');
-  if (fs.existsSync(serverPath)) {
+  // Try multiple possible paths for the compiled server
+  const possiblePaths = [
+    join(__dirname, '..', 'dist', 'server', 'index.js'),
+    join(process.cwd(), 'dist', 'server', 'index.js'),
+    './dist/server/index.js',
+    '../dist/server/index.js',
+  ];
+  
+  let serverPath = null;
+  for (const path of possiblePaths) {
+    const resolvedPath = path.startsWith('.') ? join(__dirname, '..', path) : path;
+    if (fs.existsSync(resolvedPath)) {
+      serverPath = resolvedPath;
+      console.log(`✅ Found server file at: ${serverPath}`);
+      break;
+    }
+  }
+  
+  if (serverPath) {
     // Use dynamic import with proper path resolution
-    const serverModule = await import(serverPath);
+    // In Vercel, we need to use the file path directly, not file:// URL
+    console.log(`📦 Importing server from: ${serverPath}`);
+    
+    // Try importing with the path directly (works in Vercel)
+    // If that fails, try with file:// URL
+    let serverModule;
+    try {
+      serverModule = await import(serverPath);
+    } catch (importError) {
+      // Fallback: try with file:// URL
+      const fileUrl = `file://${serverPath}`;
+      console.log(`📦 Retrying import with file:// URL: ${fileUrl}`);
+      try {
+        serverModule = await import(fileUrl);
+      } catch (urlError) {
+        console.error('❌ Both import methods failed:', {
+          directPath: importError.message,
+          fileUrl: urlError.message,
+        });
+        throw importError;
+      }
+    }
+    
     serverApp = serverModule.default;
     
     // If the server exports an Express app, use it
@@ -250,11 +288,16 @@ try {
     } else {
       console.warn('⚠️ Server module does not export an Express app');
       console.warn('   Type:', typeof serverApp);
+      console.warn('   Module keys:', Object.keys(serverModule || {}));
     }
   } else {
-    console.warn(`⚠️ Server file not found at ${serverPath}`);
+    console.warn(`⚠️ Server file not found at any of these paths:`);
+    possiblePaths.forEach(path => {
+      const resolvedPath = path.startsWith('.') ? join(__dirname, '..', path) : path;
+      console.warn(`   - ${resolvedPath} (exists: ${fs.existsSync(resolvedPath)})`);
+    });
     console.warn(`   Current directory: ${__dirname}`);
-    console.warn(`   Looking for: ${serverPath}`);
+    console.warn(`   Process CWD: ${process.cwd()}`);
   }
 } catch (error) {
   console.error('❌ Error loading compiled server:', error);
