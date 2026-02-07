@@ -314,7 +314,7 @@ export default function ProjectsList() {
             <Card 
               key={project.id}
               className="hover:shadow-lg transition-shadow cursor-pointer"
-              onClick={() => setLocation(`/projects/${project.id}`)}
+              onClick={() => setLocation(`/dashboard?project=${project.id}`)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between mb-2">

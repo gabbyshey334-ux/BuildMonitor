@@ -90,7 +90,8 @@ export default function Sidebar() {
             <li>
               <ul role="list" className="-mx-2 space-y-1">
                 {navigation.map((item) => {
-                  const isActive = location === item.href;
+                  // Check if location matches (including query params for dashboard)
+                  const isActive = location === item.href || location.startsWith(item.href + '?');
                   const badge = item.name === 'Issues & Risks' ? openIssuesCount : null;
                   return (
                     <li key={item.name}>
@@ -123,7 +124,8 @@ export default function Sidebar() {
             <li className="mt-auto">
               <ul role="list" className="-mx-2 space-y-1">
                 {bottomNav.map((item) => {
-                  const isActive = location === item.href;
+                  // Check if location matches (including query params)
+                  const isActive = location === item.href || location.startsWith(item.href + '?');
                   return (
                     <li key={item.name}>
                       <Link href={item.href}>

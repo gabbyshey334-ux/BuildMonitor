@@ -59,10 +59,16 @@ export default function Dashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Extract project ID from URL query parameter
+  // Extract project ID from URL query parameter - reactive to URL changes
   // Must be declared after all hooks to follow Rules of Hooks
-  const urlParams = new URLSearchParams(window.location.search);
-  const selectedProjectId = urlParams.get('project');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Update selectedProjectId when URL changes
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const projectId = urlParams.get('project');
+    setSelectedProjectId(projectId);
+  }, [location]); // React to location changes
 
   useEffect(() => {
     fetchProjects();
