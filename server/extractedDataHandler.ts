@@ -389,7 +389,7 @@ async function handleQuery(
 
     if (question.includes('task') || question.includes('pending') || question.includes('todo')) {
       const tasks = await storage.getTasks(data.projectId);
-      const pendingTasks = tasks.filter(t => !t.completed);
+      const pendingTasks = tasks.filter(t => t.status !== 'completed' && !t.completedAt);
       const taskList = pendingTasks.slice(0, 5).map(t => `• ${t.title}`).join('\n');
       
       return {

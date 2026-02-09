@@ -4,10 +4,7 @@
   "builds": [
     {
       "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": ["dist/shared/**"]
-      }
+      "use": "@vercel/node"
     },
     {
       "src": "package.json",

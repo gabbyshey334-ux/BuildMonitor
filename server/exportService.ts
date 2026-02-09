@@ -58,10 +58,10 @@ export class ExportService {
       id: project.id,
       name: project.name,
       description: project.description,
-      budget: project.budget,
+      budget: project.budgetAmount || '0',
       status: project.status,
-      startDate: project.startDate,
-      endDate: project.endDate,
+      startDate: project.createdAt?.toISOString() || null, // Use createdAt as startDate
+      endDate: project.completedAt?.toISOString() || null, // Use completedAt as endDate
       exportedAt: new Date().toISOString()
     };
 
@@ -110,13 +110,14 @@ export class ExportService {
 
       // Financial summary
       const analytics = await storage.getProjectAnalytics(projectId);
+      const budgetAmount = parseFloat(project.budgetAmount || '0');
       exportData.financialSummary = {
-        totalBudget: project.budget,
+        totalBudget: project.budgetAmount || '0',
         totalSpent: analytics.totalSpent,
         totalCashSpent: analytics.totalCashSpent,
         totalSupplierSpent: analytics.totalSupplierSpent,
         cashBalance: analytics.cashBalance,
-        budgetUtilization: analytics.totalSpent / parseFloat(project.budget)
+        budgetUtilization: budgetAmount > 0 ? analytics.totalSpent / budgetAmount : 0
       };
     }
 
@@ -128,11 +129,11 @@ export class ExportService {
         title: task.title,
         description: task.description,
         priority: task.priority,
-        completed: task.completed,
-        dueDate: task.dueDate,
-        location: task.location,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt
+        completed: task.status === 'completed' || !!task.completedAt,
+        dueDate: task.dueDate ? (typeof task.dueDate === 'string' ? task.dueDate : task.dueDate.toISOString()) : null,
+        location: null, // Location field doesn't exist in current schema
+        createdAt: task.createdAt?.toISOString() || null,
+        updatedAt: task.updatedAt?.toISOString() || null
       }));
     }
 
@@ -227,12 +228,12 @@ export class ExportService {
         id: project.id,
         name: project.name,
         description: project.description,
-        budget: project.budget,
+        budget: project.budgetAmount || '0',
         status: project.status,
-        startDate: project.startDate,
-        endDate: project.endDate,
-        ownerId: project.ownerId,
-        createdAt: project.createdAt
+        startDate: project.createdAt?.toISOString() || null,
+        endDate: project.completedAt?.toISOString() || null,
+        ownerId: project.userId, // Use userId instead of ownerId
+        createdAt: project.createdAt?.toISOString() || null
       }))
     };
 
