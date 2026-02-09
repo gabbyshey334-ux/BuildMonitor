@@ -94,12 +94,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('whatsapp_messages')
         .insert({
           user_id: profile.id,
-          from_number: phoneNumber,
+          whatsapp_message_id: MessageSid,
           message_body: message,
-          message_sid: MessageSid,
           direction: 'inbound',
-          received_at: new Date().toISOString(),
           processed: false,
+          received_at: new Date().toISOString(),
         });
     } catch (logError) {
       // Non-critical - log error but don't fail the webhook
