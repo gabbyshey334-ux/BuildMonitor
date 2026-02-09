@@ -7,7 +7,7 @@
     "dev": "tsx watch server/index.ts",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
-    "build:server": "tsc -p tsconfig.build.json || true",
+    "build:server": "tsc -p tsconfig.build.json || true && node -e \"const fs = require('fs'); const path = require('path'); if (!fs.existsSync('dist/shared')) { console.error('ERROR: dist/shared folder not found after build!'); process.exit(1); }\"",
     "vercel-build": "npm run build",
     "start": "NODE_ENV=production node dist/server/index.js",
     "check": "tsc",

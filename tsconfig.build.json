@@ -33,6 +33,7 @@
     }
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
-  "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "**/*.test.tsx"]
+  "exclude": ["node_modules", "dist", "client", "**/*.test.ts", "**/*.test.tsx"],
+  "files": []
 }
 

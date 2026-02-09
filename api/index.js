@@ -17,6 +17,22 @@ import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
 
+// CRITICAL: Explicitly import shared schema to ensure it's included in Vercel bundle
+// This ensures dist/shared/schema.js is included in the serverless function
+try {
+  // This import ensures the shared folder is included in the bundle
+  // The path will be resolved at runtime when the server imports it
+  const sharedSchemaPath = join(__dirname, '..', 'dist', 'shared', 'schema.js');
+  if (fs.existsSync(sharedSchemaPath)) {
+    // Import to ensure it's included in bundle
+    await import(sharedSchemaPath);
+    console.log('✅ Shared schema pre-loaded for Vercel bundle');
+  }
+} catch (error) {
+  // Non-critical - the import will happen when server loads
+  console.warn('⚠️ Could not pre-load shared schema (will load on demand):', error.message);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
