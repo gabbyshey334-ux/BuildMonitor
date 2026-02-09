@@ -97,7 +97,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           from_number: phoneNumber,
           message_body: message,
           message_sid: MessageSid,
+          direction: 'inbound',
           received_at: new Date().toISOString(),
+          processed: false,
         });
     } catch (logError) {
       // Non-critical - log error but don't fail the webhook
