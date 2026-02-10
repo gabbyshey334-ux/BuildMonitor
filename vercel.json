@@ -3,15 +3,15 @@
   "buildCommand": "npm run vercel-build",
   "builds": [
     {
+      "src": "api/whatsapp-webhook.ts",
+      "use": "@vercel/node"
+    },
+    {
       "src": "api/index.js",
       "use": "@vercel/node"
     },
     {
       "src": "api/whatsapp.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/whatsapp-webhook.ts",
       "use": "@vercel/node"
     },
     {
@@ -22,19 +22,13 @@
       }
     }
   ],
-  "rewrites": [
-    {
-      "source": "/webhook/webhook",
-      "destination": "/api/whatsapp-webhook"
-    }
-  ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/index.js"
+      "src": "/webhook/webhook",
+      "dest": "/api/whatsapp-webhook"
     },
     {
-      "src": "/webhook/(.*)",
+      "src": "/api/(.*)",
       "dest": "/api/index.js"
     },
     {
