@@ -11,6 +11,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/whatsapp-webhook.ts",
+      "use": "@vercel/node"
+    },
+    {
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -18,11 +22,13 @@
       }
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/webhook/webhook",
-      "dest": "/api/whatsapp"
-    },
+      "source": "/webhook/webhook",
+      "destination": "/api/whatsapp-webhook"
+    }
+  ],
+  "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/api/index.js"
