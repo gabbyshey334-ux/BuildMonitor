@@ -278,22 +278,51 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
     ? `${typeLabel} - ${location}`
     : typeLabel;
   
+  const description = start_date 
+    ? `Project created via WhatsApp onboarding. Started: ${start_date}`
+    : 'Project created via WhatsApp onboarding';
+  
+  // Prepare project data with correct column names (snake_case for database)
+  const projectData: any = {
+    user_id: userId,  // Database column name
+    name: projectName,
+    description: description,
+    status: 'active',
+  };
+  
+  // Add budget if provided (as string for decimal column)
+  if (budget && budget > 0) {
+    projectData.budget_amount = budget.toString();
+  }
+  
+  // created_at and updated_at are auto-set by database defaults, but we can set them explicitly
+  const now = new Date().toISOString();
+  projectData.created_at = now;
+  projectData.updated_at = now;
+  
+  console.log('[Create Project] Inserting project with data:', {
+    ...projectData,
+    budget_amount: projectData.budget_amount || '0',
+  });
+  
   const { data: project, error } = await supabase
     .from('projects')
-    .insert({
-      user_id: userId,
-      name: projectName,
-      description: 'Project created via WhatsApp onboarding',
-      budget_amount: budget ? budget.toString() : '0',
-      status: 'active',
-    })
+    .insert(projectData)
     .select()
     .single();
   
   if (error) {
-    console.error('[Create Project Error]', error);
+    console.error('[Create Project Error]', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      fullError: error,
+    });
     throw error;
   }
+  
+  console.log('[Create Project] ✅ Project created successfully:', project.id);
   
   // Mark onboarding as completed
   await updateOnboardingState(userId, 'completed');
