@@ -1,23 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
-  "builds": [
-    {
-      "src": "api/whatsapp-webhook.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist/public"
-      }
-    }
-  ],
   "routes": [
     {
       "src": "/webhook/webhook",
@@ -25,7 +7,7 @@
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/api/$1"
     },
     {
       "src": "/health",
@@ -39,8 +21,5 @@
       "src": "/(.*)",
       "dest": "/index.html"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
