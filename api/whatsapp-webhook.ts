@@ -437,8 +437,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Handle confirmation
         if (message.includes('1') || message.includes('yes') || message.includes('create')) {
           // Create project
-          const projectId = await createProjectFromOnboarding(userId);
-          await sendPostCreationMessage(From, projectId);
+          try {
+            const projectId = await createProjectFromOnboarding(userId);
+            await sendPostCreationMessage(From, projectId);
+          } catch (error: any) {
+            console.error('[Onboarding] Project creation failed:', error);
+            const errorMessage = error.message || 'Unknown error';
+            const errorDetails = error.details || error.hint || '';
+            
+            await sendMessage(From, 
+              `⚠️ Oops! Couldn't create the project.\n\nError: ${errorMessage}\n${errorDetails ? `Details: ${errorDetails}\n` : ''}\n\nType "start over" to try again, or contact support.`
+            );
+            
+            // Log detailed error for debugging
+            console.error('[Onboarding] Full error details:', {
+              userId,
+              onboardingData,
+              error: {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                hint: error.hint,
+                stack: error.stack,
+              }
+            });
+          }
         } else if (message.includes('2') || message.includes('edit')) {
           // Restart onboarding
           await updateOnboardingState(userId, 'welcome_sent', {});
