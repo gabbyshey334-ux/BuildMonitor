@@ -21,8 +21,8 @@ coverage/
 *.swo
 *~
 
-# Build outputs (Vercel handles builds)
-dist/
+# Build outputs - DO NOT ignore dist/; Vercel needs it after build
+# dist/ is created by npm run build and used by outputDirectory
 .next/
 .nuxt/
 .cache/

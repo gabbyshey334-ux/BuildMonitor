@@ -5,10 +5,10 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/index.ts",
-    "build": "npm run build:client && npm run build:server",
+    "build": "npm run build:client",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.build.json || echo 'Warning: Server build has TypeScript errors but continuing deployment'",
-    "vercel-build": "npm run build",
+    "vercel-build": "npm run build:client",
     "start": "NODE_ENV=production node dist/server/index.js",
     "check": "tsc",
     "db:push": "drizzle-kit push",
