@@ -1,137 +1,105 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Check } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Pricing() {
+  const [isYearly, setIsYearly] = useState(false);
+
   const plans = [
     {
-      name: "Free Trial",
-      price: "0",
-      period: "14 days",
-      tagline: "Perfect for testing",
-      features: [
-        "Unlimited expenses",
-        "1 project",
-        "WhatsApp support",
-        "Dashboard access",
-      ],
-      cta: "Start Free Trial",
-      ctaVariant: "outline" as const,
+      name: "Free Plan",
+      price: "$0",
+      period: "/ month",
+      features: ["1 Project", "50 MB Storage", "Basic Reports", "2 Users Max", "Standard support"],
+      cta: "Sign Up",
       highlighted: false,
     },
     {
-      name: "Starter",
-      price: "30,000",
-      period: "month",
-      tagline: "For solo contractors",
-      features: [
-        "Everything in Free",
-        "Unlimited projects",
-        "Receipt images",
-        "Export reports",
-        "Priority support",
-      ],
+      name: "Pro Plan",
+      sublabel: "Pro Plus",
+      price: "$24",
+      period: "/ month",
+      features: ["5 Projects", "1 TB Storage", "Advanced Analytics", "Up to 10 Users", "Premium support"],
       cta: "Get Started",
-      ctaVariant: "default" as const,
       highlighted: true,
-      badge: "Most Popular",
     },
     {
-      name: "Professional",
-      price: "75,000",
-      period: "month",
-      tagline: "For growing teams",
-      features: [
-        "Everything in Starter",
-        "Multi-user access",
-        "Advanced analytics",
-        "Custom categories",
-        "Dedicated support",
-      ],
-      cta: "Contact Sales",
-      ctaVariant: "outline" as const,
+      name: "Enterprise",
+      price: "Custom",
+      period: "",
+      features: ["Unlimited projects/Storage", "Unlimited number of users", "Custom Integrations", "Dedicated 24/7 support"],
+      cta: "Contact Us",
       highlighted: false,
     },
   ];
 
   return (
-    <section id="pricing" className="py-20 bg-background">
+    <section id="pricing" className="py-20 bg-zinc-950">
       <div className="container mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-4">
-            Simple, Transparent Pricing
+          <h2 className="text-3xl lg:text-4xl font-heading font-bold text-white mb-4">
+            Start Managing <span className="text-fresh-fern">Smarter</span>
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Start free, upgrade as you grow
+          <p className="text-zinc-400 max-w-2xl mx-auto">
+            Whether you're managing a single site or multiple projects, JengaTrack grows with you.
           </p>
+          <div className="flex items-center justify-center gap-4 mt-6">
+            <button
+              onClick={() => setIsYearly(false)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${!isYearly ? "bg-gradient-to-r from-fresh-fern to-ocean-pine text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              Per Month
+            </button>
+            <button
+              onClick={() => setIsYearly(true)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isYearly ? "bg-gradient-to-r from-fresh-fern to-ocean-pine text-white" : "text-zinc-400 hover:text-white"}`}
+            >
+              Per Year
+            </button>
+          </div>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           {plans.map((plan, index) => (
             <motion.div
               key={index}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
+              transition={{ delay: index * 0.1 }}
             >
-              <Card
-                className={`bg-card border-border h-full flex flex-col ${
-                  plan.highlighted
-                    ? "border-primary border-2 shadow-lg shadow-primary/10"
-                    : ""
-                }`}
-              >
+              <Card className={`h-full border ${plan.highlighted ? "border-fresh-fern bg-gradient-to-b from-fresh-fern/10 to-ocean-pine/10" : "border-zinc-800 bg-zinc-900"}`}>
                 <CardHeader className="text-center">
-                  {plan.badge && (
-                    <Badge className="mb-2 bg-primary text-primary-foreground">
-                      {plan.badge}
-                    </Badge>
-                  )}
-                  <CardTitle className="text-2xl font-bold text-foreground mb-2">
-                    {plan.name}
-                  </CardTitle>
-                  <div className="mb-2">
-                    <span className="text-4xl font-bold text-foreground">
-                      {plan.price}
-                    </span>
-                    <span className="text-muted-foreground ml-2">
-                      UGX / {plan.period}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{plan.tagline}</p>
+                  {plan.sublabel && <p className="text-sm text-fresh-fern font-medium">{plan.sublabel}</p>}
+                  <h3 className="text-xl font-bold text-white">{plan.name}</h3>
+                  <p className="text-2xl font-bold text-white">
+                    {plan.price}
+                    <span className="text-zinc-400 font-normal text-base">{plan.period}</span>
+                  </p>
                 </CardHeader>
-
-                <CardContent className="flex-1">
+                <CardContent>
                   <ul className="space-y-3">
-                    {plan.features.map((feature, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-foreground">{feature}</span>
+                    {plan.features.map((f, i) => (
+                      <li key={i} className="flex items-start gap-2 text-zinc-300">
+                        <Check className="w-5 h-5 text-fresh-fern flex-shrink-0 mt-0.5" />
+                        <span>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
-
                 <CardFooter>
-                  <Link href="/signup" className="w-full">
+                  <Link href={plan.cta === "Contact Us" ? "#contact" : "/signup"} className="w-full">
                     <Button
-                      variant={plan.ctaVariant}
-                      className={`w-full ${
-                        plan.highlighted
-                          ? "bg-primary hover:bg-primary/90 text-primary-foreground"
-                          : ""
-                      }`}
-                      size="lg"
+                      className={`w-full ${plan.highlighted ? "bg-gradient-to-r from-fresh-fern to-ocean-pine text-white border-0" : "bg-transparent border-2 border-fresh-fern text-fresh-fern hover:bg-fresh-fern/10"}`}
+                      variant={plan.highlighted ? "default" : "outline"}
                     >
                       {plan.cta}
                     </Button>
@@ -141,18 +109,7 @@ export default function Pricing() {
             </motion.div>
           ))}
         </div>
-
-        <motion.p
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="text-center text-muted-foreground mt-8"
-        >
-          All plans include 14-day free trial. No credit card required.
-        </motion.p>
       </div>
     </section>
   );
 }
-

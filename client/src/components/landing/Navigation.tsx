@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Hammer } from "lucide-react";
+import { Menu, X, TrendingUp, Globe } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Navigation() {
@@ -17,63 +17,43 @@ export default function Navigation() {
   }, []);
 
   const navLinks = [
-    { name: "Features", href: "#features" },
-    { name: "How It Works", href: "#how-it-works" },
-    { name: "Pricing", href: "#pricing" },
+    { name: "Resources", href: "#features" },
+    { name: "Team", href: "#team" },
+    { name: "Blog", href: "#" },
+    { name: "Contact", href: "#contact" },
   ];
 
   return (
     <nav
       className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-        isScrolled
-          ? "bg-background/80 backdrop-blur-sm border-b border-border shadow-md py-2"
-          : "bg-transparent py-4"
+        isScrolled ? "bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800 py-2" : "bg-transparent py-4"
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <div className="relative flex items-center gap-2">
-              <img
-                src="/images/logo/jengatrack-logo-primary.svg"
-                alt="JengaTrack"
-                className="h-10 w-auto"
-                onError={(e) => {
-                  // Fallback to icon + text if logo asset isn't present yet
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-              <div className="bg-ocean-pine p-1.5 rounded-lg">
-                <Hammer className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-2xl font-heading font-bold text-foreground tracking-tight">
-                JengaTrack
-              </span>
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fresh-fern to-ocean-pine flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-white" />
             </div>
+            <span className="text-xl font-heading font-bold text-white">JengaTrack</span>
           </Link>
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center space-x-8">
             {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
-                className="text-foreground/80 hover:text-primary font-medium transition-colors"
-              >
+              <a key={link.name} href={link.href} className="text-zinc-300 hover:text-white transition-colors">
                 {link.name}
               </a>
             ))}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-3">
+              <button className="p-2 text-zinc-400 hover:text-white transition-colors" aria-label="Language">
+                <Globe className="w-5 h-5" />
+              </button>
               <ThemeToggle />
               <Link href="/login">
-                <Button variant="ghost" className="text-foreground/80 font-medium">
-                  Login
-                </Button>
-              </Link>
-              <Link href="/signup">
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-6">
-                  Sign Up
+                <Button className="bg-gradient-to-r from-fresh-fern to-ocean-pine hover:opacity-90 text-white px-6 border-0">
+                  Login/Track
                 </Button>
               </Link>
             </div>
@@ -98,29 +78,15 @@ export default function Navigation() {
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden bg-background border-t border-border py-4 px-4 space-y-4 shadow-xl">
+        <div className="md:hidden bg-zinc-900 border-t border-zinc-800 py-4 px-4 space-y-4">
           {navLinks.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="block text-foreground/80 hover:text-primary font-medium py-2"
-            >
+            <a key={link.name} href={link.href} onClick={() => setIsMobileMenuOpen(false)} className="block text-zinc-300 hover:text-white py-2">
               {link.name}
             </a>
           ))}
-          <div className="pt-4 flex flex-col space-y-3">
-            <Link href="/login">
-              <Button variant="outline" className="w-full">
-                Login
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                Sign Up
-              </Button>
-            </Link>
-          </div>
+          <Link href="/login">
+            <Button className="w-full bg-gradient-to-r from-fresh-fern to-ocean-pine text-white">Login/Track</Button>
+          </Link>
         </div>
       )}
     </nav>

@@ -37,7 +37,7 @@ export default function StatsBar() {
   ];
 
   return (
-    <section className="py-12 bg-gradient-to-b from-background to-ash-gray/40 border-y border-border">
+    <section className="py-8 bg-gradient-to-r from-fresh-fern/20 via-ocean-pine/20 to-fresh-fern/20 border-y border-zinc-800">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
           {stats.map((stat, index) => (
@@ -47,16 +47,13 @@ export default function StatsBar() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="text-center"
+              className="flex items-center justify-center gap-3"
             >
-              <div className="text-4xl mb-2">{stat.icon}</div>
-              <div className="text-3xl lg:text-4xl font-heading font-bold text-ocean-pine mb-2">
+              <div className="text-2xl">{stat.icon}</div>
+              <span className="text-lg lg:text-xl font-heading font-semibold text-white">
                 <AnimatedCounter end={stat.value} />
-                {stat.suffix}
-              </div>
-              <div className="text-sm lg:text-base text-muted-foreground">
-                {stat.label}
-              </div>
+                {stat.suffix} {stat.label}
+              </span>
             </motion.div>
           ))}
         </div>

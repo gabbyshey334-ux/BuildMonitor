@@ -1,153 +1,73 @@
 import { Link } from "wouter";
-import { Hammer, Twitter, Facebook, Linkedin } from "lucide-react";
+import { TrendingUp, Facebook, Twitter, Instagram, Linkedin, Youtube } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Footer() {
-  const footerLinks = {
-    product: [
-      { name: "Features", href: "#features" },
-      { name: "Pricing", href: "#pricing" },
-      { name: "How It Works", href: "#how-it-works" },
-      { name: "Demo", href: "/signup" },
-    ],
-    resources: [
-      { name: "Help Center", href: "#" },
-      { name: "Video Tutorials", href: "#" },
-      { name: "WhatsApp Guide", href: "#" },
-      { name: "Blog", href: "#" },
-    ],
-    company: [
-      { name: "About Us", href: "#" },
-      { name: "Contact", href: "#" },
-      { name: "Careers", href: "#" },
-      { name: "Partners", href: "#" },
-    ],
-    legal: [
-      { name: "Privacy Policy", href: "#" },
-      { name: "Terms of Service", href: "#" },
-      { name: "Cookie Policy", href: "#" },
-      { name: "Data Security", href: "#" },
-    ],
-  };
-
   return (
-    <footer className="bg-card border-t border-border">
+    <footer className="bg-zinc-950 border-t border-zinc-800">
       <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
-          {/* Logo Column */}
-          <div className="lg:col-span-1">
-            <Link href="/" className="flex items-center space-x-2 mb-4">
-              <div className="bg-primary p-1.5 rounded-lg">
-                <Hammer className="w-6 h-6 text-primary-foreground" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
+          <div>
+            <Link href="/" className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fresh-fern to-ocean-pine flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-white" />
               </div>
-              <span className="text-2xl font-bold text-foreground">
-                JengaTrack
-              </span>
+              <span className="text-xl font-bold text-white">JengaTrack</span>
             </Link>
-            <p className="text-sm text-muted-foreground">
-              Construction budget tracking made simple. Right from WhatsApp.
-            </p>
+            <div className="flex gap-4">
+              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Facebook">
+                <Facebook className="w-5 h-5" />
+              </a>
+              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Twitter">
+                <Twitter className="w-5 h-5" />
+              </a>
+              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Instagram">
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="LinkedIn">
+                <Linkedin className="w-5 h-5" />
+              </a>
+              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="YouTube">
+                <Youtube className="w-5 h-5" />
+              </a>
+            </div>
           </div>
-
-          {/* Product Column */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Product</h3>
+            <h3 className="font-semibold text-white mb-4">Product</h3>
             <ul className="space-y-2">
-              {footerLinks.product.map((link, index) => (
-                <li key={index}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </a>
+              {["About", "Features", "Pricing", "API/Docs", "Blog"].map((item) => (
+                <li key={item}>
+                  <a href="#" className="text-zinc-400 hover:text-white transition-colors">{item}</a>
                 </li>
               ))}
             </ul>
           </div>
-
-          {/* Resources Column */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Resources</h3>
+            <h3 className="font-semibold text-white mb-4">Company</h3>
             <ul className="space-y-2">
-              {footerLinks.resources.map((link, index) => (
-                <li key={index}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </a>
+              {["Careers", "Support", "Press", "Legal"].map((item) => (
+                <li key={item}>
+                  <a href="#" className="text-zinc-400 hover:text-white transition-colors">{item}</a>
                 </li>
               ))}
             </ul>
           </div>
-
-          {/* Company Column */}
           <div>
-            <h3 className="font-semibold text-foreground mb-4">Company</h3>
-            <ul className="space-y-2">
-              {footerLinks.company.map((link, index) => (
-                <li key={index}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Legal Column */}
-          <div>
-            <h3 className="font-semibold text-foreground mb-4">Legal</h3>
-            <ul className="space-y-2">
-              {footerLinks.legal.map((link, index) => (
-                <li key={index}>
-                  <a
-                    href={link.href}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {link.name}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <p className="text-zinc-400 text-sm mb-4">Kampala, Uganda</p>
+            <Button className="bg-gradient-to-r from-fresh-fern to-ocean-pine text-white border-0">
+              Contact Us
+            </Button>
           </div>
         </div>
 
-        {/* Bottom Bar */}
-        <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-muted-foreground">
-            &copy; 2026 JengaTrack Uganda. All rights reserved.
-          </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Twitter"
-            >
-              <Twitter className="w-5 h-5" />
-            </a>
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Facebook"
-            >
-              <Facebook className="w-5 h-5" />
-            </a>
-            <a
-              href="#"
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="LinkedIn"
-            >
-              <Linkedin className="w-5 h-5" />
-            </a>
+        <div className="pt-8 border-t border-zinc-800 flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="flex gap-6">
+            <a href="#" className="text-sm text-zinc-400 hover:text-white">Privacy Policy</a>
+            <a href="#" className="text-sm text-zinc-400 hover:text-white">Terms of Service</a>
           </div>
+          <p className="text-sm text-zinc-400">© 2024 JengaTrack. All rights reserved.</p>
         </div>
       </div>
     </footer>
   );
 }
-

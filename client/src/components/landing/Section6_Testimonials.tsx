@@ -1,34 +1,18 @@
 import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
-import { Star, Quote } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function Testimonials() {
   const testimonials = [
-    {
-      initials: "JM",
-      quote: "JengaTrack saved me 2 hours every day. I just text my expenses and focus on the work.",
-      name: "John Mugisha",
-      role: "General Contractor, Kampala",
-      rating: 5,
-    },
-    {
-      initials: "SN",
-      quote: "The Luganda support means my team can use it without training. Game changer.",
-      name: "Sarah Nakato",
-      role: "Home Builder, Entebbe",
-      rating: 5,
-    },
-    {
-      initials: "DK",
-      quote: "I always know exactly how much budget I have left. No more surprises.",
-      name: "David Katende",
-      role: "Renovation Specialist, Jinja",
-      rating: 5,
-    },
+    { name: "Daniel Okello", role: "Quantity Surveyor", quote: "JengaTrack transformed how we track expenses. Simple and effective." },
+    { name: "Sarah Kamau", role: "Project Manager", quote: "Finally, a tool that understands construction workflows." },
+    { name: "Michael Kyalo", role: "Construction Lead", quote: "Our team adoption was instant. WhatsApp integration is brilliant." },
+    { name: "James Mwangi", role: "Development Manager", quote: "Real-time insights help us stay on budget every time." },
+    { name: "Luis Anderson", role: "IT Manager", quote: "Seamless integration with our existing tools. Highly recommended." },
+    { name: "Lydia Anderson", role: "Executive Director", quote: "The best construction management investment we've made." },
   ];
 
   return (
-    <section className="py-20 bg-secondary/30">
+    <section className="py-20 bg-zinc-950">
       <div className="container mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -37,54 +21,38 @@ export default function Testimonials() {
           transition={{ duration: 0.5 }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl lg:text-4xl font-bold text-foreground mb-4">
-            What Ugandan Contractors Say
+          <h2 className="text-3xl lg:text-4xl font-heading font-bold text-white mb-4">
+            What Our Users Are Saying
           </h2>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {testimonials.map((testimonial, index) => (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {testimonials.map((t, i) => (
             <motion.div
-              key={index}
+              key={i}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-emerald-500/30 transition-colors"
             >
-              <Card className="bg-card border-border h-full">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4 mb-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold flex-shrink-0">
-                      {testimonial.initials}
-                    </div>
-                    <div className="flex-1">
-                      <Quote className="w-6 h-6 text-muted-foreground mb-2" />
-                      <p className="text-foreground italic mb-4">
-                        "{testimonial.quote}"
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-border">
-                    <div className="flex items-center gap-1 mb-2">
-                      {Array.from({ length: testimonial.rating }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className="w-4 h-4 fill-yellow-400 text-yellow-400"
-                        />
-                      ))}
-                    </div>
-                    <p className="font-semibold text-foreground">
-                      {testimonial.name}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {testimonial.role}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-full bg-zinc-700 flex items-center justify-center text-white font-semibold">
+                  {t.name.split(" ").map((n) => n[0]).join("")}
+                </div>
+                <div>
+                  <p className="font-semibold text-white">{t.name}</p>
+                  <p className="text-sm text-zinc-400">{t.role}</p>
+                </div>
+              </div>
+              <p className="text-zinc-300 italic">"{t.quote}"</p>
             </motion.div>
           ))}
+        </div>
+        <div className="text-center">
+          <Button variant="outline" className="border-fresh-fern text-fresh-fern hover:bg-fresh-fern/10">
+            Read More
+          </Button>
         </div>
       </div>
     </section>
