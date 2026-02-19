@@ -1,10 +1,9 @@
 import Navigation from "@/components/landing/Navigation";
 import Hero from "@/components/landing/Hero";
-import StatsBar from "@/components/landing/Section1_StatsBar";
 import TurnSiteMessages from "@/components/landing/Section2_TurnSiteMessages";
 import HowItWorks from "@/components/landing/Section3_HowItWorks";
-import Testimonials from "@/components/landing/Section6_Testimonials";
 import Pricing from "@/components/landing/Section7_Pricing";
+import Testimonials from "@/components/landing/Section6_Testimonials";
 import FinalCTA from "@/components/landing/Section9_FinalCTA";
 import Footer from "@/components/landing/Section10_Footer";
 
@@ -14,11 +13,10 @@ export default function Landing() {
       <Navigation />
       <main>
         <Hero />
-        <StatsBar />
         <TurnSiteMessages />
         <HowItWorks />
-        <Testimonials />
         <Pricing />
+        <Testimonials />
         <FinalCTA />
       </main>
       <Footer />

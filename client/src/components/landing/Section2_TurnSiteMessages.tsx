@@ -1,77 +1,199 @@
 import { motion } from "framer-motion";
+import { Play, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Play, BarChart3, Eye, LineChart } from "lucide-react";
-import { Link } from "wouter";
 
-export default function TurnSiteMessages() {
-  const featureCards = [
-    { icon: BarChart3, title: "Built for Real-World Construction." },
-    { icon: Eye, title: "Full Oversight & Quality." },
-    { icon: LineChart, title: "Sustainable Project Insights." },
-  ];
-
+export default function Features() {
   return (
-    <section id="features" className="py-20 bg-zinc-950">
-      <div className="container mx-auto px-4">
+    <section id="features" className="py-24 bg-[#0a0a0a] relative overflow-hidden">
+      <div className="container mx-auto px-4 max-w-6xl relative z-10">
+        {/* Section Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center mb-12"
+          transition={{ duration: 0.6 }}
+          className="text-center mb-16"
         >
-          <h2 className="text-3xl lg:text-4xl font-heading font-bold text-white mb-4">
-            Turn Site Messages Into Structured Control
+          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
+            Turn Site Messages Into
+            <br />
+            Structured Control
           </h2>
-          <p className="text-lg text-zinc-400 max-w-3xl mx-auto">
-            JengaTrack helps you communicate, coordinate, and organize your construction data. Stay on top of your projects, streamline internal communications, and get real-time insights and analytics.
+          <p className="text-lg text-zinc-400 max-w-3xl mx-auto leading-relaxed">
+            JengaTrack transforms everyday construction updates into organized trackable data. 
+            Using AI and familiar chat apps, it converts informal communication into real-time 
+            financial and progress insights
           </p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-2 gap-8 mb-12">
+        {/* Features Grid - 2 rows layout */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          
+          {/* Main Feature Card - GREEN GRADIENT with Video (Top Left - spans full width on mobile, half on desktop) */}
           <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="bg-gradient-to-br from-fresh-fern/20 to-ocean-pine/20 rounded-2xl p-8 border border-emerald-500/20"
+            transition={{ duration: 0.6, delay: 0.1 }}
+            className="bg-gradient-to-br from-[#0f766e] to-[#22c55e] rounded-3xl p-8 relative overflow-hidden"
           >
-            <h3 className="text-2xl font-heading font-bold text-white mb-4">Manage Projects Through Chats</h3>
-            <p className="text-zinc-300 mb-6">
-              JengaTrack streamlines communication using chat apps like WhatsApp. Send updates, photos, and voice notes—we organize everything automatically.
-            </p>
-            <Link href="/signup">
-              <Button className="bg-white text-zinc-900 hover:bg-zinc-200">Learn More</Button>
-            </Link>
+            <div className="flex flex-col h-full justify-between">
+              <div>
+                <Button 
+                  className="bg-black/20 hover:bg-black/30 text-white border-0 rounded-full px-6 text-sm backdrop-blur-sm mb-6"
+                >
+                  Learn More
+                </Button>
+                
+                <h3 className="text-3xl lg:text-4xl font-bold text-white leading-tight mb-4">
+                  Manage Projects Through Chats
+                </h3>
+                
+                <p className="text-white/85 leading-relaxed text-sm max-w-md">
+                  Log purchases, labor payments, deliveries, and site updates by sending a 
+                  simple message on WhatsApp or Telegram. No spreadsheets. No complicated tools. 
+                  Just messages and results.
+                </p>
+              </div>
+            </div>
           </motion.div>
 
+          {/* Video Card (Top Right) */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="relative rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 aspect-video flex items-center justify-center group"
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="relative rounded-3xl overflow-hidden bg-zinc-900 aspect-[4/3] md:aspect-auto"
           >
-            <div className="absolute inset-0 bg-zinc-800/50" />
-            <button className="relative z-10 w-16 h-16 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
-              <Play className="w-8 h-8 text-white fill-white ml-1" />
-            </button>
+            <img
+              src="/assets/images/construction-team.jpg"
+              alt="Construction team collaboration"
+              className="w-full h-full object-cover"
+            />
+            {/* Play Button */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <button className="w-16 h-16 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110">
+                <Play className="w-6 h-6 text-zinc-900 ml-1" fill="currentColor" />
+              </button>
+            </div>
           </motion.div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
-          {featureCards.map((card, i) => (
+        {/* Bottom Row - 3 Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          {/* Built for Real-World Construction */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50"
+          >
+            {/* Notification Badge */}
+            <div className="inline-flex items-center gap-3 bg-zinc-800/80 rounded-full px-4 py-3 mb-8">
+              <div className="w-8 h-8 rounded-full bg-[#14b8a6] flex items-center justify-center">
+                <CheckCircle2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="text-xs text-white font-medium">Budget Updated Successfully</p>
+                <p className="text-[10px] text-zinc-500">Today, 10:31am</p>
+              </div>
+            </div>
+            
+            <h4 className="text-lg font-semibold text-white mb-3">
+              Built for Real-World Construction
+            </h4>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Updates can be sent in familiar language, simple text or voice notes. Reducing friction 
+              improving adoption across teams.
+            </p>
+          </motion.div>
+
+          {/* Full Financial Visibility */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50"
+          >
+            {/* Mini Chart */}
+            <div className="mb-6 bg-zinc-800/50 rounded-xl p-4">
+              <p className="text-xs text-zinc-400 mb-3">Running Projects</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-500 w-14">Project A</span>
+                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                    <div className="h-full w-[75%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-500 w-14">Project B</span>
+                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                    <div className="h-full w-[60%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-500 w-14">Project C</span>
+                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                    <div className="h-full w-[90%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <h4 className="text-lg font-semibold text-white mb-3">
+              Full Financial Visibility
+            </h4>
+            <p className="text-zinc-400 text-sm leading-relaxed">
+              Monitor Spending in real time, compare actuals against budgets, and identify 
+              overspending before it becomes a crisis.
+            </p>
+          </motion.div>
+
+          {/* Right Column - Two stacked cards */}
+          <div className="flex flex-col gap-6">
+            {/* Users Map Card */}
             <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-zinc-900 rounded-xl p-6 border border-zinc-800 hover:border-emerald-500/30 transition-colors"
+              transition={{ duration: 0.6, delay: 0.25 }}
+              className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50 flex-1"
             >
-              <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
-                <card.icon className="w-6 h-6 text-fresh-fern" />
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex -space-x-2">
+                  <img src="/assets/images/avatar-1.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
+                  <img src="/assets/images/avatar-2.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
+                  <img src="/assets/images/avatar-3.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
+                  <img src="/assets/images/avatar-4.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
+                </div>
               </div>
-              <h4 className="text-lg font-semibold text-white">{card.title}</h4>
+              <p className="text-zinc-400 text-sm leading-relaxed">
+                Our users span across different countries in Africa.
+              </p>
             </motion.div>
-          ))}
+
+            {/* Actionable Project Insights - GREEN */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.35 }}
+              className="bg-gradient-to-br from-[#14b8a6] to-[#22c55e] rounded-3xl p-6 relative overflow-hidden flex-1"
+            >
+              <h4 className="text-lg font-semibold text-white mb-3">
+                Actionable Project Insights
+              </h4>
+              <p className="text-white/90 text-sm leading-relaxed">
+                Identify risks, track patterns, and operational inefficiencies. Transform raw data 
+                into structured insights that support faster, smarter decisions.
+              </p>
+            </motion.div>
+          </div>
+
         </div>
       </div>
     </section>
