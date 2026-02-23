@@ -51,7 +51,7 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
             <img
               src="/assets/images/logo.png"
               alt="JengaTrack"
-              className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain mix-blend-multiply dark:mix-blend-lighten"
             />
             <div>
               <h1 className="text-sm sm:text-lg font-heading font-bold text-white">JengaTrack</h1>

@@ -15,7 +15,7 @@ export default function Footer() {
               <img
                 src="/assets/images/logo.png"
                 alt="JengaTrack"
-                className="w-8 h-8 object-contain"
+                className="w-8 h-8 object-contain mix-blend-multiply dark:mix-blend-lighten"
               />
               <span className="text-xl font-bold text-white">JengaTrack</span>
             </Link>

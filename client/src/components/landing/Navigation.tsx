@@ -49,7 +49,7 @@ export default function Navigation() {
             <img
               src="/assets/images/logo.png"
               alt="JengaTrack"
-              className="w-8 h-8 sm:w-10 sm:h-10 object-contain group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.5)] transition-shadow duration-300"
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain mix-blend-multiply dark:mix-blend-lighten group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.5)] transition-shadow duration-300"
             />
             <span className="text-xl font-bold text-white tracking-tight">JengaTrack</span>
           </Link>
