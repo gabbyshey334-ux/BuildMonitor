@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Play, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 
 export default function Features() {
   return (
@@ -39,11 +40,13 @@ export default function Features() {
           >
             <div className="flex flex-col h-full justify-between">
               <div>
-                <Button 
-                  className="bg-black/20 hover:bg-black/30 text-white border-0 rounded-full px-6 text-sm backdrop-blur-sm mb-6"
-                >
-                  Learn More
-                </Button>
+                <Link href="/signup">
+                  <Button 
+                    className="bg-black/20 hover:bg-black/30 text-white border-0 rounded-full px-6 text-sm backdrop-blur-sm mb-6"
+                  >
+                    Learn More
+                  </Button>
+                </Link>
                 
                 <h3 className="text-3xl lg:text-4xl font-bold text-white leading-tight mb-4">
                   Manage Projects Through Chats
@@ -71,12 +74,12 @@ export default function Features() {
               alt="Construction team collaboration"
               className="w-full h-full object-cover"
             />
-            {/* Play Button */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <button className="w-16 h-16 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110">
+            {/* Play Button - links to demo */}
+            <Link href="/demo" className="absolute inset-0 flex items-center justify-center">
+              <span className="w-16 h-16 bg-white/90 hover:bg-white rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110 cursor-pointer">
                 <Play className="w-6 h-6 text-zinc-900 ml-1" fill="currentColor" />
-              </button>
-            </div>
+              </span>
+            </Link>
           </motion.div>
         </div>
 

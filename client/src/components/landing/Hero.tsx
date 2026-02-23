@@ -14,16 +14,16 @@ export default function Hero() {
   return (
     <section className="relative min-h-screen flex flex-col bg-[#0a0a0a] overflow-hidden">
       {/* Background Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(34,197,94,0.15),transparent_70%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(34,197,94,0.12),transparent_70%)]" />
       
       {/* Hero Content */}
-      <div className="flex-1 flex flex-col items-center justify-center pt-32 pb-20 px-4 relative z-10">
-        <div className="container mx-auto max-w-6xl text-center">
+      <div className="flex-1 flex flex-col items-center justify-center pt-28 pb-16 px-4 relative z-10">
+        <div className="container mx-auto max-w-7xl text-center">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
-            className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight"
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-5 leading-tight"
           >
             Message Anywhere.
             <br />
@@ -34,7 +34,7 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
-            className="text-lg sm:text-xl text-zinc-400 mb-10 max-w-2xl mx-auto"
+            className="text-base sm:text-lg text-zinc-400 mb-8 max-w-xl mx-auto"
           >
             Use your favorite chat app to manage your construction project.
           </motion.p>
@@ -43,79 +43,45 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}
-            className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
+            className="flex flex-col sm:flex-row gap-3 justify-center mb-12"
           >
             <Link href="/signup">
               <Button 
-                className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-8 py-6 text-base font-semibold rounded-lg shadow-[0_0_30px_rgba(34,197,94,0.3)] hover:shadow-[0_0_40px_rgba(34,197,94,0.5)] transition-all duration-300 border-0"
+                className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-6 py-5 text-sm font-semibold rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all duration-300 border-0"
               >
                 Start Tracking
               </Button>
             </Link>
             <Button 
               variant="outline" 
-              className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 px-8 py-6 text-base font-semibold rounded-lg transition-all duration-300 bg-transparent"
+              className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 px-6 py-5 text-sm font-semibold rounded-lg transition-all duration-300 bg-transparent"
             >
               Learn More
             </Button>
           </motion.div>
 
-          {/* App Mockups */}
+          {/* Hero Image - EXTRA WIDE */}
           <motion.div
-            initial={{ opacity: 0, y: 40 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.3, ease: "easeOut" }}
-            className="relative max-w-5xl mx-auto"
+            className="relative w-[90vw] max-w-[1400px] mx-auto"
           >
-            <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-8">
-              {/* Phone Mockup */}
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#22c55e]/20 to-[#14b8a6]/20 rounded-[2.5rem] blur-xl opacity-60" />
-                <div className="relative bg-zinc-900 rounded-[2rem] p-3 border border-zinc-800 shadow-2xl">
-                  <img
-                    src="/assets/images/phone-chat.png"
-                    alt="WhatsApp chat interface showing construction updates"
-                    className="w-[280px] h-auto rounded-[1.5rem] object-cover"
-                    loading="eager"
-                  />
-                  {/* Chat Bubbles Overlay */}
-                  <div className="absolute inset-0 rounded-[1.5rem] overflow-hidden pointer-events-none">
-                    <div className="absolute top-20 left-4 right-4 space-y-2">
-                      <div className="bg-[#22c55e]/90 text-white text-xs p-2 rounded-lg rounded-tl-none max-w-[80%] backdrop-blur-sm">
-                        Bought 20 bags of cement
-                      </div>
-                      <div className="bg-[#22c55e]/90 text-white text-xs p-2 rounded-lg rounded-tl-none max-w-[80%] backdrop-blur-sm">
-                        Cost: UGX 180,000
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dashboard Mockup */}
-              <div className="relative hidden md:block">
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#14b8a6]/20 to-[#22c55e]/20 rounded-2xl blur-xl opacity-60" />
-                <div className="relative bg-zinc-900 rounded-2xl p-4 border border-zinc-800 shadow-2xl">
-                  <img
-                    src="/assets/images/dashboard.png"
-                    alt="JengaTrack dashboard showing project analytics"
-                    className="w-[500px] h-auto rounded-xl object-cover"
-                    loading="eager"
-                  />
-                  {/* Dashboard UI Overlay Elements */}
-                  <div className="absolute top-4 left-4 right-4 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#22c55e] to-[#14b8a6]" />
-                      <span className="text-white text-sm font-medium">Sarah Jones</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <div className="w-2 h-2 rounded-full bg-[#22c55e]" />
-                      <div className="w-2 h-2 rounded-full bg-zinc-600" />
-                      <div className="w-2 h-2 rounded-full bg-zinc-600" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* Subtle Glow */}
+            <div className="absolute -inset-4 bg-gradient-to-r from-[#22c55e]/10 to-[#14b8a6]/10 rounded-3xl blur-2xl opacity-40" />
+            
+            {/* Image Container */}
+            <div className="relative rounded-xl overflow-hidden bg-transparent">
+              <img
+                src="/assets/images/hero-mockup.png"
+                alt="JengaTrack - WhatsApp chat and Dashboard interface"
+                className="relative w-full h-auto max-h-[500px] object-contain"
+                loading="eager"
+                style={{ 
+                  filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.5))',
+                  mixBlendMode: 'normal'
+                }}
+              />
             </div>
           </motion.div>
         </div>
@@ -126,30 +92,30 @@ export default function Hero() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.5 }}
-        className="relative z-10 border-t border-zinc-800/50 bg-[#0a0a0a]/80 backdrop-blur-sm"
+        className="relative z-10 border-t border-zinc-800/30 bg-[#0a0a0a]"
       >
-        <div className="container mx-auto max-w-6xl px-4 py-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            {stats.map((stat, index) => (
+        <div className="container mx-auto max-w-6xl px-4 py-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {stats.map((stat, idx) => (
               <motion.div
-                key={stat.label}
+                key={idx}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.6 + index * 0.1 }}
+                transition={{ duration: 0.5, delay: 0.6 + idx * 0.1 }}
                 className="flex flex-col items-center text-center"
               >
-                <stat.icon className="w-6 h-6 text-[#22c55e] mb-3" strokeWidth={1.5} />
-                <div className="text-2xl sm:text-3xl font-bold text-white mb-1">
+                <stat.icon className="w-5 h-5 text-[#22c55e] mb-2" strokeWidth={1.5} />
+                <div className="text-xl sm:text-2xl font-bold text-white mb-0.5">
                   {stat.value}
                 </div>
-                <div className="text-sm text-zinc-500 font-medium">
+                <div className="text-xs text-zinc-500 font-medium">
                   {stat.label}
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }

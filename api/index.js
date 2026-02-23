@@ -773,6 +773,26 @@ app.post('/api/auth/logout', (req, res) => {
   });
 });
 
+// POST /api/waitlist - Join waitlist (landing page)
+app.post('/api/waitlist', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+    const trimmed = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return res.status(400).json({ success: false, error: 'Invalid email address' });
+    }
+    // Optional: persist to DB (e.g. waitlist table) or external service
+    console.log('[Waitlist] Joined:', trimmed);
+    res.json({ success: true, message: 'Thanks for joining the waitlist!' });
+  } catch (error) {
+    console.error('[Waitlist] Error:', error);
+    res.status(500).json({ success: false, error: 'Could not join waitlist' });
+  }
+});
+
 // ============================================================================
 // PROJECTS ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 
 export default function Testimonials() {
   const testimonials = [
@@ -36,7 +37,7 @@ export default function Testimonials() {
   ];
 
   return (
-    <section className="py-24 bg-[#0a0a0a]">
+    <section id="testimonials" className="py-24 bg-[#0a0a0a]">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Section Header */}
         <motion.h2
@@ -102,11 +103,13 @@ export default function Testimonials() {
           transition={{ duration: 0.5, delay: 0.6 }}
           className="text-center mt-10"
         >
-          <Button 
-            className="bg-gradient-to-r from-[#14b8a6] to-[#22c55e] hover:opacity-90 text-white border-0 rounded-lg px-8 py-2 shadow-[0_0_20px_rgba(20,184,166,0.3)]"
-          >
-            See All
-          </Button>
+          <Link href="/signup">
+            <Button 
+              className="bg-gradient-to-r from-[#14b8a6] to-[#22c55e] hover:opacity-90 text-white border-0 rounded-lg px-8 py-2 shadow-[0_0_20px_rgba(20,184,166,0.3)]"
+            >
+              See All
+            </Button>
+          </Link>
         </motion.div>
       </div>
     </section>

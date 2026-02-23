@@ -1,18 +1,43 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export default function FinalCTA() {
   const [email, setEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log("Submitted:", email);
+    if (!email.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      toast({
+        title: "You're on the list!",
+        description: "We'll notify you when we launch.",
+      });
+      setEmail("");
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Couldn't join waitlist",
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <section className="py-24 bg-gradient-to-r from-[#0f766e] via-[#14b8a6] to-[#22c55e] relative overflow-hidden">
+    <section id="waitlist" className="py-24 bg-gradient-to-r from-[#0f766e] via-[#14b8a6] to-[#22c55e] relative overflow-hidden">
       {/* Subtle gradient overlay for depth */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/10 pointer-events-none" />
       
@@ -43,9 +68,10 @@ export default function FinalCTA() {
             />
             <Button 
               type="submit"
-              className="bg-black hover:bg-zinc-800 text-white px-10 py-4 rounded-xl font-medium shadow-lg transition-all hover:scale-105"
+              disabled={isSubmitting}
+              className="bg-black hover:bg-zinc-800 text-white px-10 py-4 rounded-xl font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-70"
             >
-              Submit
+              {isSubmitting ? "Submitting…" : "Submit"}
             </Button>
           </form>
           

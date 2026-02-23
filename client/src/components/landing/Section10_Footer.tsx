@@ -12,14 +12,11 @@ export default function Footer() {
           {/* Left Side - Logo & Social */}
           <div className="space-y-6 lg:w-1/4">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#22c55e] to-[#14b8a6] flex items-center justify-center">
-                {/* JengaTrack Logo Icon */}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                  <rect x="4" y="16" width="16" height="4" rx="1"/>
-                  <rect x="6" y="10" width="12" height="4" rx="1"/>
-                  <rect x="8" y="4" width="8" height="4" rx="1"/>
-                </svg>
-              </div>
+              <img
+                src="/assets/images/logo.png"
+                alt="JengaTrack"
+                className="w-8 h-8 object-contain"
+              />
               <span className="text-xl font-bold text-white">JengaTrack</span>
             </Link>
             
@@ -39,7 +36,7 @@ export default function Footer() {
               <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="YouTube">
                 <Youtube className="w-5 h-5" />
               </a>
-              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Email">
+              <a href="mailto:info@jengatrack.com" className="text-zinc-400 hover:text-white transition-colors" aria-label="Email">
                 <Mail className="w-5 h-5" />
               </a>
             </div>
@@ -64,20 +61,22 @@ export default function Footer() {
               <p className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Email:</p>
               <p className="text-zinc-400 text-sm">info@jengatrack.com</p>
             </div>
-            <Button 
-              className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white border-0 rounded-lg px-6 mt-2"
-            >
-              Contact
-            </Button>
+            <a href="#contact">
+              <Button 
+                className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white border-0 rounded-lg px-6 mt-2"
+              >
+                Contact
+              </Button>
+            </a>
           </div>
         </div>
 
         {/* Bottom Bar */}
         <div className="mt-12 pt-8 border-t border-zinc-800/50 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex gap-6 text-sm">
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors">Privacy Policy</a>
+            <a href="/privacy" className="text-zinc-500 hover:text-white transition-colors">Privacy Policy</a>
             <span className="text-zinc-700">|</span>
-            <a href="#" className="text-zinc-500 hover:text-white transition-colors">Terms & Conditions</a>
+            <a href="/terms" className="text-zinc-500 hover:text-white transition-colors">Terms & Conditions</a>
           </div>
           <p className="text-sm text-zinc-500">© {currentYear} JengaTrack. All rights reserved.</p>
         </div>

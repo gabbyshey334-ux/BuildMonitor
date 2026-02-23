@@ -5,6 +5,7 @@ import HowItWorks from "@/components/landing/Section3_HowItWorks";
 import Pricing from "@/components/landing/Section7_Pricing";
 import Testimonials from "@/components/landing/Section6_Testimonials";
 import FinalCTA from "@/components/landing/Section9_FinalCTA";
+import SectionBlog from "@/components/landing/Section_Blog";
 import Footer from "@/components/landing/Section10_Footer";
 
 export default function Landing() {
@@ -17,7 +18,10 @@ export default function Landing() {
         <HowItWorks />
         <Pricing />
         <Testimonials />
-        <FinalCTA />
+        <SectionBlog />
+        <div id="contact">
+          <FinalCTA />
+        </div>
       </main>
       <Footer />
     </div>

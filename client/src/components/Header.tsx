@@ -49,12 +49,9 @@ export default function Header({ role = 'owner', onRoleChange = () => {}, onExpo
           {/* Brand Section */}
           <div className="flex items-center gap-2 sm:gap-3">
             <img
-              src="/images/logo/jengatrack-icon.svg"
+              src="/assets/images/logo.png"
               alt="JengaTrack"
-              className="w-8 h-8 sm:w-10 sm:h-10"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain"
             />
             <div>
               <h1 className="text-sm sm:text-lg font-heading font-bold text-white">JengaTrack</h1>

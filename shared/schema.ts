@@ -56,6 +56,8 @@ export const profiles = pgTable("profiles", {
   onboardingState: text("onboarding_state"), // WhatsApp onboarding state
   onboardingData: jsonb("onboarding_data").default('{}'), // Stored onboarding responses
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
+  expenseState: text("expense_state"), // 'awaiting_price' | 'awaiting_confirmation'
+  expensePendingData: jsonb("expense_pending_data").default('{}'),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
@@ -72,9 +74,11 @@ export const profiles = pgTable("profiles", {
 export const projects = pgTable("projects", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => profiles.id, { onDelete: 'cascade' }).notNull(),
+  managerId: uuid("manager_id").references(() => profiles.id, { onDelete: 'set null' }),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   budgetAmount: decimal("budget_amount", { precision: 15, scale: 2 }),
+  channelType: varchar("channel_type", { length: 20 }).default('direct'), // 'direct' | 'group'
   status: varchar("status", { length: 20 }).notNull().default('active'), // 'active', 'completed', 'paused'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -115,6 +119,7 @@ export const expenses = pgTable("expenses", {
   currency: varchar("currency", { length: 3 }).default('UGX'),
   source: varchar("source", { length: 20 }), // 'whatsapp', 'dashboard', 'api'
   expenseDate: date("expense_date").notNull(),
+  disputed: boolean("disputed").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -179,6 +184,7 @@ export const images = pgTable("images", {
 export const whatsappMessages = pgTable("whatsapp_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => profiles.id, { onDelete: 'set null' }), // nullable
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'set null' }),
   whatsappMessageId: varchar("whatsapp_message_id", { length: 255 }),
   direction: varchar("direction", { length: 10 }).notNull(), // 'inbound', 'outbound'
   messageBody: text("message_body"),
@@ -186,15 +192,50 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   intent: varchar("intent", { length: 50 }),
   processed: boolean("processed").default(false),
   aiUsed: boolean("ai_used").default(false),
+  aiExtractedData: jsonb("ai_extracted_data"),
   errorMessage: text("error_message"),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow(),
   processedAt: timestamp("processed_at", { withTimezone: true }),
 }, (table) => [
   index("idx_whatsapp_messages_user_id").on(table.userId),
+  index("idx_whatsapp_messages_project_id").on(table.projectId),
   index("idx_whatsapp_messages_direction").on(table.direction),
   index("idx_whatsapp_messages_processed").on(table.processed),
   index("idx_whatsapp_messages_received_at").on(table.receivedAt),
 ]);
+
+// ============================================================================
+// 7b. MATERIALS_INVENTORY, VENDORS, DAILY_LOGS
+// ============================================================================
+export const materialsInventory = pgTable("materials_inventory", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  materialName: text("material_name").notNull(),
+  quantity: decimal("quantity", { precision: 15, scale: 2 }).notNull(),
+  unit: text("unit"),
+  lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [index("idx_materials_inventory_project_id").on(table.projectId)]);
+
+export const vendors = pgTable("vendors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  name: text("name").notNull(),
+  category: text("category"),
+  totalSpent: decimal("total_spent", { precision: 15, scale: 2 }).default('0'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [index("idx_vendors_project_id").on(table.projectId)]);
+
+export const dailyLogs = pgTable("daily_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  logDate: date("log_date").notNull(),
+  workerCount: integer("worker_count"),
+  notes: text("notes"),
+  weatherCondition: text("weather_condition"),
+  photoUrls: jsonb("photo_urls"), // JSON array of URLs
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [index("idx_daily_logs_project_id").on(table.projectId)]);
 
 // ============================================================================
 // 8. AI_USAGE_LOG (cost tracking)

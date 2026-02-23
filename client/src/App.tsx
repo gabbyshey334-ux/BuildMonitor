@@ -17,6 +17,8 @@ import DemoPage from "@/pages/demo";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import DashboardPageWrapper from "@/pages/DashboardPage";
 import NotFound from "@/pages/not-found";
+import Privacy from "@/pages/privacy";
+import Terms from "@/pages/terms";
 
 function Redirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
@@ -79,6 +81,8 @@ function Router() {
       <Route path="/demo">
         <DemoPage />
       </Route>
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/terms" component={Terms} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -89,7 +93,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider
         attribute="class"
-        defaultTheme="light"
+        defaultTheme="dark"
         enableSystem={true}
         storageKey="jengatrack-theme"
       >

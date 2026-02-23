@@ -2,11 +2,18 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { theme, setTheme, resolvedTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -17,8 +24,7 @@ export default function Navigation() {
   }, []);
 
   const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    // Add your theme toggle logic here
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
   };
 
   const navLinks = [
@@ -40,14 +46,11 @@ export default function Navigation() {
         <div className="flex justify-between items-center">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group">
-            <div className="relative w-8 h-8 rounded-lg bg-gradient-to-br from-[#22c55e] to-[#14b8a6] flex items-center justify-center overflow-hidden group-hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-shadow duration-300">
-              {/* JengaTrack Logo Icon - Stacked blocks style */}
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                <rect x="4" y="16" width="16" height="4" rx="1"/>
-                <rect x="6" y="10" width="12" height="4" rx="1"/>
-                <rect x="8" y="4" width="8" height="4" rx="1"/>
-              </svg>
-            </div>
+            <img
+              src="/assets/images/logo.png"
+              alt="JengaTrack"
+              className="w-8 h-8 sm:w-10 sm:h-10 object-contain group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.5)] transition-shadow duration-300"
+            />
             <span className="text-xl font-bold text-white tracking-tight">JengaTrack</span>
           </Link>
 
@@ -73,14 +76,23 @@ export default function Navigation() {
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center gap-2">
             {/* Language Selector */}
-            <button 
-              className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors rounded-lg hover:bg-zinc-800/50"
-              aria-label="Select Language"
-            >
-              <span className="text-base">🇺🇬</span>
-              <span>EN</span>
-              <ChevronDown className="w-4 h-4 opacity-50" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors rounded-lg hover:bg-zinc-800/50"
+                  aria-label="Select Language"
+                >
+                  <span className="text-base">🇺🇬</span>
+                  <span>EN</span>
+                  <ChevronDown className="w-4 h-4 opacity-50" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
+                <DropdownMenuItem className="text-zinc-200 focus:bg-zinc-800 focus:text-white">
+                  English
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             {/* Theme Toggle */}
             <button
@@ -88,7 +100,7 @@ export default function Navigation() {
               className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800/50"
               aria-label="Toggle Theme"
             >
-              {isDarkMode ? (
+              {resolvedTheme === "dark" ? (
                 <Moon className="w-5 h-5" />
               ) : (
                 <Sun className="w-5 h-5" />
@@ -112,7 +124,7 @@ export default function Navigation() {
               className="p-2 text-zinc-400 hover:text-white transition-colors"
               aria-label="Toggle Theme"
             >
-              {isDarkMode ? (
+              {resolvedTheme === "dark" ? (
                 <Moon className="w-5 h-5" />
               ) : (
                 <Sun className="w-5 h-5" />
