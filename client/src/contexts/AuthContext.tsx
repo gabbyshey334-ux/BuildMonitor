@@ -127,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       
       // Redirect to dashboard
-      setLocation("/dashboard");
+      setLocation("/projects");
     },
     onError: (error: Error) => {
       console.error("[Auth] Login error:", error);
@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: `Welcome, ${data.user?.fullName}! Your project is ready.`,
       });
       
-      setLocation("/dashboard");
+      setLocation("/projects");
     },
     onError: (error: Error) => {
       console.error("[Auth] Registration error:", error);

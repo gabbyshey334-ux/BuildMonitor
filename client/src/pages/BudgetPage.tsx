@@ -4,10 +4,10 @@ import React from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PlaceholderView } from "@/components/layout/PlaceholderView";
 
-export default function DashboardPage() {
+export default function BudgetPage() {
   return (
     <AppLayout>
-      <PlaceholderView title="Dashboard" />
+      <PlaceholderView title="Budgets & Costs" />
     </AppLayout>
   );
 }

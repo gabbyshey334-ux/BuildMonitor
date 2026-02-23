@@ -6,6 +6,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth, AuthProvider } from "@/hooks/useAuth";
+import { ProjectProvider } from "@/contexts/ProjectContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import Landing from "@/pages/landing";
 import Login from "@/pages/login";
@@ -14,11 +15,17 @@ import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Home from "@/pages/home";
 import DemoPage from "@/pages/demo";
-import DashboardLayout from "@/components/layout/DashboardLayout";
-import DashboardPageWrapper from "@/pages/DashboardPage";
 import NotFound from "@/pages/not-found";
 import Privacy from "@/pages/privacy";
 import Terms from "@/pages/terms";
+import ProjectsPage from "@/pages/ProjectsPage";
+import FullDashboard from "@/components/dashboard-new/DashboardPage";
+import BudgetPage from "@/pages/BudgetPage";
+import MaterialsPage from "@/pages/MaterialsPage";
+import DailyPage from "@/pages/DailyPage";
+import TrendsPage from "@/pages/TrendsPage";
+import SettingsPage from "@/pages/SettingsPage";
+import HelpPage from "@/pages/HelpPage";
 
 function Redirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
@@ -26,6 +33,11 @@ function Redirect({ to }: { to: string }) {
     setLocation(to);
   }, [to, setLocation]);
   return null;
+}
+
+function DashboardRoute() {
+  const projectId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") || undefined : undefined;
+  return <FullDashboard projectId={projectId} />;
 }
 
 function Router() {
@@ -45,38 +57,43 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <Landing />}
+        {isAuthenticated ? <Redirect to="/projects" /> : <Landing />}
       </Route>
       <Route path="/login">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <Login />}
+        {isAuthenticated ? <Redirect to="/projects" /> : <Login />}
       </Route>
       <Route path="/signup">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <Signup />}
+        {isAuthenticated ? <Redirect to="/projects" /> : <Signup />}
       </Route>
       <Route path="/forgot-password">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <ForgotPassword />}
+        {isAuthenticated ? <Redirect to="/projects" /> : <ForgotPassword />}
       </Route>
       <Route path="/reset-password">
-        {isAuthenticated ? <Redirect to="/dashboard" /> : <ResetPassword />}
+        {isAuthenticated ? <Redirect to="/projects" /> : <ResetPassword />}
+      </Route>
+      <Route path="/projects">
+        {isAuthenticated ? <ProjectsPage /> : <Redirect to="/login" />}
       </Route>
       <Route path="/dashboard">
-        {isAuthenticated ? (
-          <DashboardLayout>
-            <Switch>
-              <Route path="/dashboard" component={DashboardPageWrapper} />
-              <Route path="/dashboard/budget" component={() => <div className="p-6">Budget Page - Coming Soon</div>} />
-              <Route path="/dashboard/tasks" component={() => <div className="p-6">Tasks Page - Coming Soon</div>} />
-              <Route path="/dashboard/materials" component={() => <div className="p-6">Materials Page - Coming Soon</div>} />
-              <Route path="/dashboard/issues" component={() => <div className="p-6">Issues Page - Coming Soon</div>} />
-              <Route path="/dashboard/photos" component={() => <div className="p-6">Photos Page - Coming Soon</div>} />
-              <Route path="/dashboard/reports" component={() => <div className="p-6">Reports Page - Coming Soon</div>} />
-              <Route path="/dashboard/settings" component={() => <div className="p-6">Settings Page - Coming Soon</div>} />
-              <Route path="/dashboard/help" component={() => <div className="p-6">Help Page - Coming Soon</div>} />
-            </Switch>
-          </DashboardLayout>
-        ) : (
-          <Login />
-        )}
+        {isAuthenticated ? <DashboardRoute /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/budget">
+        {isAuthenticated ? <BudgetPage /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/materials">
+        {isAuthenticated ? <MaterialsPage /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/daily">
+        {isAuthenticated ? <DailyPage /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/trends">
+        {isAuthenticated ? <TrendsPage /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/settings">
+        {isAuthenticated ? <SettingsPage /> : <Redirect to="/login" />}
+      </Route>
+      <Route path="/help">
+        {isAuthenticated ? <HelpPage /> : <Redirect to="/login" />}
       </Route>
       <Route path="/demo">
         <DemoPage />
@@ -99,10 +116,12 @@ function App() {
       >
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Router />
-            </TooltipProvider>
+            <ProjectProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Router />
+              </TooltipProvider>
+            </ProjectProvider>
           </AuthProvider>
         </QueryClientProvider>
       </ThemeProvider>
