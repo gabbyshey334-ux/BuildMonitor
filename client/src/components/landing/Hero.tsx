@@ -17,7 +17,7 @@ export default function Hero() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(34,197,94,0.12),transparent_70%)]" />
       
       {/* Hero Content */}
-      <div className="flex-1 flex flex-col items-center justify-center pt-28 pb-16 px-4 relative z-10">
+      <div className="flex-1 flex flex-col items-center justify-center pt-24 pb-12 px-4 relative z-10">
         <div className="container mx-auto max-w-7xl text-center">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
@@ -43,39 +43,39 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.2, ease: "easeOut" }}
-            className="flex flex-col sm:flex-row gap-3 justify-center mb-12"
+            className="flex flex-col sm:flex-row gap-3 justify-center mb-8"
           >
             <Link href="/signup">
               <Button 
-                className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-6 py-5 text-sm font-semibold rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all duration-300 border-0"
+                className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-8 py-5 text-sm font-semibold rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all duration-300 border-0"
               >
                 Start Tracking
               </Button>
             </Link>
             <Button 
               variant="outline" 
-              className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 px-6 py-5 text-sm font-semibold rounded-lg transition-all duration-300 bg-transparent"
+              className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 px-8 py-5 text-sm font-semibold rounded-lg transition-all duration-300 bg-transparent"
             >
               Learn More
             </Button>
           </motion.div>
 
-          {/* Hero Image - EXTRA WIDE */}
+          {/* Hero Image - FULL WIDTH like PDF */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.3, ease: "easeOut" }}
-            className="relative w-[90vw] max-w-[1400px] mx-auto"
+            className="relative w-full max-w-none mx-auto"
           >
             {/* Subtle Glow */}
-            <div className="absolute -inset-4 bg-gradient-to-r from-[#22c55e]/10 to-[#14b8a6]/10 rounded-3xl blur-2xl opacity-40" />
+            <div className="absolute -inset-4 bg-gradient-to-r from-[#22c55e]/10 to-[#14b8a6]/10 rounded-3xl blur-2xl opacity-30" />
             
-            {/* Image Container */}
-            <div className="relative rounded-xl overflow-hidden bg-transparent">
+            {/* Image Container - Full Width */}
+            <div className="relative w-full overflow-hidden bg-transparent">
               <img
                 src="/assets/images/hero-mockup.png"
                 alt="JengaTrack - WhatsApp chat and Dashboard interface"
-                className="relative w-full h-auto max-h-[500px] object-contain"
+                className="relative w-full h-auto max-h-[600px] object-cover object-top"
                 loading="eager"
                 style={{ 
                   filter: 'drop-shadow(0 25px 50px rgba(0,0,0,0.5))',
@@ -115,7 +115,7 @@ export default function Hero() {
             ))}
           </div>
         </div>
-      </div>
+      </motion.div>
     </section>
   );
 }
