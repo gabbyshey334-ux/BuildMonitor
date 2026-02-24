@@ -1,9 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { TopBar } from "./TopBar";
 import { Sidebar, useSidebarState } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
+import { useProjects } from "@/hooks/useProjects";
+import { useProject } from "@/contexts/ProjectContext";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -12,6 +14,14 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { open, toggle } = useSidebarState();
+  const { data: projectsData } = useProjects();
+  const { setProjects } = useProject();
+
+  useEffect(() => {
+    if (Array.isArray(projectsData)) {
+      setProjects(projectsData);
+    }
+  }, [projectsData, setProjects]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-zinc-200">
@@ -32,6 +42,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       </main>
 
       <BottomNav />
+
     </div>
   );
 }

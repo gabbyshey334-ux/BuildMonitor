@@ -23,7 +23,7 @@ interface ProjectContextType {
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
-const STORAGE_KEY = "jengatrack-current-project-id";
+const STORAGE_KEY = "jenga_current_project";
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjectsState] = useState<Project[]>([]);

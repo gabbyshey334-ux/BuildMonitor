@@ -1002,18 +1002,47 @@ router.get('/auth/me', async (req: Request, res: Response) => {
 
 /**
  * GET /api/projects
- * Get user's projects
+ * Get user's projects with total spent and last activity from expenses
  */
 router.get('/projects', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
 
-    // Fetch projects
     const projectList = await db
-      .select()
+      .select({
+        id: projects.id,
+        userId: projects.userId,
+        managerId: projects.managerId,
+        name: projects.name,
+        description: projects.description,
+        budgetAmount: projects.budgetAmount,
+        channelType: projects.channelType,
+        status: projects.status,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+        completedAt: projects.completedAt,
+        deletedAt: projects.deletedAt,
+        totalSpent: sql<string>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+        lastActivity: sql<string | null>`MAX(${expenses.createdAt})`,
+      })
       .from(projects)
+      .leftJoin(expenses, and(eq(expenses.projectId, projects.id), isNull(expenses.deletedAt)))
       .where(and(eq(projects.userId, userId), isNull(projects.deletedAt)))
-      .orderBy(desc(projects.updatedAt));
+      .groupBy(
+        projects.id,
+        projects.userId,
+        projects.managerId,
+        projects.name,
+        projects.description,
+        projects.budgetAmount,
+        projects.channelType,
+        projects.status,
+        projects.createdAt,
+        projects.updatedAt,
+        projects.completedAt,
+        projects.deletedAt,
+      )
+      .orderBy(desc(projects.createdAt));
 
     res.json({
       success: true,
@@ -1035,9 +1064,9 @@ router.get('/projects', requireAuth, async (req: Request, res: Response) => {
 router.post('/projects', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    const { name, description, budgetAmount, status } = req.body;
+    const { name, description, budgetAmount, status, channelType, whatsappNumber } = req.body;
 
-    console.log('[Create Project] Request body:', { name, description, budgetAmount, status });
+    console.log('[Create Project] Request body:', { name, description, budgetAmount, status, channelType, whatsappNumber });
     console.log('[Create Project] User ID:', userId);
 
     // Validate required fields
@@ -1059,12 +1088,16 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
+    const normalizedChannelType =
+      channelType && typeof channelType === 'string' && channelType.trim() === 'direct'
+        ? 'direct'
+        : 'direct';
+
     // Parse budget amount - handle string or number
     let parsedBudgetAmount = '0';
     if (budgetAmount !== undefined && budgetAmount !== null && budgetAmount !== '') {
       const budgetNum = typeof budgetAmount === 'string' ? parseFloat(budgetAmount) : Number(budgetAmount);
       if (!isNaN(budgetNum) && budgetNum >= 0) {
-        // Format as decimal string with 2 decimal places
         parsedBudgetAmount = budgetNum.toFixed(2);
       } else if (budgetNum < 0) {
         return res.status(400).json({
@@ -1082,9 +1115,21 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       description: description?.trim() || null,
       budgetAmount: parsedBudgetAmount,
       status: normalizedStatus,
+      channelType: normalizedChannelType,
       createdAt: new Date(),
       updatedAt: new Date(),
     }).returning();
+
+    // If WhatsApp number provided, update profile
+    if (whatsappNumber && typeof whatsappNumber === 'string' && whatsappNumber.trim() !== '') {
+      const normalizedPhone = whatsappNumber.trim().startsWith('+')
+        ? whatsappNumber.trim()
+        : `+${whatsappNumber.trim()}`;
+      await db
+        .update(profiles)
+        .set({ whatsappNumber: normalizedPhone, updatedAt: new Date() })
+        .where(eq(profiles.id, userId));
+    }
 
     console.log('[Create Project] ✅ Success - Project created:', {
       id: project.id,

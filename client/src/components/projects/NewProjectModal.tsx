@@ -43,6 +43,7 @@ interface NewProjectModalProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: NewProjectFormData) => void | Promise<void>;
   isLoading?: boolean;
+  errorMessage?: string | null;
 }
 
 export function NewProjectModal({
@@ -50,6 +51,7 @@ export function NewProjectModal({
   onOpenChange,
   onSubmit,
   isLoading = false,
+  errorMessage = null,
 }: NewProjectModalProps) {
   const [form, setForm] = useState<NewProjectFormData>(DEFAULT_FORM);
 
@@ -57,7 +59,6 @@ export function NewProjectModal({
     e.preventDefault();
     await onSubmit(form);
     setForm(DEFAULT_FORM);
-    onOpenChange(false);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -141,6 +142,9 @@ export function NewProjectModal({
               className="mt-1 bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
             />
           </div>
+          {errorMessage && (
+            <p className="text-sm text-red-400">{errorMessage}</p>
+          )}
           <DialogFooter className="gap-2 sm:gap-0 pt-4">
             <Button
               type="button"

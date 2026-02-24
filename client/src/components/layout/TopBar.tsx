@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Menu,
   Building2,
@@ -40,6 +40,7 @@ interface TopBarProps {
 }
 
 export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
+  const [location, setLocation] = useLocation();
   const { user, logout } = useAuth();
   const { currentProject, projects, setCurrentProject } = useProject();
   const [projectOpen, setProjectOpen] = useState(false);
@@ -106,6 +107,9 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
                 onClick={() => {
                   setCurrentProject(p);
                   setProjectOpen(false);
+                  if (location.startsWith("/dashboard")) {
+                    setLocation(`/dashboard?project=${p.id}`);
+                  }
                 }}
                 className="cursor-pointer"
               >
