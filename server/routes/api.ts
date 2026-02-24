@@ -18,6 +18,8 @@ import {
   tasks,
   images,
   expenseCategories,
+  materialsInventory,
+  dailyLogs,
   InsertExpense,
   InsertTask,
   InsertImage,
@@ -1176,6 +1178,597 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       error: errorMessage,
       message: errorMessage,
     });
+  }
+});
+
+// ============================================================================
+// PROJECT-SCOPED DASHBOARD ROUTES (require projectId param + ownership)
+// ============================================================================
+
+/** Helper: get project by id and verify current user owns it */
+async function getProjectForUser(projectId: string, userId: string) {
+  const [project] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.userId, userId), isNull(projects.deletedAt)))
+    .limit(1);
+  return project ?? null;
+}
+
+/**
+ * GET /api/projects/:projectId/summary
+ * Returns everything the dashboard needs in one call.
+ */
+router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const totalBudget = parseFloat(project.budgetAmount || '0');
+
+    // Expenses: total spent, recent 5, by category
+    const [spentRow] = await db
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)` })
+      .from(expenses)
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)));
+    const spent = parseFloat(spentRow?.total?.toString() || '0');
+
+    const recentExpenses = await db
+      .select({
+        id: expenses.id,
+        description: expenses.description,
+        amount: expenses.amount,
+        expenseDate: expenses.expenseDate,
+        createdAt: expenses.createdAt,
+        categoryName: expenseCategories.name,
+      })
+      .from(expenses)
+      .leftJoin(expenseCategories, eq(expenses.categoryId, expenseCategories.id))
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)))
+      .orderBy(desc(expenses.createdAt))
+      .limit(5);
+
+    const byCategoryRows = await db
+      .select({
+        category: expenseCategories.name,
+        total: sql<string>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+      })
+      .from(expenses)
+      .leftJoin(expenseCategories, eq(expenses.categoryId, expenseCategories.id))
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)))
+      .groupBy(expenseCategories.name);
+
+    const [expenseCountRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(expenses)
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)));
+    const expensesTotal = Number(expenseCountRow?.count ?? 0);
+
+    // Weekly burn rate (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const [burnRow] = await db
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)` })
+      .from(expenses)
+      .where(
+        and(
+          eq(expenses.projectId, projectId),
+          eq(expenses.userId, userId),
+          isNull(expenses.deletedAt),
+          gte(expenses.expenseDate, thirtyDaysAgo.toISOString().slice(0, 10))
+        )
+      );
+    const last30Spend = parseFloat(burnRow?.total?.toString() || '0');
+    const weeklyBurnRate = last30Spend / 4; // ~4 weeks
+    const remaining = Math.max(0, totalBudget - spent);
+    const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : 0;
+    const percentage = totalBudget > 0 ? Math.min(100, (spent / totalBudget) * 100) : 0;
+
+    // Materials inventory + low stock (quantity <= 5)
+    const materialsRows = await db
+      .select()
+      .from(materialsInventory)
+      .where(eq(materialsInventory.projectId, projectId));
+    const inventory = materialsRows.map((r) => ({
+      material_name: r.materialName,
+      quantity: parseFloat(r.quantity?.toString() || '0'),
+      unit: r.unit || '',
+    }));
+    const lowStock = inventory.filter((m) => m.quantity <= 5);
+
+    // Daily logs: today, recent photos, streak
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const [todayLog] = await db
+      .select()
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.projectId, projectId), eq(dailyLogs.logDate, todayStr)))
+      .limit(1);
+    const allLogs = await db
+      .select()
+      .from(dailyLogs)
+      .where(eq(dailyLogs.projectId, projectId))
+      .orderBy(desc(dailyLogs.logDate))
+      .limit(35);
+    const recentPhotos: string[] = [];
+    for (const log of allLogs.slice(0, 5)) {
+      const urls = Array.isArray(log.photoUrls) ? (log.photoUrls as string[]) : [];
+      recentPhotos.push(...urls.slice(0, 2));
+    }
+    let streak = 0;
+    const sortedDates = [...new Set(allLogs.map((l) => l.logDate))].sort().reverse();
+    for (const d of sortedDates) {
+      const expected = new Date();
+      expected.setDate(expected.getDate() - streak);
+      if (expected.toISOString().slice(0, 10) === d) streak++;
+      else break;
+    }
+
+    // Activity heatmap (last 30 days)
+    const heatmap: { date: string; active: boolean; workerCount: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const log = allLogs.find((l) => l.logDate === dateStr);
+      heatmap.push({
+        date: dateStr,
+        active: !!log,
+        workerCount: log?.workerCount ?? 0,
+      });
+    }
+    const recentUpdates = allLogs.slice(0, 5).map((l) => ({
+      log_date: l.logDate,
+      worker_count: l.workerCount,
+      notes: l.notes,
+      weather_condition: l.weatherCondition,
+    }));
+
+    // Tasks for progress, issues, milestones
+    const allTasks = await db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), eq(tasks.userId, userId), isNull(tasks.deletedAt)));
+    const totalTasks = allTasks.length;
+    const completedTasks = allTasks.filter((t) => t.status === 'completed').length;
+    const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const now = new Date();
+    const delayedTasks = allTasks.filter(
+      (t) => t.dueDate && t.status !== 'completed' && new Date(t.dueDate) < now
+    );
+    let daysDelayed = 0;
+    if (delayedTasks.length > 0) {
+      const mostDelayed = delayedTasks.reduce((a, b) =>
+        (a.dueDate && b.dueDate && new Date(a.dueDate) < new Date(b.dueDate)) ? a : b
+      );
+      if (mostDelayed.dueDate) {
+        daysDelayed = Math.floor((now.getTime() - new Date(mostDelayed.dueDate).getTime()) / (24 * 60 * 60 * 1000));
+      }
+    }
+    const openIssuesCount = allTasks.filter((t) => t.status === 'pending' || t.status === 'in_progress').length;
+    const criticalCount = allTasks.filter(
+      (t) => (t.status === 'pending' || t.status === 'in_progress') && t.priority === 'high'
+    ).length;
+
+    // Budget section: breakdown, vsActual, cumulativeCosts
+    const categoryExpenses = await db
+      .select({
+        categoryId: expenses.categoryId,
+        categoryName: expenseCategories.name,
+        colorHex: expenseCategories.colorHex,
+        totalAmount: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+      })
+      .from(expenses)
+      .leftJoin(expenseCategories, eq(expenses.categoryId, expenseCategories.id))
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)))
+      .groupBy(expenses.categoryId, expenseCategories.name, expenseCategories.colorHex);
+    const breakdown = categoryExpenses.map((item) => ({
+      category: item.categoryName || 'Uncategorized',
+      amount: Number(item.totalAmount),
+      percentage: spent > 0 ? Math.round((Number(item.totalAmount) / spent) * 100) : 0,
+      colorHex: item.colorHex || '#CCCCCC',
+    }));
+    const vsActual = breakdown.map((item) => {
+      const budgeted = totalBudget > 0 ? (item.percentage / 100) * totalBudget : 0;
+      const actual = item.amount;
+      const variance = budgeted > 0 ? Math.round(((actual - budgeted) / budgeted) * 100) : 0;
+      return {
+        category: item.category,
+        budgeted,
+        actual,
+        variance,
+        colorHex: item.colorHex,
+      };
+    });
+    const dailyExpenses = await db
+      .select({
+        date: sql<string>`DATE(${expenses.expenseDate})`,
+        amount: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+      })
+      .from(expenses)
+      .where(and(eq(expenses.projectId, projectId), eq(expenses.userId, userId), isNull(expenses.deletedAt)))
+      .groupBy(sql`DATE(${expenses.expenseDate})`)
+      .orderBy(sql`DATE(${expenses.expenseDate})`);
+    let cumSum = 0;
+    const cumulativeCosts = dailyExpenses.map((day) => {
+      cumSum += Number(day.amount);
+      return { date: day.date, amount: cumSum };
+    });
+
+    // Phases / milestones from tasks (simplified)
+    const phases = [
+      { id: '1', name: 'Foundation', percentComplete: 0, status: 'pending' as const },
+      { id: '2', name: 'Framing', percentComplete: 0, status: 'pending' as const },
+      { id: '3', name: 'Roofing', percentComplete: 0, status: 'pending' as const },
+      { id: '4', name: 'Finishing', percentComplete: 0, status: 'pending' as const },
+    ];
+    allTasks.forEach((t) => {
+      const phase = phases.find((p) => t.title.toLowerCase().includes(p.name.toLowerCase()));
+      if (phase) {
+        const phaseTasks = allTasks.filter((task) =>
+          task.title.toLowerCase().includes(phase.name.toLowerCase())
+        );
+        const done = phaseTasks.filter((task) => task.status === 'completed').length;
+        phase.percentComplete = phaseTasks.length > 0 ? Math.round((done / phaseTasks.length) * 100) : 0;
+        phase.status = phase.percentComplete === 100 ? 'completed' : phase.percentComplete > 0 ? 'in-progress' : 'pending';
+      }
+    });
+    const sevenDaysFromNow = new Date();
+    sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+    const upcomingMilestones = allTasks
+      .filter(
+        (t) =>
+          t.dueDate &&
+          new Date(t.dueDate) > now &&
+          new Date(t.dueDate) <= sevenDaysFromNow &&
+          t.status !== 'completed'
+      )
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueDate: t.dueDate!,
+        priority: (t.priority || 'medium') as 'low' | 'medium' | 'high',
+      }));
+
+    // Issues (tasks as issues)
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const todoIssues = allTasks
+      .filter((t) => t.status === 'pending')
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        status: 'todo' as const,
+        priority: (t.priority || 'medium') as 'low' | 'medium' | 'high' | 'critical',
+        reportedBy: 'System',
+        reportedDate: t.createdAt || now,
+        type: 'Task',
+      }));
+    const inProgressIssues = allTasks
+      .filter((t) => t.status === 'in_progress')
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        status: 'inProgress' as const,
+        priority: (t.priority || 'medium') as 'low' | 'medium' | 'high' | 'critical',
+        reportedBy: 'System',
+        reportedDate: t.createdAt || now,
+        type: 'Task',
+      }));
+    const resolvedIssues = allTasks
+      .filter((t) => t.status === 'completed')
+      .map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description || '',
+        status: 'resolved' as const,
+        priority: (t.priority || 'low') as 'low' | 'medium' | 'high' | 'critical',
+        reportedBy: 'System',
+        reportedDate: t.completedAt || t.createdAt || now,
+        type: 'Task',
+      }));
+    const resolvedThisWeek = allTasks.filter(
+      (t) => t.status === 'completed' && t.completedAt && new Date(t.completedAt) >= oneWeekAgo
+    ).length;
+    const issueTypes = [
+      { type: 'Task', count: allTasks.length, percentage: allTasks.length > 0 ? 100 : 0 },
+    ];
+
+    // Cost burn trend (daily amounts last 30 days)
+    const costBurnTrend = heatmap.map((h) => {
+      const log = allLogs.find((l) => l.logDate === h.date);
+      return { date: h.date, value: 0 }; // Could join expenses by date if needed
+    });
+    const costBurnByDate = await db
+      .select({
+        date: sql<string>`DATE(${expenses.expenseDate})`,
+        amount: sql<number>`COALESCE(SUM(CAST(${expenses.amount} AS DECIMAL)), 0)`,
+      })
+      .from(expenses)
+      .where(
+        and(
+          eq(expenses.projectId, projectId),
+          isNull(expenses.deletedAt),
+          gte(expenses.expenseDate, thirtyDaysAgo.toISOString().slice(0, 10))
+        )
+      )
+      .groupBy(sql`DATE(${expenses.expenseDate})`)
+      .orderBy(sql`DATE(${expenses.expenseDate})`);
+    const costBurnMap = Object.fromEntries(costBurnByDate.map((r) => [r.date, Number(r.amount)]));
+    const costBurnTrendFilled = heatmap.map((h) => ({ date: h.date, value: costBurnMap[h.date] ?? 0 }));
+    const dailyBurnRate = costBurnByDate.length > 0
+      ? costBurnByDate.reduce((s, r) => s + Number(r.amount), 0) / Math.max(1, costBurnByDate.length)
+      : 0;
+
+    // Recent photos for media section (from daily logs + images table)
+    const recentImages = await db
+      .select()
+      .from(images)
+      .where(and(eq(images.projectId, projectId), isNull(images.deletedAt)))
+      .orderBy(desc(images.createdAt))
+      .limit(6);
+    const recentPhotosForMedia = recentImages.map((img, i) => ({
+      id: img.id,
+      url: img.storagePath,
+      thumbnailUrl: img.storagePath,
+      description: img.caption || img.fileName || 'Site photo',
+      caption: img.caption || img.fileName || 'Site photo',
+      date: img.createdAt || new Date().toISOString(),
+    }));
+    const logsThisWeek = allLogs.filter((l) => {
+      const d = new Date(l.logDate);
+      return d >= oneWeekAgo && d <= now;
+    }).length;
+
+    res.json({
+      success: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        budget_amount: project.budgetAmount,
+        status: project.status,
+        created_at: project.createdAt,
+      },
+      budget: {
+        total: totalBudget,
+        spent,
+        remaining,
+        percentage: Math.round(percentage * 10) / 10,
+        weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
+        weeksRemaining: Math.round(weeksRemaining * 10) / 10,
+      },
+      expenses: {
+        total: expensesTotal,
+        recent: recentExpenses.map((e) => ({
+          id: e.id,
+          description: e.description,
+          amount: parseFloat(e.amount?.toString() || '0'),
+          category: e.categoryName || 'Uncategorized',
+          expense_date: e.expenseDate,
+          created_at: e.createdAt,
+        })),
+        byCategory: byCategoryRows.map((r) => ({
+          category: r.category || 'Uncategorized',
+          total: parseFloat(r.total?.toString() || '0'),
+        })),
+      },
+      materials: { inventory, lowStock },
+      dailyLog: {
+        todayActive: !!todayLog,
+        workerCount: todayLog?.workerCount ?? 0,
+        recentPhotos,
+        streak,
+      },
+      activity: { heatmap, recentUpdates },
+      summaryHealth: {
+        overallProgress,
+        onTimeStatus: { isDelayed: delayedTasks.length > 0, daysDelayed },
+        budgetHealth: { percent: percentage, remaining },
+        activeIssues: { total: openIssuesCount, critical: criticalCount },
+      },
+      budgetSection: {
+        breakdown,
+        vsActual,
+        cumulativeCosts,
+        totalBudget,
+        spent,
+        remaining,
+        spentPercent: Math.round(percentage * 10) / 10,
+      },
+      progressSection: { phases, upcomingMilestones },
+      inventorySection: {
+        items: materialsRows.map((r, i) => ({
+          id: r.id,
+          name: r.materialName,
+          unit: r.unit || 'units',
+          currentStock: parseFloat(r.quantity?.toString() || '0'),
+          totalStock: Math.max(parseFloat(r.quantity?.toString() || '0'), 100),
+          stockPercent: 100,
+          consumptionVsEstimate: 0,
+        })),
+        usage: inventory.map((m) => ({
+          material: m.material_name,
+          used: 0,
+          remaining: m.quantity,
+        })),
+      },
+      issuesSection: {
+        todo: todoIssues,
+        inProgress: inProgressIssues,
+        resolved: resolvedIssues,
+        criticalIssues: criticalCount,
+        highIssues: criticalCount,
+        openIssues: todoIssues.length + inProgressIssues.length,
+        resolvedThisWeek,
+        types: issueTypes,
+      },
+      mediaSection: {
+        recentPhotos: recentPhotosForMedia,
+        stats: { dailyLogsThisWeek: logsThisWeek, siteCondition: 'Good' },
+      },
+      trendsSection: {
+        progressTrend: costBurnTrendFilled.map((p) => ({ date: p.date, value: p.value })),
+        costBurnTrend: costBurnTrendFilled,
+        dailyBurnRate,
+        insights: [
+          { id: '1', text: `Budget used: ${Math.round(percentage)}%` },
+          { id: '2', text: `${expensesTotal} expenses recorded` },
+          { id: '3', text: `${inventory.length} materials in inventory` },
+          { id: '4', text: `${streak} day streak for daily logs` },
+        ],
+      },
+    });
+  } catch (error) {
+    console.error('[Project Summary] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch project summary' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/expenses
+ * Paginated expenses for the project.
+ */
+router.get('/projects/:projectId/expenses', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const category = req.query.category as string | undefined;
+    const offset = (page - 1) * limit;
+
+    const conditions = [
+      eq(expenses.projectId, projectId),
+      eq(expenses.userId, userId),
+      isNull(expenses.deletedAt),
+    ];
+    if (category) {
+      const [catRow] = await db
+        .select({ id: expenseCategories.id })
+        .from(expenseCategories)
+        .where(and(eq(expenseCategories.userId, userId), eq(expenseCategories.name, category)))
+        .limit(1);
+      if (catRow) conditions.push(eq(expenses.categoryId, catRow.id));
+    }
+
+    const list = await db
+      .select({
+        id: expenses.id,
+        description: expenses.description,
+        amount: expenses.amount,
+        expenseDate: expenses.expenseDate,
+        createdAt: expenses.createdAt,
+        categoryName: expenseCategories.name,
+      })
+      .from(expenses)
+      .leftJoin(expenseCategories, eq(expenses.categoryId, expenseCategories.id))
+      .where(and(...conditions))
+      .orderBy(desc(expenses.expenseDate))
+      .limit(limit)
+      .offset(offset);
+
+    const [countRow] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(expenses)
+      .where(and(...conditions));
+    const total = Number(countRow?.count ?? 0);
+    const pages = Math.ceil(total / limit);
+
+    res.json({
+      success: true,
+      expenses: list.map((e) => ({
+        ...e,
+        amount: parseFloat(e.amount?.toString() || '0'),
+      })),
+      total,
+      pages,
+    });
+  } catch (error) {
+    console.error('[Project Expenses] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch expenses' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/materials
+ */
+router.get('/projects/:projectId/materials', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const materials = await db
+      .select()
+      .from(materialsInventory)
+      .where(eq(materialsInventory.projectId, projectId));
+    res.json({
+      success: true,
+      materials: materials.map((r) => ({
+        id: r.id,
+        material_name: r.materialName,
+        quantity: parseFloat(r.quantity?.toString() || '0'),
+        unit: r.unit,
+        last_updated: r.lastUpdated,
+      })),
+    });
+  } catch (error) {
+    console.error('[Project Materials] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch materials' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/daily-logs
+ */
+router.get('/projects/:projectId/daily-logs', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const days = Math.min(90, Math.max(7, parseInt(req.query.days as string) || 30));
+    const start = new Date();
+    start.setDate(start.getDate() - days);
+    const startStr = start.toISOString().slice(0, 10);
+    const logs = await db
+      .select()
+      .from(dailyLogs)
+      .where(eq(dailyLogs.projectId, projectId))
+      .orderBy(desc(dailyLogs.logDate))
+      .limit(days + 10);
+    const filtered = logs.filter((l) => l.logDate >= startStr);
+    const heatmap = filtered.map((l) => ({
+      date: l.logDate,
+      active: true,
+      workerCount: l.workerCount,
+    }));
+    res.json({
+      success: true,
+      logs: filtered.map((l) => ({
+        log_date: l.logDate,
+        worker_count: l.workerCount,
+        notes: l.notes,
+        weather_condition: l.weatherCondition,
+        photo_urls: l.photoUrls,
+      })),
+      heatmap,
+    });
+  } catch (error) {
+    console.error('[Project Daily Logs] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch daily logs' });
   }
 });
 
