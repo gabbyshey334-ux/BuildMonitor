@@ -64,7 +64,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             </p>
             <Button asChild>
               <Link href="/projects">
-                <a>← Go to My Projects</a>
+                <a>← Back to My Projects</a>
               </Link>
             </Button>
           </CardContent>
@@ -94,12 +94,60 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   }
 
   const summary = summaryData!;
-  const summaryHealth = summary.summaryHealth ?? {
-    overallProgress: 0,
-    onTimeStatus: { isDelayed: false, daysDelayed: 0 },
-    budgetHealth: { percent: 0, remaining: 0 },
-    activeIssues: { total: 0, critical: 0 },
+  const summaryHealth = {
+    overallProgress: summary.progress?.overallPercentage ?? summary.summaryHealth?.overallProgress ?? 0,
+    onTimeStatus: {
+      isDelayed: summary.schedule?.status === 'Delayed',
+      daysDelayed: summary.schedule?.daysBehind ?? summary.summaryHealth?.onTimeStatus?.daysDelayed ?? 0,
+      scheduleStatus: summary.schedule?.status,
+      daysAhead: summary.schedule?.daysAhead,
+    },
+    budgetHealth: {
+      percent: summary.budget?.percentage ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
+      remaining: summary.budget?.remaining ?? summary.summaryHealth?.budgetHealth?.remaining ?? 0,
+    },
+    activeIssues: {
+      total: summary.issues?.total ?? summary.summaryHealth?.activeIssues?.total ?? 0,
+      critical: summary.issues?.critical ?? summary.summaryHealth?.activeIssues?.critical ?? 0,
+    },
+    schedule: summary.schedule,
   };
+
+  // Map API progress.phases (status "not-started") to UI "pending" for ProgressScheduleSection
+  const progressSectionData = summary.progressSection
+    ? summary.progressSection
+    : summary.progress
+      ? {
+          phases: summary.progress.phases.map((p, i) => ({
+            id: String(i + 1),
+            name: p.name,
+            percentComplete: p.percentage,
+            status: (p.status === 'not-started' ? 'pending' : p.status) as 'pending' | 'in-progress' | 'completed',
+          })),
+          upcomingMilestones: (summary.progress.milestones ?? []).map((m) => ({
+            id: m.id,
+            title: m.title,
+            dueDate: new Date(m.due_date),
+            priority: 'medium' as const,
+          })),
+        }
+      : undefined;
+
+  const trendsSectionData = summary.trendsSection ?? (summary.insights && summary.budget
+    ? {
+        progressTrend: summary.insights.progressTrend ?? [],
+        costBurnTrend: (summary.insights.dailyCostBurn ?? []).map((p) => ({ date: p.date, value: p.amount })),
+        dailyBurnRate: summary.budget.dailyBurnRate ?? 0,
+        insights: [
+          ...(summary.insights.topDelayCause ? [{ id: '1', text: `Top delay cause: ${summary.insights.topDelayCause}` }] : []),
+          ...(summary.insights.mostUsedMaterial ? [{ id: '2', text: `Most used material: ${summary.insights.mostUsedMaterial}` }] : []),
+          ...(summary.insights.recentHighlight ? [{ id: '3', text: summary.insights.recentHighlight }] : []),
+        ],
+        topDelayCause: summary.insights.topDelayCause,
+        mostUsedMaterial: summary.insights.mostUsedMaterial,
+        recentHighlight: summary.insights.recentHighlight,
+      }
+    : undefined);
 
   return (
     <div className="min-h-screen bg-background p-6">
@@ -110,15 +158,15 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <ProgressScheduleSection data={summary.progressSection as any} />
-          <BudgetCostsSection data={summary.budgetSection as any} />
-          <MaterialsInventorySection data={summary.inventorySection as any} />
-          <IssuesRisksSection data={summary.issuesSection as any} />
-          <SiteReportsMediaSection data={summary.mediaSection as any} />
+          <ProgressScheduleSection data={progressSectionData} />
+          <BudgetCostsSection data={summary.budgetSection} />
+          <MaterialsInventorySection data={summary.inventorySection} />
+          <IssuesRisksSection data={summary.issuesSection} />
+          <SiteReportsMediaSection data={summary.mediaSection} />
         </div>
 
         <div className="space-y-6">
-          <TrendsQuickInsightsSection data={summary.trendsSection as any} />
+          <TrendsQuickInsightsSection data={trendsSectionData} />
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Quick Actions</CardTitle>

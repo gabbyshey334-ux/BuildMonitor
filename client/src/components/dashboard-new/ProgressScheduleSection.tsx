@@ -56,12 +56,12 @@ export function ProgressScheduleSection({ data }: { data?: ProgressScheduleSecti
                         text-white
                       `}
                     >
-                      {phase.status.charAt(0).toUpperCase() + phase.status.slice(1)}
+                      {phase.status === 'pending' ? 'Not Started' : phase.status === 'in-progress' ? 'In-progress' : phase.status.charAt(0).toUpperCase() + phase.status.slice(1)}
                     </Badge>
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No phase data available.</p>
+                <p className="text-gray-500 dark:text-gray-400">No tasks created yet. Add tasks from Settings or log progress via WhatsApp.</p>
               )}
             </div>
           </section>
@@ -76,7 +76,7 @@ export function ProgressScheduleSection({ data }: { data?: ProgressScheduleSecti
                     <div className="flex-1">
                       <p className="font-medium text-gray-800 dark:text-gray-200">{milestone.title}</p>
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Due: {new Date(milestone.dueDate).toLocaleDateString()}
+                        Due: {new Date(milestone.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                     </div>
                     <Badge

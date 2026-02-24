@@ -17,8 +17,27 @@ export interface ProjectSummaryResponse {
     spent: number;
     remaining: number;
     percentage: number;
+    dailyBurnRate: number;
     weeklyBurnRate: number;
     weeksRemaining: number;
+  };
+  schedule: {
+    status: "On Track" | "At Risk" | "Delayed";
+    daysAhead: number;
+    daysBehind: number;
+  };
+  progress: {
+    overallPercentage: number;
+    phases: Array<{ name: string; percentage: number; status: "completed" | "in-progress" | "not-started" }>;
+    milestones: Array<{ id: string; title: string; due_date: string; status: string }>;
+  };
+  issues: { total: number; critical: number };
+  insights: {
+    topDelayCause: string | null;
+    mostUsedMaterial: string | null;
+    recentHighlight: string | null;
+    progressTrend: Array<{ date: string; value: number }>;
+    dailyCostBurn: Array<{ date: string; amount: number }>;
   };
   expenses: {
     total: number;
@@ -53,7 +72,12 @@ export interface ProjectSummaryResponse {
   };
   summaryHealth?: {
     overallProgress: number;
-    onTimeStatus: { isDelayed: boolean; daysDelayed: number };
+    onTimeStatus: {
+      isDelayed: boolean;
+      daysDelayed: number;
+      scheduleStatus?: "On Track" | "At Risk" | "Delayed";
+      daysAhead?: number;
+    };
     budgetHealth: { percent: number; remaining: number };
     activeIssues: { total: number; critical: number };
   };
@@ -83,6 +107,7 @@ export function useProjectSummary(projectId: string | null | undefined) {
     queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, projectId],
     queryFn: () => fetchProjectSummary(projectId!),
     staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
     enabled: !!projectId,
   });
 }

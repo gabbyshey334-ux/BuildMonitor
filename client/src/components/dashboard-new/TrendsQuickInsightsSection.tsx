@@ -18,31 +18,44 @@ interface TrendsQuickInsightsSectionData {
   costBurnTrend: DataPoint[];
   dailyBurnRate: number;
   insights: Insight[];
+  topDelayCause?: string | null;
+  mostUsedMaterial?: string | null;
+  recentHighlight?: string | null;
 }
 
 export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsightsSectionData }) {
-  const { progressTrend = [], costBurnTrend = [], dailyBurnRate = 0, insights = [] } = data || {};
-  
-  // Transform data for charts (convert date to name for display)
+  const {
+    progressTrend = [],
+    costBurnTrend = [],
+    dailyBurnRate = 0,
+    insights = [],
+    topDelayCause,
+    mostUsedMaterial,
+    recentHighlight,
+  } = data || {};
+
+  // Build display insights from API or fallback empty-state messages
+  const displayInsights: Insight[] =
+    insights.length > 0
+      ? insights
+      : [
+          { id: '1', text: topDelayCause ? `Top delay cause: ${topDelayCause}` : 'No delays recorded' },
+          { id: '2', text: mostUsedMaterial ? `Most used material: ${mostUsedMaterial}` : 'No materials logged yet' },
+          { id: '3', text: recentHighlight || 'No updates yet' },
+        ].filter((i) => i.text);
+  const hasAnyHighlight = Boolean(topDelayCause || mostUsedMaterial || recentHighlight || insights.length > 0);
+  const emptyInsight: Insight[] = [{ id: '0', text: "Insights will appear after a few days of updates." }];
+  const finalInsights = hasAnyHighlight ? displayInsights : emptyInsight;
+
   const progressChartData = progressTrend.map((point, index) => ({
     name: `Day ${index + 1}`,
     value: point.value,
   }));
-
   const costChartData = costBurnTrend.map((point, index) => ({
     name: `Day ${index + 1}`,
     value: point.value,
   }));
 
-  // Default insights if none provided
-  const defaultInsights: Insight[] = [
-    { id: '1', text: 'Top delay cause: Weather (3 days lost)' },
-    { id: '2', text: 'Most used material: Cement (450 bags)' },
-    { id: '3', text: 'Foundation phase completed ahead of schedule' },
-    { id: '4', text: 'Resolution rate: 85% of issues closed' },
-  ];
-
-  const displayInsights = insights.length > 0 ? insights : defaultInsights;
   return (
     <Card>
       <CardHeader>
@@ -102,7 +115,7 @@ export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsight
           <h5 className="font-semibold text-sm font-heading">This Week's Highlights</h5>
           
           <div className="space-y-2">
-            {displayInsights.map((insight, index) => {
+            {finalInsights.map((insight, index) => {
               const icons = [AlertCircle, Package, TrendingUp, CheckCircle];
               const colors = ['text-alert-red', 'text-ocean-pine', 'text-success-green', 'text-success-green'];
               const Icon = icons[index % icons.length];

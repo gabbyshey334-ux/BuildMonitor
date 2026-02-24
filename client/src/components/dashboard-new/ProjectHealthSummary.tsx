@@ -5,19 +5,32 @@ import { AlertCircle, CheckCircle, ArrowRight } from 'lucide-react';
 
 interface ProjectHealthSummaryProps {
   overallProgress?: number;
-  onTimeStatus?: { isDelayed: boolean; daysDelayed: number; };
+  onTimeStatus?: { isDelayed: boolean; daysDelayed: number; scheduleStatus?: 'On Track' | 'At Risk' | 'Delayed'; daysAhead?: number };
   budgetHealth?: { percent: number; remaining: number; };
   activeIssues?: { total: number; critical: number; };
+  schedule?: { status: 'On Track' | 'At Risk' | 'Delayed'; daysAhead?: number; daysBehind?: number };
 }
 
 export function ProjectHealthSummary({ data }: { data?: ProjectHealthSummaryProps }) {
-  const { overallProgress = 0, onTimeStatus, budgetHealth, activeIssues } = data || {};
+  const { overallProgress = 0, onTimeStatus, schedule, budgetHealth, activeIssues } = data || {};
 
-  const daysDelayed = onTimeStatus?.daysDelayed || 0;
-  const budgetUsedPercent = budgetHealth?.percent || 0;
-  const remaining = budgetHealth?.remaining || 0;
-  const openIssues = activeIssues?.total || 0;
-  const criticalIssues = activeIssues?.critical || 0;
+  const scheduleStatus = schedule?.status ?? onTimeStatus?.scheduleStatus ?? (onTimeStatus?.isDelayed ? 'Delayed' : 'On Track');
+  const daysDelayed = schedule?.daysBehind ?? onTimeStatus?.daysDelayed ?? 0;
+  const daysAhead = schedule?.daysAhead ?? onTimeStatus?.daysAhead ?? 0;
+  const budgetUsedPercent = budgetHealth?.percent ?? 0;
+  const remaining = budgetHealth?.remaining ?? 0;
+  const openIssues = activeIssues?.total ?? 0;
+  const criticalIssues = activeIssues?.critical ?? 0;
+
+  const progressDescription = overallProgress === 0 ? 'Just getting started! 🏗️' : 'Complete';
+  const scheduleDescription = scheduleStatus === 'On Track' && daysAhead > 0
+    ? `${daysAhead} days ahead`
+    : scheduleStatus === 'On Track'
+      ? undefined
+      : daysDelayed > 0
+        ? `by ${daysDelayed} days`
+        : undefined;
+  const scheduleIndicator = scheduleStatus === 'On Track' ? 'success' : scheduleStatus === 'At Risk' ? 'warning' : 'error';
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -26,7 +39,7 @@ export function ProjectHealthSummary({ data }: { data?: ProjectHealthSummaryProp
         title="Overall Progress"
         value={overallProgress}
         unit="%"
-        description="Complete"
+        description={progressDescription}
         statusIndicator="success"
         progressValue={overallProgress}
         progressBarColor="bg-white/20"
@@ -37,10 +50,10 @@ export function ProjectHealthSummary({ data }: { data?: ProjectHealthSummaryProp
       {/* Card 2: On-Time Status */}
       <KpiCard
         title="Schedule Status"
-        value={daysDelayed > 0 ? "Delayed" : "On Track"}
-        statusIndicator={daysDelayed > 0 ? "error" : "success"}
-        description={daysDelayed > 0 ? `by ${daysDelayed} days` : undefined}
-        icon={daysDelayed > 0 ? AlertCircle : CheckCircle}
+        value={scheduleStatus}
+        statusIndicator={scheduleIndicator}
+        description={scheduleDescription}
+        icon={scheduleStatus === 'On Track' ? CheckCircle : AlertCircle}
       />
 
       {/* Card 3: Budget Health */}
@@ -48,9 +61,18 @@ export function ProjectHealthSummary({ data }: { data?: ProjectHealthSummaryProp
         title="Budget Health"
         value={budgetUsedPercent}
         unit="%"
-        description={`UGX ${remaining.toLocaleString()} remaining`}
-        statusIndicator={budgetUsedPercent > 90 ? "error" : "success"}
-        alertMessage={budgetUsedPercent > 100 ? `Over Budget by ${budgetUsedPercent - 100}%` : undefined}
+        description={
+          budgetUsedPercent === 0 ? (
+            <>
+              <span className="block">UGX {remaining.toLocaleString()} remaining</span>
+              <span className="block text-xs mt-1 opacity-90">No expenses logged yet. Send &quot;Bought cement for 200,000&quot; via WhatsApp to start tracking.</span>
+            </>
+          ) : (
+            `UGX ${remaining.toLocaleString()} remaining`
+          )
+        }
+        statusIndicator={budgetUsedPercent > 100 ? 'error' : budgetUsedPercent > 80 ? 'error' : 'success'}
+        alertMessage={budgetUsedPercent > 100 ? 'Over budget!' : undefined}
         alertVariant="destructive"
       />
 
@@ -58,7 +80,13 @@ export function ProjectHealthSummary({ data }: { data?: ProjectHealthSummaryProp
       <KpiCard
         title="Active Issues"
         value={openIssues}
-        description={<span className="text-alert-red font-medium font-body">{criticalIssues} critical</span>}
+        description={
+          openIssues === 0 ? (
+            <span className="text-success-green font-medium font-body">All clear ✅</span>
+          ) : (
+            <span className="text-alert-red font-medium font-body">{criticalIssues} critical</span>
+          )
+        }
         icon={ArrowRight}
         onClick={() => console.log('View all issues')}
       />

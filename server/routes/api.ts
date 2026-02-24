@@ -1264,8 +1264,11 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       );
     const last30Spend = parseFloat(burnRow?.total?.toString() || '0');
     const weeklyBurnRate = last30Spend / 4; // ~4 weeks
+    const projectStart = project.createdAt ? new Date(project.createdAt) : now;
+    const daysSinceProjectStart = Math.max(1, Math.floor((now.getTime() - projectStart.getTime()) / (24 * 60 * 60 * 1000)));
+    const dailyBurnRate = spent / daysSinceProjectStart;
     const remaining = Math.max(0, totalBudget - spent);
-    const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : 0;
+    const weeksRemaining = dailyBurnRate > 0 ? remaining / (dailyBurnRate * 7) : 0;
     const percentage = totalBudget > 0 ? Math.min(100, (spent / totalBudget) * 100) : 0;
 
     // Materials inventory + low stock (quantity <= 5)
@@ -1352,6 +1355,15 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
     const criticalCount = allTasks.filter(
       (t) => (t.status === 'pending' || t.status === 'in_progress') && t.priority === 'high'
     ).length;
+    const overdueCount = delayedTasks.length;
+    const criticalOverdue = delayedTasks.filter((t) => t.priority === 'high').length;
+
+    // Schedule status: On Track | At Risk | Delayed
+    let scheduleStatus: 'On Track' | 'At Risk' | 'Delayed' = 'On Track';
+    if (percentage >= 90 || overdueCount >= 2) scheduleStatus = 'Delayed';
+    else if (percentage >= 70 || overdueCount >= 1) scheduleStatus = 'At Risk';
+    const daysAhead = 0; // optional: could compute from next milestone
+    const schedule = { status: scheduleStatus, daysAhead, daysBehind: daysDelayed };
 
     // Budget section: breakdown, vsActual, cumulativeCosts
     const categoryExpenses = await db
@@ -1399,11 +1411,12 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
     });
 
     // Phases / milestones from tasks (simplified)
-    const phases = [
-      { id: '1', name: 'Foundation', percentComplete: 0, status: 'pending' as const },
-      { id: '2', name: 'Framing', percentComplete: 0, status: 'pending' as const },
-      { id: '3', name: 'Roofing', percentComplete: 0, status: 'pending' as const },
-      { id: '4', name: 'Finishing', percentComplete: 0, status: 'pending' as const },
+    type PhaseStatus = 'pending' | 'in-progress' | 'completed';
+    const phases: { id: string; name: string; percentComplete: number; status: PhaseStatus }[] = [
+      { id: '1', name: 'Foundation', percentComplete: 0, status: 'pending' },
+      { id: '2', name: 'Framing', percentComplete: 0, status: 'pending' },
+      { id: '3', name: 'Roofing', percentComplete: 0, status: 'pending' },
+      { id: '4', name: 'Finishing', percentComplete: 0, status: 'pending' },
     ];
     allTasks.forEach((t) => {
       const phase = phases.find((p) => t.title.toLowerCase().includes(p.name.toLowerCase()));
@@ -1430,8 +1443,21 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         id: t.id,
         title: t.title,
         dueDate: t.dueDate!,
+        due_date: t.dueDate!,
         priority: (t.priority || 'medium') as 'low' | 'medium' | 'high',
+        status: t.status || 'pending',
       }));
+    const progressPhasesForApi = phases.map((p) => ({
+      name: p.name,
+      percentage: p.percentComplete,
+      status: p.status === 'pending' ? ('not-started' as const) : (p.status as 'in-progress' | 'completed'),
+    }));
+    const progressMilestonesForApi = upcomingMilestones.map((m) => ({
+      id: m.id,
+      title: m.title,
+      due_date: m.due_date,
+      status: m.status,
+    }));
 
     // Issues (tasks as issues)
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -1500,9 +1526,23 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       .orderBy(sql`DATE(${expenses.expenseDate})`);
     const costBurnMap = Object.fromEntries(costBurnByDate.map((r) => [r.date, Number(r.amount)]));
     const costBurnTrendFilled = heatmap.map((h) => ({ date: h.date, value: costBurnMap[h.date] ?? 0 }));
-    const dailyBurnRate = costBurnByDate.length > 0
-      ? costBurnByDate.reduce((s, r) => s + Number(r.amount), 0) / Math.max(1, costBurnByDate.length)
-      : 0;
+
+    // Insights: top delay cause (most common weather), most used material, recent highlight
+    const weatherCounts: Record<string, number> = {};
+    for (const log of allLogs) {
+      const w = log.weatherCondition?.trim() || null;
+      if (w) weatherCounts[w] = (weatherCounts[w] || 0) + 1;
+    }
+    const topDelayCause = Object.keys(weatherCounts).length > 0
+      ? Object.entries(weatherCounts).sort((a, b) => b[1] - a[1])[0][0]
+      : null;
+    const mostUsedMaterial = inventory.length > 0
+      ? inventory.reduce((a, b) => (b.quantity > a.quantity ? b : a), inventory[0])?.material_name ?? null
+      : null;
+    const recentHighlight = allLogs[0]?.notes?.trim() || null;
+
+    const progressTrend = heatmap.map((h) => ({ date: h.date, value: h.workerCount }));
+    const dailyCostBurn = costBurnTrendFilled.map((p) => ({ date: p.date, amount: p.value }));
 
     // Recent photos for media section (from daily logs + images table)
     const recentImages = await db
@@ -1538,6 +1578,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         spent,
         remaining,
         percentage: Math.round(percentage * 10) / 10,
+        dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
         weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
         weeksRemaining: Math.round(weeksRemaining * 10) / 10,
       },
@@ -1564,11 +1605,25 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         streak,
       },
       activity: { heatmap, recentUpdates },
+      schedule,
+      progress: {
+        overallPercentage: overallProgress,
+        phases: progressPhasesForApi,
+        milestones: progressMilestonesForApi,
+      },
+      issues: { total: overdueCount, critical: criticalOverdue },
+      insights: {
+        topDelayCause,
+        mostUsedMaterial,
+        recentHighlight,
+        progressTrend,
+        dailyCostBurn,
+      },
       summaryHealth: {
         overallProgress,
-        onTimeStatus: { isDelayed: delayedTasks.length > 0, daysDelayed },
+        onTimeStatus: { isDelayed: schedule.status === 'Delayed', daysDelayed: schedule.daysBehind, scheduleStatus: schedule.status, daysAhead: schedule.daysAhead },
         budgetHealth: { percent: percentage, remaining },
-        activeIssues: { total: openIssuesCount, critical: criticalCount },
+        activeIssues: { total: overdueCount, critical: criticalOverdue },
       },
       budgetSection: {
         breakdown,
@@ -1611,15 +1666,17 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         stats: { dailyLogsThisWeek: logsThisWeek, siteCondition: 'Good' },
       },
       trendsSection: {
-        progressTrend: costBurnTrendFilled.map((p) => ({ date: p.date, value: p.value })),
-        costBurnTrend: costBurnTrendFilled,
+        progressTrend,
+        costBurnTrend: dailyCostBurn.map((p) => ({ date: p.date, value: p.amount })),
         dailyBurnRate,
         insights: [
-          { id: '1', text: `Budget used: ${Math.round(percentage)}%` },
-          { id: '2', text: `${expensesTotal} expenses recorded` },
-          { id: '3', text: `${inventory.length} materials in inventory` },
-          { id: '4', text: `${streak} day streak for daily logs` },
+          ...(topDelayCause ? [{ id: '1', text: `Top delay cause: ${topDelayCause}` }] : []),
+          ...(mostUsedMaterial ? [{ id: '2', text: `Most used material: ${mostUsedMaterial}` }] : []),
+          ...(recentHighlight ? [{ id: '3', text: recentHighlight }] : []),
         ],
+        topDelayCause: topDelayCause ?? undefined,
+        mostUsedMaterial: mostUsedMaterial ?? undefined,
+        recentHighlight: recentHighlight ?? undefined,
       },
     });
   } catch (error) {
