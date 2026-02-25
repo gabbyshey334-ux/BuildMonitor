@@ -307,18 +307,19 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
     try {
-      console.log('[Summary]', { projectId, userId });
+      console.log('[Summary] Running query for:', { projectId, userId });
       const dbConnection = initializeDatabase();
       if (!dbConnection) {
         return res.status(503).json({ success: false, error: 'Database unavailable' });
       }
       const projectResult = await dbConnection.execute(sql`
-        SELECT id, name, budget_amount, status, created_at
+        SELECT id, name, budget, status, created_at
         FROM projects
         WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
         LIMIT 1
       `);
       const projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
+      console.log('[Summary] Project found:', projectRow ? 'yes' : 'no', projectRow ? Object.keys(projectRow) : []);
       if (!projectRow) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
@@ -328,7 +329,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         WHERE project_id = ${projectId} AND deleted_at IS NULL
       `);
       const totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
-      const budgetAmount = parseFloat(projectRow.budget_amount || '0');
+      const budgetAmount = parseFloat(projectRow.budget != null ? projectRow.budget : '0');
       const remaining = Math.max(0, budgetAmount - totalSpent);
       const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
       const createdAt = projectRow.created_at ? new Date(projectRow.created_at) : new Date();
@@ -340,7 +341,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         project: {
           id: projectRow.id,
           name: projectRow.name,
-          budget_amount: projectRow.budget_amount,
+          budget_amount: projectRow.budget,
           status: projectRow.status,
           created_at: projectRow.created_at,
         },
