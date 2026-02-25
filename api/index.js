@@ -48,49 +48,17 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS - CRITICAL: Allow credentials for session cookies
+// CORS - CRITICAL: Allow credentials for session cookies (specific origin, never *)
 app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // In production, allow Vercel domains and specific origins
-  // In development, allow all origins
-  const isProduction = process.env.NODE_ENV === 'production';
-  
-  if (isProduction) {
-    // Production: Only allow specific origins
-    const allowedOrigins = [
-      'https://build-monitor-lac.vercel.app',
-      'https://build-monitor-lac-git-',
-      'https://build-monitor-lac-',
-    ];
-    
-    const isAllowed = origin && (
-      allowedOrigins.some(allowed => origin.includes(allowed.replace('*', ''))) ||
-      origin.includes('vercel.app')
-    );
-    
-    if (isAllowed) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
-    } else {
-      // Default to allowing the origin if it's a Vercel domain
-      res.header('Access-Control-Allow-Origin', origin || 'https://build-monitor-lac.vercel.app');
-      res.header('Access-Control-Allow-Credentials', 'true');
-    }
-  } else {
-    // Development: Allow all origins
-    res.header('Access-Control-Allow-Origin', origin || '*');
-    res.header('Access-Control-Allow-Credentials', 'true');
-  }
-  
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  res.header('Access-Control-Expose-Headers', 'Set-Cookie');
-  
+  const origin = req.headers.origin || 'https://build-monitor-lac.vercel.app';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cookie');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
+    return res.status(200).end();
   }
-  
   next();
 });
 
@@ -157,12 +125,12 @@ app.use(session({
   proxy: true, // Trust proxy (required for Vercel)
   rolling: true, // Reset expiration on every request
   cookie: {
-    httpOnly: true, // Prevent XSS attacks
-    secure: true, // HTTPS only (always true on Vercel)
-    maxAge: sessionTtl,
-    sameSite: 'none', // CRITICAL: Required for cross-site cookies on Vercel
-    domain: undefined, // Let browser set domain automatically (don't restrict)
-    path: '/', // Available on all paths
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    domain: undefined,
+    path: '/',
   },
 }));
 
@@ -326,15 +294,88 @@ try {
   console.log('📝 Falling back to basic routes');
 }
 
-// Explicit route for dashboard summary so we never return 404 from catch-all when server app didn't load
+// Explicit route for dashboard summary — when server app didn't load, implement here so cookies/session work
 app.get('/api/projects/:projectId/summary', (req, res, next) => {
   if (serverApp) {
     return serverApp(req, res, next);
   }
-  res.status(503).json({
-    success: false,
-    error: 'Dashboard summary is temporarily unavailable.',
-    message: 'Server module did not load. Check deployment logs.',
+  // Run requireAuth then summary logic using api/index.js db
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.session?.userId || req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      console.log('[Summary]', { projectId, userId });
+      const dbConnection = initializeDatabase();
+      if (!dbConnection) {
+        return res.status(503).json({ success: false, error: 'Database unavailable' });
+      }
+      const projectResult = await dbConnection.execute(sql`
+        SELECT id, name, budget_amount, status, created_at
+        FROM projects
+        WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
+        LIMIT 1
+      `);
+      const projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
+      if (!projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+      const expenseResult = await dbConnection.execute(sql`
+        SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
+        FROM expenses
+        WHERE project_id = ${projectId} AND deleted_at IS NULL
+      `);
+      const totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
+      const budgetAmount = parseFloat(projectRow.budget_amount || '0');
+      const remaining = Math.max(0, budgetAmount - totalSpent);
+      const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
+      const createdAt = projectRow.created_at ? new Date(projectRow.created_at) : new Date();
+      const daysSinceStart = Math.max(1, (Date.now() - createdAt.getTime()) / 86400000);
+      const dailyBurnRate = totalSpent / daysSinceStart;
+      const weeksRemaining = dailyBurnRate > 0 ? remaining / (dailyBurnRate * 7) : null;
+      return res.json({
+        success: true,
+        project: {
+          id: projectRow.id,
+          name: projectRow.name,
+          budget_amount: projectRow.budget_amount,
+          status: projectRow.status,
+          created_at: projectRow.created_at,
+        },
+        budget: {
+          total: budgetAmount,
+          spent: totalSpent,
+          remaining,
+          percentage: Math.round(percentage * 10) / 10,
+          dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
+          weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
+        },
+        progress: {
+          overallPercentage: 0,
+          phases: [],
+          milestones: [],
+        },
+        schedule: {
+          status: percentage < 70 ? 'On Track' : percentage < 90 ? 'At Risk' : 'Delayed',
+          daysAhead: 0,
+          daysBehind: 0,
+        },
+        issues: { total: 0, critical: 0 },
+        insights: {
+          topDelayCause: null,
+          mostUsedMaterial: null,
+          recentHighlight: null,
+          progressTrend: [],
+          dailyCostBurn: [],
+        },
+        activity: { heatmap: [] },
+      });
+    } catch (err) {
+      console.error('[Summary Error]', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message || 'Summary failed' });
+    }
   });
 });
 
@@ -395,6 +436,11 @@ app.get('/webhook/debug', async (req, res) => {
 
 // Middleware to check authentication (supports both JWT token and session)
 function requireAuth(req, res, next) {
+  console.log('[Auth Check]', {
+    sessionId: req.sessionID,
+    userId: req.session?.userId,
+    path: req.path,
+  });
   // Try JWT token first
   const token = extractToken(req);
   
@@ -404,6 +450,7 @@ function requireAuth(req, res, next) {
       // JWT token is valid
       req.userId = decoded.userId;
       req.userEmail = decoded.email;
+      req.user = { id: decoded.userId };
       console.log('[Auth Check] ✅ SUCCESS - JWT token authenticated:', decoded.userId);
       return next();
     }
@@ -414,6 +461,7 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.userId) {
     req.userId = req.session.userId;
     req.userEmail = req.session.email;
+    req.user = { id: req.session.userId };
     console.log('[Auth Check] ✅ SUCCESS - Session authenticated:', req.session.userId);
     return next();
   }
@@ -531,6 +579,17 @@ app.post('/api/auth/login', async (req, res) => {
         
         console.log('[Login] ✅ User created in users table');
         
+        // Save session so cookie is sent
+        req.session.userId = authData.user.id;
+        req.session.email = authData.user.email;
+        await new Promise((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        console.log('[Login] Session saved:', { sessionId: req.sessionID, userId: req.session.userId });
+        
         // Generate JWT token
         const token = generateToken(authData.user.id, authData.user.email);
         
@@ -557,12 +616,21 @@ app.post('/api/auth/login', async (req, res) => {
     // Generate JWT token
     const token = generateToken(authData.user.id, user.email || authData.user.email);
 
-    console.log('[Login] ✅ Token generated for user:', authData.user.id);
+    // Save session so cookie is sent and subsequent requests have userId
+    req.session.userId = authData.user.id;
+    req.session.email = user.email || authData.user.email;
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    console.log('[Login] Session saved:', { sessionId: req.sessionID, userId: req.session.userId });
 
     // Return token and user data
     res.json({
       success: true,
-      token, // JWT token for frontend to store
+      token,
       user: {
         id: user.id,
         email: user.email || authData.user.email,
