@@ -42,6 +42,19 @@ const app = express();
 // MIDDLEWARE SETUP
 // ============================================================================
 
+// CORS - must allow credentials so session cookies are sent (first, before session)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const allowedOrigin = origin || process.env.CLIENT_URL || (process.env.NODE_ENV === 'production' ? 'https://build-monitor-lac.vercel.app' : 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cookie');
+  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -74,10 +87,10 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production', // Secure cookies in production (HTTPS required)
+    secure: process.env.NODE_ENV === 'production',
     maxAge: sessionTtl,
-    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax', // Use 'lax' for Vercel compatibility
-    domain: process.env.COOKIE_DOMAIN, // Optional: set if using custom domain
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    domain: process.env.COOKIE_DOMAIN,
   },
   name: 'jengatrack.sid', // Custom session cookie name
 }));

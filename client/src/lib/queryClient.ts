@@ -56,6 +56,7 @@ export async function apiRequest(
   const res = await fetch(url, {
     method,
     headers,
+    credentials: 'include',
     body: data ? JSON.stringify(data) : undefined,
   });
 
@@ -84,6 +85,7 @@ export const getQueryFn: <T>(options: {
 
     const res = await fetch(queryKey.join("/") as string, {
       headers,
+      credentials: 'include',
     });
 
     // If unauthorized, token might be invalid - clear it
