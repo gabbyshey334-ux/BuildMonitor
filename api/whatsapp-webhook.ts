@@ -55,7 +55,7 @@ interface OnboardingData {
   budget?: number;
 }
 
-type ExpenseState = null | 'awaiting_price' | 'awaiting_confirmation';
+type ExpenseState = null | 'awaiting_price' | 'awaiting_confirmation' | 'awaiting_project_selection';
 
 interface ExpensePendingData {
   quantity?: number;
@@ -66,6 +66,7 @@ interface ExpensePendingData {
   description?: string;
   project_id?: string;
   vendor?: string;
+  project_options?: { id: string; name: string; location?: string }[];
 }
 
 interface ParsedExpense {
@@ -123,7 +124,7 @@ const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
 async function getUserProfile(phoneNumber: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('*')
+    .select('*, active_project_id, active_project_set_at')
     .eq('whatsapp_number', phoneNumber)
     .single();
   if (error && error.code !== 'PGRST116') console.error('[Supabase Error]', error);
@@ -174,6 +175,102 @@ async function updateExpenseState(userId: string, state: ExpenseState, data?: Ex
     updated_at: new Date().toISOString(),
   }).eq('id', userId);
   if (error) { console.error('[Update Expense State Error]', error); throw error; }
+}
+
+// ─── Active Project (multi-project selection) ─────────────────────────────────
+
+async function getActiveProject(
+  userId: string,
+  profile: any
+): Promise<{
+  project: any | null;
+  needsSelection: boolean;
+  projects: any[];
+}> {
+  const { data: ownedProjects } = await supabase
+    .from('projects')
+    .select('id, name, description, status, channel_type, manager_id, user_id')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  const { data: managedProjects } = await supabase
+    .from('projects')
+    .select('id, name, description, status, channel_type, manager_id, user_id')
+    .eq('manager_id', userId)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
+  const allProjects = [
+    ...(ownedProjects || []),
+    ...(managedProjects || []),
+  ].filter((p, index, self) => index === self.findIndex((t) => t.id === p.id));
+
+  if (allProjects.length === 0) {
+    return { project: null, needsSelection: false, projects: [] };
+  }
+
+  if (allProjects.length === 1) {
+    if (profile.active_project_id !== allProjects[0].id) {
+      await supabase
+        .from('profiles')
+        .update({
+          active_project_id: allProjects[0].id,
+          active_project_set_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+    }
+    return { project: allProjects[0], needsSelection: false, projects: allProjects };
+  }
+
+  if (profile.active_project_id) {
+    const activeProject = allProjects.find((p) => p.id === profile.active_project_id);
+    if (activeProject) {
+      const setAt = profile.active_project_set_at
+        ? new Date(profile.active_project_set_at)
+        : null;
+      const today = new Date();
+      const isToday = setAt && setAt.toDateString() === today.toDateString();
+      if (isToday) {
+        return { project: activeProject, needsSelection: false, projects: allProjects };
+      }
+    }
+  }
+
+  return { project: null, needsSelection: true, projects: allProjects };
+}
+
+async function sendProjectSelectionMenu(
+  to: string,
+  userId: string,
+  projects: any[]
+): Promise<void> {
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: 'awaiting_project_selection',
+      expense_pending_data: {
+        project_options: projects.map((p) => ({
+          id: p.id,
+          name: p.name,
+          location: p.description || 'No location',
+        })),
+      },
+    })
+    .eq('id', userId);
+
+  const projectList = projects
+    .map((p, i) => `${i + 1}. ${p.name}` + (p.description ? ` — ${p.description}` : ''))
+    .join('\n');
+
+  await sendMessage(
+    to,
+    `👋 You have ${projects.length} active projects.\n\n` +
+      `Which one are you updating today?\n\n` +
+      `${projectList}\n\n` +
+      `Reply with the number (e.g. "1" or "2")\n\n` +
+      `💡 Tip: Say "switch project" anytime to change.`
+  );
 }
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
@@ -585,18 +682,25 @@ async function handleBudgetQuery(from: string, projectId: string): Promise<void>
   await sendMessage(from, reply);
 }
 
-async function handleGreeting(from: string): Promise<void> {
-  await sendMessage(from,
-    `👋 *JengaTrack Bot* — Here's what you can say:\n\n` +
-    `💰 *Log expense:*\n"Bought 50 bags cement from Hima for 1,900,000"\n\n` +
-    `📦 *Log materials:*\n"Used 5 bags cement for foundation"\n\n` +
-    `👷 *Log workers:*\n"8 workers on site today"\n\n` +
-    `🏗️ *Progress:*\n"Foundation 80% complete"\n\n` +
-    `📊 *Check budget:*\n"How much have we spent?"\n\n` +
-    `📦 *Check stock:*\n"How much cement do we have?"\n\n` +
-    `🌧️ *Log delay:*\n"Heavy rain, no work today"\n\n` +
-    `📸 Send a *receipt photo* and I'll scan it\n` +
-    `🎙️ Send a *voice note* and I'll transcribe it`
+async function handleGreeting(from: string, currentProject?: any): Promise<void> {
+  const projectLine = currentProject
+    ? `\n📌 *Active project:* ${currentProject.name}\n(Say "switch project" to change)\n`
+    : '';
+
+  await sendMessage(
+    from,
+    `👋 *JengaTrack Bot*${projectLine}\n\n` +
+      `Here's what you can say:\n\n` +
+      `💰 "Bought 50 bags cement for 1,900,000"\n` +
+      `📦 "Used 5 bags cement for foundation"\n` +
+      `👷 "8 workers on site today"\n` +
+      `🏗️ "Foundation 80% complete"\n` +
+      `📊 "How much have we spent?"\n` +
+      `📦 "How much cement do we have?"\n` +
+      `🌧️ "Heavy rain, no work today"\n` +
+      `🔄 "Switch project" to change projects\n\n` +
+      `📸 Send a receipt photo to scan it\n` +
+      `🎙️ Send a voice note to log hands-free`
   );
 }
 
@@ -943,19 +1047,80 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // ── STEP 3: Get project ───────────────────────────────────────────────────
+    // ── STEP 3: Expense state & project ───────────────────────────────────────
     const expenseState = (profile.expense_state as ExpenseState) ?? null;
     const pendingData = (profile.expense_pending_data as ExpensePendingData) || {};
 
-    const { data: ownerProject } = await supabase.from('projects')
-      .select('id, user_id, channel_type, manager_id, name')
-      .eq('user_id', userId).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
-    const { data: managerProject } = await supabase.from('projects')
-      .select('id, user_id, channel_type, manager_id, name')
-      .eq('manager_id', userId).eq('status', 'active')
-      .order('created_at', { ascending: false }).limit(1).maybeSingle();
-    const project = ownerProject || managerProject;
+    // Handle reply to "Which project?" menu (BEFORE intent classification)
+    if (expenseState === 'awaiting_project_selection') {
+      const options = pendingData.project_options || [];
+      const selection = parseInt(rawMessage.trim(), 10);
+      const nameMatch = options.findIndex(
+        (p: any) => message.toLowerCase().includes(String(p.name).toLowerCase().split(' ')[0])
+      );
+
+      let selectedProject: { id: string; name: string; location?: string } | null = null;
+      if (!isNaN(selection) && selection >= 1 && selection <= options.length) {
+        selectedProject = options[selection - 1];
+      } else if (nameMatch !== -1) {
+        selectedProject = options[nameMatch];
+      }
+
+      if (selectedProject) {
+        await supabase
+          .from('profiles')
+          .update({
+            active_project_id: selectedProject.id,
+            active_project_set_at: new Date().toISOString(),
+            expense_state: null,
+            expense_pending_data: {},
+          })
+          .eq('id', userId);
+
+        await sendMessage(
+          From,
+          `✅ Got it! Logging updates to:\n*${selectedProject.name}*` +
+            (selectedProject.location && selectedProject.location !== 'No location'
+              ? ` — ${selectedProject.location}`
+              : '') +
+            `\n\nSend your first update now or type "switch project" to change projects.`
+        );
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      } else {
+        const projectList = options.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
+        await sendMessage(From, `Please reply with a number:\n\n${projectList}`);
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+    }
+
+    // Get active project (or require selection for multi-project users)
+    const { project, needsSelection, projects } = await getActiveProject(userId, profile);
+
+    if (needsSelection) {
+      await sendProjectSelectionMenu(From, userId, projects);
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
+
+    // Check for "switch project" command (before classifyIntent)
+    if (/switch\s*project|change\s*project|select\s*project/i.test(rawMessage)) {
+      if (projects.length <= 1) {
+        await sendMessage(
+          From,
+          `You only have one active project: *${projects[0]?.name || 'None'}*`
+        );
+      } else {
+        await supabase
+          .from('profiles')
+          .update({ active_project_id: null, active_project_set_at: null })
+          .eq('id', userId);
+        await sendProjectSelectionMenu(From, userId, projects);
+      }
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
 
     // ── STEP 4: Group mode dispute handling ───────────────────────────────────
     const channelType = (project?.channel_type as string) || 'direct';
@@ -1149,6 +1314,6 @@ async function routeIntent(
       break;
     case 'GREETING':
     default:
-      await handleGreeting(from);
+      await handleGreeting(from, project);
   }
 }
