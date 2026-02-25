@@ -58,8 +58,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
-            <h2 className="text-2xl font-bold mb-2">No project selected</h2>
-            <p className="text-muted-foreground mb-4">
+            <h2 className="text-2xl font-bold mb-2 text-white">No project selected</h2>
+            <p className="text-[#CBD5E1] mb-4">
               Select a project from the list or go to My Projects to get started.
             </p>
             <Button asChild>
@@ -83,7 +83,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         <Card className="max-w-md w-full">
           <CardContent className="pt-6 text-center">
             <h2 className="text-2xl font-bold mb-2 text-destructive">Error loading dashboard</h2>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-[#CBD5E1] mb-4">
               {error instanceof Error ? error.message : 'Something went wrong.'}
             </p>
             <Button onClick={() => refetch()}>Try again</Button>
@@ -152,7 +152,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   return (
     <div className="min-h-screen bg-background p-6">
       <section className="mb-8">
-        <h1 className="text-3xl font-bold mb-6">Project Dashboard</h1>
+        <h1 className="text-3xl font-bold mb-6 text-white">Project Dashboard</h1>
         <ProjectHealthSummary data={summaryHealth} />
       </section>
 
@@ -169,10 +169,10 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           <TrendsQuickInsightsSection data={trendsSectionData} />
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Quick Actions</CardTitle>
+              <CardTitle className="text-lg text-white font-bold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button className="w-full justify-start" variant="outline" asChild>
+              <Button className="w-full justify-start text-white border-white/20 hover:bg-white/10" variant="outline" asChild>
                 <Link href="/budget">
                   <a>
                     <Plus className="w-4 h-4 mr-2" />
@@ -180,15 +180,15 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   </a>
                 </Link>
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start text-white border-white/20 hover:bg-white/10" variant="outline">
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Photo
               </Button>
-              <Button className="w-full justify-start" variant="outline">
+              <Button className="w-full justify-start text-white border-white/20 hover:bg-white/10" variant="outline">
                 <AlertCircle className="w-4 h-4 mr-2" />
                 Report Issue
               </Button>
-              <Button className="w-full justify-start" variant="outline" asChild>
+              <Button className="w-full justify-start text-white border-white/20 hover:bg-white/10" variant="outline" asChild>
                 <Link href="/daily">
                   <a>
                     <FileText className="w-4 h-4 mr-2" />

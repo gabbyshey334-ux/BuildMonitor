@@ -40,28 +40,28 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
   return (
     <Card className="col-span-1 lg:col-span-2">
       <CardHeader>
-        <CardTitle>Budget & Costs</CardTitle>
+        <CardTitle className="text-white font-bold">Budget & Costs</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           {/* Key Budget Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-4 bg-ash-gray rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Total Budget</p>
-              <p className="text-2xl font-bold">UGX {totalBudget.toLocaleString()}</p>
+            <div className="text-center p-4 rounded-lg border border-border bg-card">
+              <p className="text-sm text-[#CBD5E1] mb-1">Total Budget</p>
+              <p className="text-2xl font-bold text-white">UGX {totalBudget.toLocaleString()}</p>
             </div>
-            <div className="text-center p-4 bg-ash-gray rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Spent</p>
-              <p className="text-2xl font-bold">
+            <div className="text-center p-4 rounded-lg border border-border bg-card">
+              <p className="text-sm text-[#CBD5E1] mb-1">Spent</p>
+              <p className="text-2xl font-bold text-white">
                 UGX {spent.toLocaleString()}
-                <span className="text-sm font-normal text-muted-foreground ml-2">
+                <span className="text-sm font-normal text-[#94A3B8] ml-2">
                   ({spentPercent}%)
                 </span>
               </p>
             </div>
-            <div className="text-center p-4 bg-ash-gray rounded-lg">
-              <p className="text-sm text-muted-foreground mb-1">Remaining</p>
-              <p className="text-2xl font-bold text-success-green">
+            <div className="text-center p-4 rounded-lg border border-border bg-card">
+              <p className="text-sm text-[#CBD5E1] mb-1">Remaining</p>
+              <p className="text-2xl font-bold text-ocean-pine">
                 UGX {remaining.toLocaleString()}
               </p>
             </div>
@@ -71,7 +71,7 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Budget Breakdown - Pie Chart */}
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Budget Breakdown</h3>
+              <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Budget Breakdown</h3>
               {breakdown.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={300}>
@@ -107,9 +107,9 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                               backgroundColor: category.colorHex || '#A0AEC0'
                             }}
                           />
-                          <span className="text-sm">{category.category}</span>
+                          <span className="text-sm text-[#E2E8F0]">{category.category}</span>
                         </div>
-                        <span className="font-medium">
+                        <span className="font-medium text-white">
                           UGX {category.amount.toLocaleString()}
                         </span>
                       </div>
@@ -117,13 +117,13 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                   </div>
                 </>
               ) : (
-                <p className="text-center text-muted-foreground py-8">No budget data available</p>
+                <p className="text-center text-[#94A3B8] py-8">No budget data available</p>
               )}
             </div>
 
             {/* Budget vs Actual - Bar Chart */}
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Budget vs. Actual Spend</h3>
+              <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Budget vs. Actual Spend</h3>
               {vsActual.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={300}>
@@ -155,14 +155,14 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                   </div>
                 </>
               ) : (
-                <p className="text-center text-muted-foreground py-8">No comparison data available</p>
+                <p className="text-center text-[#94A3B8] py-8">No comparison data available</p>
               )}
             </div>
           </div>
 
           {/* Cumulative costs trend line */}
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Cumulative Costs Over Time</h3>
+            <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Cumulative Costs Over Time</h3>
             {cumulativeCosts.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={cumulativeCosts}>
@@ -179,7 +179,7 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-center text-muted-foreground py-8">No cost trend data available</p>
+              <p className="text-center text-[#94A3B8] py-8">No cost trend data available</p>
             )}
           </div>
         </div>

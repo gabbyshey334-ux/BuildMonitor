@@ -30,20 +30,20 @@ export function ProgressScheduleSection({ data }: { data?: ProgressScheduleSecti
   return (
     <Card className="col-span-1 lg:col-span-2">
       <CardHeader>
-        <CardTitle>Progress & Schedule</CardTitle>
+        <CardTitle className="text-white font-bold">Progress & Schedule</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           <section>
-            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Phases Overview</h3>
+            <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Phases Overview</h3>
             <div className="space-y-4">
               {phases.length > 0 ? (
                 phases.map((phase) => (
                   <div key={phase.id} className="flex items-center space-x-4">
-                    <div className="w-2/5 font-medium text-gray-700 dark:text-gray-300">{phase.name}</div>
+                    <div className="w-2/5 font-medium text-white">{phase.name}</div>
                     <div className="flex-1">
                       <Progress value={phase.percentComplete} className="h-2 rounded-full" />
-                      <span className="text-sm text-gray-500 dark:text-gray-400 mt-1 block">
+                      <span className="text-sm text-[#CBD5E1] mt-1 block">
                         {phase.percentComplete}% Complete
                       </span>
                     </div>
@@ -61,21 +61,21 @@ export function ProgressScheduleSection({ data }: { data?: ProgressScheduleSecti
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No tasks created yet. Add tasks from Settings or log progress via WhatsApp.</p>
+                <p className="text-[#94A3B8]">No tasks created yet. Add tasks from Settings or log progress via WhatsApp.</p>
               )}
             </div>
           </section>
 
           <section>
-            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">Upcoming Milestones</h3>
+            <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Upcoming Milestones</h3>
             <div className="space-y-3">
               {upcomingMilestones.length > 0 ? (
                 upcomingMilestones.map((milestone) => (
-                  <div key={milestone.id} className="flex items-center p-3 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-                    <Calendar className="text-blue-500 mr-3 flex-shrink-0" size={20} />
+                  <div key={milestone.id} className="flex items-center p-3 border border-border rounded-lg shadow-sm">
+                    <Calendar className="text-ocean-pine mr-3 flex-shrink-0" size={20} />
                     <div className="flex-1">
-                      <p className="font-medium text-gray-800 dark:text-gray-200">{milestone.title}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="font-medium text-white">{milestone.title}</p>
+                      <p className="text-sm text-[#CBD5E1]">
                         Due: {new Date(milestone.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </p>
                     </div>
@@ -92,7 +92,7 @@ export function ProgressScheduleSection({ data }: { data?: ProgressScheduleSecti
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No upcoming milestones.</p>
+                <p className="text-[#94A3B8]">No upcoming milestones.</p>
               )}
             </div>
           </section>

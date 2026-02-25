@@ -141,14 +141,14 @@
 }
 
 .dark {
-  /* graphite/dark */
-  --background: 165 4% 12%;
+  /* graphite/dark - match landing #0a0a0a feel */
+  --background: 0 0% 4%;
   --foreground: 210 40% 98%;
 
-  --card: 165 4% 14%;
+  --card: 0 0% 7%;
   --card-foreground: 210 40% 98%;
 
-  --popover: 165 4% 14%;
+  --popover: 0 0% 7%;
   --popover-foreground: 210 40% 98%;
 
   /* ocean-pine brightened for dark */
@@ -159,8 +159,8 @@
   --secondary: 165 4% 18%;
   --secondary-foreground: 210 40% 98%;
 
-  --muted: 165 4% 18%;
-  --muted-foreground: 0 0% 80%;
+  --muted: 0 0% 14%;
+  --muted-foreground: 215 20% 65%;
 
   --accent: 179 41% 30%;
   --accent-foreground: 0 0% 100%;
@@ -200,6 +200,10 @@ html {
   body {
     @apply bg-background text-foreground font-body antialiased;
     min-height: 100vh;
+  }
+
+  html.dark body {
+    color: #F1F5F9;
   }
 
   h1, h2, h3, h4, h5, h6 {

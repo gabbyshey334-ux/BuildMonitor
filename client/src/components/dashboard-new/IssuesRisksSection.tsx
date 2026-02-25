@@ -54,7 +54,7 @@ const IssueCard = ({ issue }: { issue: Issue }) => (
   }`}>
     <CardContent className="p-3">
       <div className="flex items-start justify-between mb-2">
-        <h5 className="font-medium text-sm font-heading">{issue.title}</h5>
+        <h5 className="font-medium text-sm font-heading text-white">{issue.title}</h5>
         <Badge
           variant={ issue.priority === 'critical' ? 'destructive' : issue.priority === 'high' ? 'secondary' : 'secondary'}
           className={`text-xs ${issue.priority === 'critical' ? 'bg-alert-red/10 text-alert-red' : issue.priority === 'high' ? 'bg-warning-yellow/10 text-warning-yellow' : ''}`}
@@ -62,8 +62,8 @@ const IssueCard = ({ issue }: { issue: Issue }) => (
           {issue.priority}
         </Badge>
       </div>
-      <p className="text-xs text-muted-foreground mb-2 font-body">{issue.description}</p>
-      <div className="flex items-center justify-between text-xs text-muted-foreground font-body">
+      <p className="text-xs text-[#CBD5E1] mb-2 font-body">{issue.description}</p>
+      <div className="flex items-center justify-between text-xs text-[#94A3B8] font-body">
         <span>{issue.reportedBy}</span>
         <span>{formatDate(issue.reportedDate)}</span>
       </div>
@@ -85,8 +85,8 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-heading">Issues & Risks</CardTitle>
-          <Button size="sm">
+          <CardTitle className="font-heading text-white font-bold">Issues & Risks</CardTitle>
+          <Button size="sm" className="text-white border-white/20 hover:bg-white/10">
             <Plus className="w-4 h-4 mr-2" />
             Report Issue
           </Button>
@@ -97,19 +97,19 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
         <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="text-center">
             <p className="text-3xl font-bold text-alert-red font-heading">{criticalIssues}</p>
-            <p className="text-xs text-muted-foreground font-body">Critical</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Critical</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-warning-yellow font-heading">{highIssues}</p>
-            <p className="text-xs text-muted-foreground font-body">High Priority</p>
+            <p className="text-xs text-[#CBD5E1] font-body">High Priority</p>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-bold font-heading">{openIssues}</p>
-            <p className="text-xs text-muted-foreground font-body">Open</p>
+            <p className="text-3xl font-bold text-white font-heading">{openIssues}</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Open</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-success-green font-heading">{resolvedThisWeek}</p>
-            <p className="text-xs text-muted-foreground font-body">Resolved This Week</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Resolved This Week</p>
           </div>
         </div>
 
@@ -117,8 +117,8 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* To Do */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading">
-              <Circle className="w-4 h-4 text-muted-foreground" />
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
+              <Circle className="w-4 h-4 text-[#94A3B8]" />
               To Do ({issuesTodo.length})
             </h4>
             <div className="space-y-2">
@@ -130,7 +130,7 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
 
           {/* In Progress */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading">
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
               <AlertCircle className="w-4 h-4 text-ocean-pine" />
               In Progress ({issuesInProgress.length})
             </h4>
@@ -143,7 +143,7 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
 
           {/* Resolved */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading">
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
               <CheckCircle className="w-4 h-4 text-success-green" />
               Resolved ({issuesResolved.length})
             </h4>

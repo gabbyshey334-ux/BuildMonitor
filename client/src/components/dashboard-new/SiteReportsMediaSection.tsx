@@ -39,33 +39,33 @@ export function SiteReportsMediaSection({ data }: { data?: SiteReportsMediaSecti
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-heading">Site Reports & Media</CardTitle>
+          <CardTitle className="font-heading text-white font-bold">Site Reports & Media</CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="font-body">{recentPhotos.length} photos</Badge>
-            <Badge variant="secondary" className="font-body">{dailyLogsThisWeek} logs this week</Badge>
+            <Badge variant="secondary" className="font-body text-[#E2E8F0]">{recentPhotos.length} photos</Badge>
+            <Badge variant="secondary" className="font-body text-[#E2E8F0]">{dailyLogsThisWeek} logs this week</Badge>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="text-center p-4 bg-ash-gray rounded-lg">
-            <p className="text-2xl font-bold font-heading">{dailyLogsThisWeek}</p>
-            <p className="text-xs text-muted-foreground font-body">Daily Logs This Week</p>
+          <div className="text-center p-4 rounded-lg border border-border bg-card">
+            <p className="text-2xl font-bold font-heading text-white">{dailyLogsThisWeek}</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Daily Logs This Week</p>
           </div>
-          <div className="text-center p-4 bg-ash-gray rounded-lg">
-            <p className="text-2xl font-bold font-heading">{photosUploaded}</p>
-            <p className="text-xs text-muted-foreground font-body">Photos Uploaded</p>
+          <div className="text-center p-4 rounded-lg border border-border bg-card">
+            <p className="text-2xl font-bold font-heading text-white">{photosUploaded}</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Photos Uploaded</p>
           </div>
-          <div className="text-center p-4 bg-ash-gray rounded-lg">
+          <div className="text-center p-4 rounded-lg border border-border bg-card">
             <p className="text-2xl font-bold text-success-green font-heading">Good</p>
-            <p className="text-xs text-muted-foreground font-body">Site Condition</p>
+            <p className="text-xs text-[#CBD5E1] font-body">Site Condition</p>
           </div>
         </div>
 
         {/* Photo gallery - thumbnail grid */}
         <div>
-          <h4 className="font-semibold mb-3 font-heading">Recent Site Photos</h4>
+          <h4 className="font-semibold mb-3 font-heading text-[#E2E8F0]">Recent Site Photos</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {recentPhotos.map(photo => (
               <div 
@@ -89,7 +89,7 @@ export function SiteReportsMediaSection({ data }: { data?: SiteReportsMediaSecti
             ))}
           </div>
           
-          <Button variant="outline" className="w-full mt-4 font-body">
+          <Button variant="outline" className="w-full mt-4 font-body text-white border-white/20 hover:bg-white/10">
             View All Photos ({totalPhotos})
           </Button>
         </div>

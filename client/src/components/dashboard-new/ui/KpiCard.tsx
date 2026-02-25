@@ -51,20 +51,20 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   const trendIcons = {
     up: <TrendingUp className="w-4 h-4 text-success-green" />,
     down: <TrendingDown className="w-4 h-4 text-alert-red" />,
-    neutral: <MinusCircle className="w-4 h-4 text-muted-foreground" />,
+    neutral: <MinusCircle className="w-4 h-4 text-[#94A3B8]" />,
   };
 
   return (
     <Card className={`p-6 ${className || ''}`} onClick={onClick}>
       <CardContent className="pt-0">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm text-muted-foreground font-body">{title}</h3>
-          {Icon && <Icon className="w-5 h-5 text-muted-foreground" />}
+          <h3 className="text-sm text-[#CBD5E1] font-body">{title}</h3>
+          {Icon && <Icon className="w-5 h-5 text-[#94A3B8]" />}
         </div>
         <div className="flex items-baseline gap-2">
-          <p className="text-4xl font-bold font-heading" style={{ color: statusIndicator !== 'none' ? statusColors[statusIndicator] : undefined }}>
+          <p className="text-4xl font-bold font-heading text-white" style={{ color: statusIndicator !== 'none' ? statusColors[statusIndicator] : undefined }}>
             {value}
-            {unit && <span className="text-xl ml-1">{unit}</span>}
+            {unit && <span className="text-xl ml-1 text-white/90">{unit}</span>}
           </p>
           {trendValue !== undefined && (
             <div className="flex items-center gap-1 text-sm font-body">
@@ -75,7 +75,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
             </div>
           )}
         </div>
-        {description && <p className="text-sm text-muted-foreground mt-1 font-body">{description}</p>}
+        {description && <p className="text-sm text-[#CBD5E1] mt-1 font-body">{description}</p>}
 
         {progressValue !== undefined && progressValue >= 0 && (
           <Progress value={progressValue} className={`mt-4 h-2 ${progressBarColor || 'bg-fresh-fern/20'}`} />
