@@ -486,37 +486,157 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
 
 // ─── Intent Classification (GPT-4o) ──────────────────────────────────────────
 
+function preClassifyIntent(message: string): IntentResult | null {
+  const m = message.toLowerCase().trim();
+
+  // EXPENSE patterns
+  if (/bought|paid|spent|purchased|cost|price|buying|pay|expense/i.test(m) && /\d/.test(m)) {
+    const amountMatch = message.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/g);
+    const amounts = amountMatch ? amountMatch.map((a) => parseFloat(a.replace(/,/g, ''))) : [];
+    const amount = amounts.length > 0 ? Math.max(...amounts) : 0;
+
+    const itemMatch = message.match(/(?:bought|paid|spent|purchased)\s+(?:\d+\s+\w+\s+)?(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+at|\s+from|\s*$)/i);
+    const item = itemMatch ? itemMatch[1].trim() : '';
+
+    const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?|rolls?|sheets?)/i);
+    const quantity = qtyMatch ? parseFloat(qtyMatch[1]) : 0;
+    const unit = qtyMatch ? qtyMatch[2].toLowerCase() : '';
+
+    const vendorMatch = message.match(/from\s+([A-Za-z\s]+?)(?:\s+for|\s*$)/i);
+    const vendor = vendorMatch ? vendorMatch[1].trim() : '';
+
+    return {
+      intent: 'EXPENSE_LOG',
+      extracted: { item, amount, quantity, unit, vendor },
+    };
+  }
+
+  // MATERIAL used patterns
+  if (/used|consumed|applied|finished\s+using/i.test(m) && /\d/.test(m)) {
+    const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?)/i);
+    const itemMatch = message.match(/(?:used|consumed)\s+\d+\s+\w+\s+(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+on|\s*$)/i);
+    return {
+      intent: 'MATERIAL_LOG',
+      extracted: {
+        action: 'used',
+        quantity: qtyMatch ? parseFloat(qtyMatch[1]) : 0,
+        unit: qtyMatch ? qtyMatch[2].toLowerCase() : '',
+        item: itemMatch ? itemMatch[1].trim() : '',
+      },
+    };
+  }
+
+  // MATERIAL received patterns
+  if (/received|delivered|got|arrived|brought/i.test(m) && /\d/.test(m)) {
+    return {
+      intent: 'MATERIAL_LOG',
+      extracted: { action: 'bought' },
+    };
+  }
+
+  // LABOR patterns
+  if (/(\d+)\s*(workers?|casuals?|labou?rers?|men|people|staff)/i.test(m)) {
+    const match = message.match(/(\d+)\s*(workers?|casuals?|labou?rers?|men|people|staff)/i);
+    return {
+      intent: 'LABOR_LOG',
+      extracted: { worker_count: match ? parseInt(match[1], 10) : 0 },
+    };
+  }
+
+  // BUDGET query patterns
+  if (/how much|budget|spent|remaining|left|balance|total cost/i.test(m) && /spent|budget|left|remaining|balance/i.test(m)) {
+    return { intent: 'BUDGET_QUERY', extracted: {} };
+  }
+
+  // WEATHER/DELAY patterns
+  if (/rain|flood|weather|delay|couldn't work|no work|storm/i.test(m)) {
+    return {
+      intent: 'WEATHER_DELAY',
+      extracted: { reason: message },
+    };
+  }
+
+  // PROGRESS patterns
+  if (/finished|completed|done|\d+%|percent|progress|milestone/i.test(m)) {
+    return {
+      intent: 'PROGRESS_UPDATE',
+      extracted: { note: message },
+    };
+  }
+
+  return null;
+}
+
 async function classifyIntent(message: string): Promise<IntentResult> {
+  const preClassified = preClassifyIntent(message);
+  if (preClassified) {
+    console.log('[Intent] Pre-classified:', preClassified.intent);
+    return preClassified;
+  }
+
   if (!process.env.OPENAI_API_KEY) {
     return { intent: 'GREETING', extracted: {} };
   }
 
-  const systemPrompt = `You are a construction site assistant for African building projects (Uganda/Kenya/Nigeria).
-Classify the user message into exactly one intent and extract key data.
+  const systemPrompt = `You are a construction site assistant for African building projects.
 
-Intents:
-- EXPENSE_LOG: reporting money spent ("bought cement for 200k", "paid plumber 150k")
-- MATERIAL_LOG: reporting materials bought or used ("received 50 bags cement", "used 5 bags for foundation")
-- LABOR_LOG: reporting workers on site ("6 workers today", "8 casuals on site")
-- PROGRESS_UPDATE: milestone or progress ("foundation finished", "roof 80% done", "ring beam complete")
-- BUDGET_QUERY: asking about spend or remaining budget ("how much spent?", "what's left?", "show budget")
-- MATERIAL_QUERY: asking about inventory ("how much cement?", "what materials do we have?")
-- WEATHER_DELAY: bad weather or delay ("heavy rain, couldn't work", "no work today, flooding")
-- GREETING: general hello, unclear, or anything else
+IMPORTANT: Be aggressive about classifying expense and material messages. When in doubt between EXPENSE_LOG and GREETING, choose EXPENSE_LOG if there are numbers involved.
 
-Return ONLY valid JSON, no other text:
+Common patterns you MUST classify correctly:
+
+EXPENSE_LOG examples (always has numbers):
+- "Bought 50 bags cement for 1,900,000"
+- "Bought cement 1900000"
+- "Paid plumber 150k"
+- "Spent 500k on iron rods"
+- "200000 for sand"
+- "cement 38000 per bag"
+- "purchased tiles 450,000"
+
+MATERIAL_LOG examples:
+- "Received 50 bags cement from Hima"
+- "Used 5 bags for foundation"
+- "2 trips of sand delivered"
+- "consumed 10 bags cement today"
+
+LABOR_LOG examples:
+- "6 workers today"
+- "8 casuals on site"
+- "5 men working"
+
+PROGRESS_UPDATE examples:
+- "Foundation 80% done"
+- "Finished ring beam today"
+- "Roofing complete"
+
+BUDGET_QUERY examples:
+- "How much spent?"
+- "What's left in budget?"
+- "Show me expenses"
+
+WEATHER_DELAY examples:
+- "Heavy rain today"
+- "No work, flooding"
+
+GREETING - ONLY use this for:
+- Pure greetings with NO numbers or construction context ("hello", "hi", "good morning")
+- Completely unclear messages
+
+NEVER classify a message with numbers AND construction materials as GREETING.
+
+Return ONLY valid JSON:
 {
   "intent": "INTENT_NAME",
   "extracted": {
-    "item": "string (for EXPENSE_LOG, MATERIAL_LOG)",
-    "amount": number_in_UGX_or_0,
-    "quantity": number_or_0,
-    "unit": "bags/kg/trips/pieces/etc",
-    "action": "bought|used|received (for MATERIAL_LOG)",
-    "vendor": "vendor or person name if mentioned",
-    "worker_count": number_or_0,
-    "note": "string (for PROGRESS_UPDATE)",
-    "reason": "string (for WEATHER_DELAY)"
+    "item": "material name",
+    "amount": number_in_UGX,
+    "quantity": number,
+    "unit": "bags/kg/etc",
+    "action": "bought|used|received",
+    "vendor": "vendor name if mentioned",
+    "worker_count": number,
+    "note": "for progress updates",
+    "reason": "for weather delays"
   }
 }`;
 
