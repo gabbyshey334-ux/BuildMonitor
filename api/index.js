@@ -326,6 +326,18 @@ try {
   console.log('📝 Falling back to basic routes');
 }
 
+// Explicit route for dashboard summary so we never return 404 from catch-all when server app didn't load
+app.get('/api/projects/:projectId/summary', (req, res, next) => {
+  if (serverApp) {
+    return serverApp(req, res, next);
+  }
+  res.status(503).json({
+    success: false,
+    error: 'Dashboard summary is temporarily unavailable.',
+    message: 'Server module did not load. Check deployment logs.',
+  });
+});
+
 // ============================================================================
 // TEST ENDPOINTS (available even when server app is loaded)
 // ============================================================================

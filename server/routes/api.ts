@@ -1201,10 +1201,16 @@ async function getProjectForUser(projectId: string, userId: string) {
  */
 router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.id;
+    const userId = req.user?.id;
     const projectId = req.params.projectId;
+    console.log('[Summary] projectId:', projectId, 'userId:', userId);
+    if (userId == null) {
+      return res.status(401).json({ success: false, error: 'Authentication required' });
+    }
+    console.log('[Summary] Looking for project:', projectId, 'for user:', userId);
     const project = await getProjectForUser(projectId, userId);
     if (!project) {
+      console.log('[Summary] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
