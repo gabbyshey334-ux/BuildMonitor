@@ -315,7 +315,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       const projectResult = await dbConnection.execute(sql`
         SELECT id, name, budget, status, created_at
         FROM projects
-        WHERE id = ${projectId} AND user_id = ${userId} AND deleted_at IS NULL
+        WHERE id = ${projectId} AND user_id = ${userId}
         LIMIT 1
       `);
       const projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
@@ -326,7 +326,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       const expenseResult = await dbConnection.execute(sql`
         SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
         FROM expenses
-        WHERE project_id = ${projectId} AND deleted_at IS NULL
+        WHERE project_id = ${projectId}
       `);
       const totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
       const budgetAmount = parseFloat(projectRow.budget != null ? projectRow.budget : '0');
