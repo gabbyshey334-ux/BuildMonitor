@@ -294,12 +294,8 @@ try {
   console.log('📝 Falling back to basic routes');
 }
 
-// Explicit route for dashboard summary — when server app didn't load, implement here so cookies/session work
+// Explicit route for dashboard summary — ALWAYS use Supabase here so dashboard sees same data as WhatsApp webhook (do not delegate to serverApp)
 app.get('/api/projects/:projectId/summary', (req, res, next) => {
-  if (serverApp) {
-    return serverApp(req, res, next);
-  }
-  // Run requireAuth then summary logic using api/index.js db
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
     const userId = req.session?.userId || req.userId || req.user?.id;
@@ -311,6 +307,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
 
       let projectRow = null;
       let totalSpent = 0;
+      let expenseRowsForCumulative = [];
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -332,14 +329,16 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         projectRow = projectData;
 
         let expenseRowCount = 0;
+        let expenseRowsForCumulative = [];
         if (projectRow) {
           const { data: expenseRows, error: expenseError } = await supabase
             .from('expenses')
-            .select('amount')
+            .select('amount, expense_date')
             .eq('project_id', projectId);
           if (expenseError) console.error('[Summary] Supabase expenses error:', expenseError);
           expenseRowCount = (expenseRows || []).length;
           totalSpent = (expenseRows || []).reduce((sum, row) => sum + parseFloat(String(row.amount || 0)), 0);
+          expenseRowsForCumulative = expenseRows || [];
         }
 
         console.log('[Summary Debug]', {
@@ -366,11 +365,13 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
 
         if (projectRow) {
           const expenseResult = await dbConnection.execute(sql`
-            SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
+            SELECT amount, expense_date
             FROM expenses
             WHERE project_id = ${projectId}
           `);
-          totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
+          const rows = Array.isArray(expenseResult) ? expenseResult : (expenseResult?.rows || []);
+          totalSpent = rows.reduce((sum, row) => sum + parseFloat(String(row?.amount || 0)), 0);
+          expenseRowsForCumulative = rows;
         }
 
         console.log('[Summary Debug]', {
@@ -393,6 +394,49 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       const daysSinceStart = Math.max(1, (Date.now() - createdAt.getTime()) / 86400000);
       const dailyBurnRate = totalSpent / daysSinceStart;
       const weeksRemaining = dailyBurnRate > 0 ? remaining / (dailyBurnRate * 7) : null;
+
+      // Build cumulative costs by date (for Budget & Costs section)
+      const byDate = {};
+      for (const row of expenseRowsForCumulative) {
+        const d = row.expense_date;
+        const dateStr = typeof d === 'string' ? d.split('T')[0] : (d ? new Date(d).toISOString().split('T')[0] : null);
+        if (dateStr) {
+          byDate[dateStr] = (byDate[dateStr] || 0) + parseFloat(String(row.amount || 0));
+        }
+      }
+      const sortedDates = Object.keys(byDate).sort();
+      let running = 0;
+      const cumulativeCosts = sortedDates.map((date) => {
+        running += byDate[date];
+        return { date, amount: Math.round(running * 100) / 100 };
+      });
+
+      const spentPercentRounded = Math.round(percentage * 10) / 10;
+      const budgetSection = {
+        totalBudget: budgetAmount,
+        spent: totalSpent,
+        remaining,
+        spentPercent: spentPercentRounded,
+        breakdown: budgetAmount > 0
+          ? [{ category: 'Budget', amount: budgetAmount, percentage: 100, colorHex: '#218598' }]
+          : [],
+        vsActual:
+          budgetAmount > 0 || totalSpent > 0
+            ? [
+                {
+                  category: 'Total',
+                  budgeted: budgetAmount,
+                  actual: totalSpent,
+                  variance:
+                    budgetAmount > 0
+                      ? Math.round(((totalSpent - budgetAmount) / budgetAmount) * 100)
+                      : 0,
+                  colorHex: '#218598',
+                },
+              ]
+            : [],
+        cumulativeCosts,
+      };
 
       return res.json({
         success: true,
@@ -430,6 +474,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           dailyCostBurn: [],
         },
         activity: { heatmap: [] },
+        budgetSection,
       });
     } catch (err) {
       console.error('[Summary Error]', err.message, err.stack);
