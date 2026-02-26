@@ -1326,7 +1326,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             expense_date: new Date().toISOString().split('T')[0],
             source: 'whatsapp',
           })
-          .select()
+          .select('id, project_id, user_id, amount, description, expense_date, created_at')
           .single();
 
         if (insertError) {
