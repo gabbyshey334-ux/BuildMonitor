@@ -77,7 +77,7 @@ export const projects = pgTable("projects", {
   managerId: uuid("manager_id").references(() => profiles.id, { onDelete: 'set null' }),
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
-  budgetAmount: decimal("budget_amount", { precision: 15, scale: 2 }),
+  budgetAmount: decimal("budget", { precision: 15, scale: 2 }),
   channelType: varchar("channel_type", { length: 20 }).default('direct'), // 'direct' | 'group'
   status: varchar("status", { length: 20 }).notNull().default('active'), // 'active', 'completed', 'paused'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

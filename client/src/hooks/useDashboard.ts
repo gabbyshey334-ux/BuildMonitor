@@ -106,8 +106,8 @@ export function useProjectSummary(projectId: string | null | undefined) {
   return useQuery({
     queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, projectId],
     queryFn: () => fetchProjectSummary(projectId!),
-    staleTime: 30 * 1000,
-    refetchInterval: 30 * 1000,
+    staleTime: 0,
+    refetchInterval: 5000,
     enabled: !!projectId,
   });
 }

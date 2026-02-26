@@ -10,6 +10,7 @@ interface ApiProject {
   userId: string;
   name: string;
   description?: string | null;
+  budget?: string | number | null;
   budgetAmount?: string | null;
   status: string;
   totalSpent?: string;
@@ -20,7 +21,7 @@ interface ApiProject {
 }
 
 function mapApiProjectToProject(api: ApiProject): Project {
-  const budget = api.budgetAmount != null ? parseFloat(String(api.budgetAmount)) : 0;
+  const budget = api.budget != null ? parseFloat(String(api.budget)) : (api.budgetAmount != null ? parseFloat(String(api.budgetAmount)) : 0);
   const spent = api.totalSpent != null ? parseFloat(String(api.totalSpent)) : 0;
   return {
     id: api.id,

@@ -339,7 +339,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
     user_id: userId,
     name: projectName,
     description: `Started: ${d.start_date || 'TBD'}. Created via WhatsApp.`,
-    budget_amount: d.budget ? d.budget.toString() : '0',
+    budget: d.budget ? d.budget.toString() : '0',
     status: 'active',
     channel_type: 'direct',
     created_at: new Date().toISOString(),
@@ -771,12 +771,12 @@ async function upsertDailyLog(
 
 async function handleBudgetQuery(from: string, projectId: string): Promise<void> {
   const { data: project } = await supabase
-    .from('projects').select('budget_amount, name').eq('id', projectId).single();
+    .from('projects').select('budget, name').eq('id', projectId).single();
   const { data: expenses } = await supabase
     .from('expenses').select('amount').eq('project_id', projectId);
 
   const totalSpent = (expenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
-  const budget = parseFloat(String(project?.budget_amount || 0));
+  const budget = parseFloat(String(project?.budget || 0));
   const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
   const remaining = budget > 0 ? Math.max(0, budget - totalSpent) : 0;
 
@@ -1030,7 +1030,7 @@ export async function sendDailyHeartbeat(): Promise<void> {
   // Get all active projects
   const { data: projects } = await supabase
     .from('projects')
-    .select('id, name, budget_amount, user_id')
+    .select('id, name, budget, user_id')
     .eq('status', 'active');
 
   if (!projects) return;
@@ -1068,7 +1068,7 @@ export async function sendDailyHeartbeat(): Promise<void> {
     const { data: allExpenses } = await supabase
       .from('expenses').select('amount').eq('project_id', project.id);
     const totalSpent = (allExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
-    const budget = parseFloat(String(project.budget_amount || 0));
+    const budget = parseFloat(String(project.budget || 0));
     const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
 
     const hadActivity = todayLog !== null;
@@ -1306,29 +1306,58 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
       if (message.includes('1') || /yes|ok|✅|log it|confirm/i.test(message)) {
-        try {
-          await supabase.from('expenses').insert({
+        console.log('[Expense Insert] Attempting:', {
+          user_id: userId,
+          project_id: pendingData.project_id,
+          description: pendingData.description,
+          amount: String(pendingData.amount),
+          supabaseUrl: process.env.SUPABASE_URL?.substring(0, 30),
+        });
+
+        const { data: insertedExpense, error: insertError } = await supabase
+          .from('expenses')
+          .insert({
             user_id: userId,
             project_id: pendingData.project_id,
             description: pendingData.description || 'Expense',
-            amount: String(pendingData.amount!),
+            amount: String(pendingData.amount),
             quantity_logged: pendingData.quantity ? String(pendingData.quantity) : null,
             currency: 'UGX',
             expense_date: new Date().toISOString().split('T')[0],
             source: 'whatsapp',
+          })
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[Expense Insert] FAILED:', {
+            error: insertError.message,
+            code: insertError.code,
+            details: insertError.details,
+            hint: insertError.hint,
           });
-          // Track vendor
-          if (pendingData.vendor && pendingData.amount) {
-            await upsertVendor(pendingData.project_id, pendingData.vendor, pendingData.amount);
-          }
-          await updateExpenseState(userId, null, {});
-          await sendMessage(From,
-            `✅ *Logged!*\n\n${pendingData.description}\n💰 ${fmt(pendingData.amount!)} UGX\n\nYour dashboard and budget have been updated.`
+          await sendMessage(
+            From,
+            `⚠️ Could not save expense.\nError: ${insertError.message}\n\nPlease try again.`
           );
-        } catch (err: any) {
-          console.error('[Expense Insert Error]', err);
-          await sendMessage(From, 'Sorry, could not save. Please try again.');
+          res.setHeader('Content-Type', 'text/xml');
+          return res.status(200).send(twimlOk);
         }
+
+        console.log('[Expense Insert] SUCCESS:', {
+          id: insertedExpense?.id,
+          amount: insertedExpense?.amount,
+          project_id: insertedExpense?.project_id,
+        });
+
+        if (pendingData.vendor && pendingData.amount) {
+          await upsertVendor(pendingData.project_id, pendingData.vendor, pendingData.amount);
+        }
+        await updateExpenseState(userId, null, {});
+        await sendMessage(
+          From,
+          `✅ *Logged!*\n\n${pendingData.description}\n💰 ${fmt(pendingData.amount!)} UGX\n\nYour dashboard and budget have been updated.`
+        );
       } else if (message.includes('2') || /edit|✏️/i.test(message)) {
         await updateExpenseState(userId, null, {});
         await sendMessage(From, 'No problem! Send the corrected details.');

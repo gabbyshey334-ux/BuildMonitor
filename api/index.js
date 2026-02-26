@@ -308,34 +308,92 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
     }
     try {
       console.log('[Summary] Running query for:', { projectId, userId });
-      const dbConnection = initializeDatabase();
-      if (!dbConnection) {
-        return res.status(503).json({ success: false, error: 'Database unavailable' });
+
+      let projectRow = null;
+      let totalSpent = 0;
+
+      // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && supabaseServiceKey) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+        const { data: projectData, error: projectError } = await supabase
+          .from('projects')
+          .select('id, name, budget, status, created_at')
+          .eq('id', projectId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (projectError) {
+          console.error('[Summary] Supabase project error:', projectError);
+          return res.status(500).json({ success: false, error: projectError.message });
+        }
+        projectRow = projectData;
+
+        let expenseRowCount = 0;
+        if (projectRow) {
+          const { data: expenseRows, error: expenseError } = await supabase
+            .from('expenses')
+            .select('amount')
+            .eq('project_id', projectId);
+          if (expenseError) console.error('[Summary] Supabase expenses error:', expenseError);
+          expenseRowCount = (expenseRows || []).length;
+          totalSpent = (expenseRows || []).reduce((sum, row) => sum + parseFloat(String(row.amount || 0)), 0);
+        }
+
+        console.log('[Summary Debug]', {
+          projectId,
+          source: 'supabase',
+          projectFound: !!projectRow,
+          projectKeys: projectRow ? Object.keys(projectRow) : [],
+          projectBudget: projectRow?.budget ?? 'NOT_FOUND',
+          expenseRowCount,
+          totalSpent,
+        });
       }
-      const projectResult = await dbConnection.execute(sql`
-        SELECT id, name, budget, status, created_at
-        FROM projects
-        WHERE id = ${projectId} AND user_id = ${userId}
-        LIMIT 1
-      `);
-      const projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
-      console.log('[Summary] Project found:', projectRow ? 'yes' : 'no', projectRow ? Object.keys(projectRow) : []);
+
+      // Fallback: raw DB connection (must use same DB as webhook - set DATABASE_URL to Supabase connection string)
+      if (!projectRow && initializeDatabase()) {
+        const dbConnection = initializeDatabase();
+        const projectResult = await dbConnection.execute(sql`
+          SELECT id, name, budget, status, created_at
+          FROM projects
+          WHERE id = ${projectId} AND user_id = ${userId}
+          LIMIT 1
+        `);
+        projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
+
+        if (projectRow) {
+          const expenseResult = await dbConnection.execute(sql`
+            SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
+            FROM expenses
+            WHERE project_id = ${projectId}
+          `);
+          totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
+        }
+
+        console.log('[Summary Debug]', {
+          projectId,
+          source: 'database',
+          projectFound: !!projectRow,
+          projectBudget: projectRow?.budget ?? 'NOT_FOUND',
+          totalSpent,
+        });
+      }
+
       if (!projectRow) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
-      const expenseResult = await dbConnection.execute(sql`
-        SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
-        FROM expenses
-        WHERE project_id = ${projectId}
-      `);
-      const totalSpent = parseFloat(Array.isArray(expenseResult) ? expenseResult[0]?.total : (expenseResult?.rows?.[0]?.total ?? expenseResult?.total) || '0');
-      const budgetAmount = parseFloat(projectRow.budget != null ? projectRow.budget : '0');
+
+      const budgetAmount = parseFloat(String(projectRow.budget ?? '0'));
       const remaining = Math.max(0, budgetAmount - totalSpent);
       const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
       const createdAt = projectRow.created_at ? new Date(projectRow.created_at) : new Date();
       const daysSinceStart = Math.max(1, (Date.now() - createdAt.getTime()) / 86400000);
       const dailyBurnRate = totalSpent / daysSinceStart;
       const weeksRemaining = dailyBurnRate > 0 ? remaining / (dailyBurnRate * 7) : null;
+
       return res.json({
         success: true,
         project: {
