@@ -1314,7 +1314,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           supabaseUrl: process.env.SUPABASE_URL?.substring(0, 30),
         });
 
-        const { data: insertedExpense, error: insertError } = await supabase
+        const { error: insertError } = await supabase
           .from('expenses')
           .insert({
             user_id: userId,
@@ -1325,9 +1325,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             currency: 'UGX',
             expense_date: new Date().toISOString().split('T')[0],
             source: 'whatsapp',
-          })
-          .select('id, project_id, user_id, amount, description, expense_date, created_at')
-          .single();
+          });
 
         if (insertError) {
           console.error('[Expense Insert] FAILED:', {
@@ -1345,9 +1343,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         console.log('[Expense Insert] SUCCESS:', {
-          id: insertedExpense?.id,
-          amount: insertedExpense?.amount,
-          project_id: insertedExpense?.project_id,
+          project_id: pendingData.project_id,
+          amount: pendingData.amount,
+          description: pendingData.description,
         });
 
         if (pendingData.vendor && pendingData.amount) {
