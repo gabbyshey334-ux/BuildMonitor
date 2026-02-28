@@ -2,26 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme variables: dark (default) and light. Class .dark / .light on html. */
-:root,
-.dark {
-  --bg-primary: #0a0a0a;
-  --bg-secondary: #1a1d2e;
-  --bg-card: #1e2235;
-  --text-primary: #ffffff;
-  --text-muted: #94a3b8;
-  --border-color: #2d3748;
-  --accent-primary: #06b6d4;
-}
-
-.light {
+/* Theme variables: light = default (:root), dark = .dark on html */
+:root {
   --bg-primary: #f8fafc;
   --bg-secondary: #f1f5f9;
   --bg-card: #ffffff;
   --text-primary: #0f172a;
   --text-muted: #64748b;
   --border-color: #e2e8f0;
-  --accent-primary: #06b6d4;
+  --accent: #06b6d4;
+}
+
+.dark {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d2e;
+  --bg-card: #1e2235;
+  --text-primary: #ffffff;
+  --text-muted: #94a3b8;
+  --border-color: #2d3748;
+  --accent: #06b6d4;
+}
+
+/* Legacy alias */
+:root, .dark {
+  --accent-primary: var(--accent);
 }
 
 :root {
@@ -226,6 +230,10 @@ html {
 
   html.dark body {
     color: #F1F5F9;
+  }
+
+  html.light body {
+    color: hsl(var(--foreground));
   }
 
   h1, h2, h3, h4, h5, h6 {

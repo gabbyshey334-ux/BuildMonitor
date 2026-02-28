@@ -20,24 +20,6 @@ import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// CRITICAL: Explicitly import shared schema to ensure it's included in Vercel bundle
-// This ensures dist/shared/schema.js is included in the serverless function
-// Vercel's @vercel/node builder only includes files that are directly imported
-// By importing this here, we ensure the shared folder is included in the bundle
-// Note: This is a side-effect import - we don't use the result, just ensure it's bundled
-try {
-  const sharedSchemaPath = join(__dirname, '..', 'dist', 'shared', 'schema.js');
-  if (fs.existsSync(sharedSchemaPath)) {
-    // Use dynamic import to ensure it's included in bundle
-    // This will be resolved at build time by Vercel's bundler
-    import(sharedSchemaPath).catch(() => {
-      // Non-critical - the import will happen when server loads
-    });
-  }
-} catch (error) {
-  // Non-critical - the import will happen when server loads
-}
-
 // Create Express app
 const app = express();
 
@@ -1176,97 +1158,66 @@ app.post('/api/auth/login', async (req, res) => {
 
     console.log('[Login] ✅ Supabase Auth successful:', authData.user.id);
 
-    // Get user from users table
-    const dbConnection = initializeDatabase();
-    if (!dbConnection) {
-      console.error('[Login] ❌ Database connection not available');
+    // Get or create profile from Supabase profiles table (no Drizzle/Postgres)
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseServiceKey) {
+      console.error('[Login] ❌ SUPABASE_SERVICE_ROLE_KEY not set');
       return res.status(500).json({
         success: false,
-        error: 'Database connection not available',
+        error: 'Server configuration error',
+        message: 'SUPABASE_SERVICE_ROLE_KEY must be configured',
+      });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name, whatsapp_number')
+      .eq('id', authData.user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      console.error('[Login] ❌ Profile fetch error:', profileError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to load profile',
+        message: profileError.message,
       });
     }
 
-    // Fetch user from users table (new schema)
-    const userResult = await dbConnection.execute(sql`
-      SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber"
-      FROM users
-      WHERE id = ${authData.user.id}
-      LIMIT 1
-    `);
-
-    const user = Array.isArray(userResult) ? userResult[0] : (userResult.rows ? userResult.rows[0] : userResult);
-
-    // If user doesn't exist in users table, create it from Supabase Auth data
-    if (!user) {
-      console.log('[Login] User not found in users table, creating from Supabase Auth...');
-      
-      // Try to get metadata from Supabase Auth
+    let userProfile = profile;
+    if (!userProfile) {
       const fullName = authData.user.user_metadata?.full_name || authData.user.email?.split('@')[0] || 'User';
-      const whatsappNumber = authData.user.user_metadata?.whatsapp_number || '';
-      
-      // Insert user into users table
-      try {
-        await dbConnection.execute(sql`
-          INSERT INTO users (id, email, full_name, whatsapp_number, created_at, updated_at)
-          VALUES (${authData.user.id}, ${authData.user.email}, ${fullName}, ${whatsappNumber}, NOW(), NOW())
-          ON CONFLICT (id) DO NOTHING
-        `);
-        
-        // Fetch the newly created user
-        const newUserResult = await dbConnection.execute(sql`
-          SELECT id, email, full_name as "fullName", whatsapp_number as "whatsappNumber"
-          FROM users
-          WHERE id = ${authData.user.id}
-          LIMIT 1
-        `);
-        const newUser = Array.isArray(newUserResult) ? newUserResult[0] : (newUserResult.rows ? newUserResult.rows[0] : newUserResult);
-        
-        if (!newUser) {
-          throw new Error('Failed to create user record');
-        }
-        
-        console.log('[Login] ✅ User created in users table');
-        
-        // Save session so cookie is sent
-        req.session.userId = authData.user.id;
-        req.session.email = authData.user.email;
-        await new Promise((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-        console.log('[Login] Session saved:', { sessionId: req.sessionID, userId: req.session.userId });
-        
-        // Generate JWT token
-        const token = generateToken(authData.user.id, authData.user.email);
-        
-        return res.json({
-          success: true,
-          token,
-          user: {
-            id: newUser.id,
-            email: newUser.email,
-            fullName: newUser.fullName,
-            whatsappNumber: newUser.whatsappNumber,
+      const whatsappNumber = (authData.user.user_metadata?.whatsapp_number || '').trim() || ('pending-' + authData.user.id.substring(0, 8));
+      const { data: inserted, error: insertErr } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          {
+            id: authData.user.id,
+            email: authData.user.email,
+            full_name: fullName,
+            whatsapp_number: whatsappNumber,
           },
-        });
-      } catch (createError) {
-        console.error('[Login] ❌ Failed to create user in users table:', createError);
+          { onConflict: 'id' }
+        )
+        .select('id, email, full_name, whatsapp_number')
+        .single();
+      if (insertErr || !inserted) {
+        console.error('[Login] ❌ Profile upsert error:', insertErr?.message);
         return res.status(500).json({
           success: false,
-          error: 'Failed to create user record',
-          message: 'Please contact support',
+          error: 'Failed to create profile',
+          message: insertErr?.message || 'Please contact support',
         });
       }
+      userProfile = inserted;
+      console.log('[Login] ✅ Profile created in profiles table');
     }
 
-    // Generate JWT token
-    const token = generateToken(authData.user.id, user.email || authData.user.email);
-
-    // Save session so cookie is sent and subsequent requests have userId
+    // Save session so cookie is sent
     req.session.userId = authData.user.id;
-    req.session.email = user.email || authData.user.email;
+    req.session.email = userProfile.email || authData.user.email;
     await new Promise((resolve, reject) => {
       req.session.save((err) => {
         if (err) reject(err);
@@ -1275,15 +1226,17 @@ app.post('/api/auth/login', async (req, res) => {
     });
     console.log('[Login] Session saved:', { sessionId: req.sessionID, userId: req.session.userId });
 
-    // Return token and user data
-    res.json({
+    // Generate JWT token
+    const token = generateToken(authData.user.id, userProfile.email || authData.user.email);
+
+    return res.json({
       success: true,
       token,
       user: {
-        id: user.id,
-        email: user.email || authData.user.email,
-        fullName: user.fullName,
-        whatsappNumber: user.whatsappNumber,
+        id: userProfile.id,
+        email: userProfile.email || authData.user.email,
+        fullName: userProfile.full_name,
+        whatsappNumber: userProfile.whatsapp_number,
       },
     });
   } catch (error) {
@@ -1355,46 +1308,30 @@ app.post('/api/auth/register', async (req, res) => {
 
     console.log('[Register] ✅ Supabase Auth user created:', authData.user.id);
 
-    // 2. Create user in users table (new schema)
-    const dbConnection = initializeDatabase();
-    if (!dbConnection) {
-      // Clean up auth user if database connection fails
+    // Create profile in Supabase profiles table (no Drizzle/Postgres)
+    const { error: profileError } = await adminClient
+      .from('profiles')
+      .upsert(
+        {
+          id: authData.user.id,
+          email,
+          full_name: fullName,
+          whatsapp_number: whatsappNumber,
+        },
+        { onConflict: 'id' }
+      );
+
+    if (profileError) {
+      console.error('[Register] ❌ Profile insert error:', profileError.message);
       await adminClient.auth.admin.deleteUser(authData.user.id);
       return res.status(500).json({
         success: false,
-        error: 'Database connection not available',
+        error: 'Failed to create profile',
+        message: profileError.message,
       });
     }
 
-    try {
-      await dbConnection.execute(sql`
-        INSERT INTO users (id, email, full_name, whatsapp_number, created_at, updated_at)
-        VALUES (${authData.user.id}, ${email}, ${fullName}, ${whatsappNumber}, NOW(), NOW())
-        ON CONFLICT (id) DO NOTHING
-      `);
-      console.log('[Register] ✅ User created in users table');
-      
-      // Also create default user_settings
-      try {
-        await dbConnection.execute(sql`
-          INSERT INTO user_settings (user_id, language, currency, created_at, updated_at)
-          VALUES (${authData.user.id}, 'en', 'UGX', NOW(), NOW())
-          ON CONFLICT (user_id) DO NOTHING
-        `);
-        console.log('[Register] ✅ User settings created');
-      } catch (settingsError) {
-        console.warn('[Register] ⚠️ Failed to create user settings (non-critical):', settingsError.message);
-      }
-    } catch (userError) {
-      console.error('[Register] ❌ User creation error:', userError);
-      // Clean up auth user if user creation fails
-      await adminClient.auth.admin.deleteUser(authData.user.id);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create user record',
-        details: userError.message,
-      });
-    }
+    console.log('[Register] ✅ Profile created in profiles table');
 
     // Generate JWT token
     const token = generateToken(authData.user.id, email);
@@ -1428,7 +1365,7 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
   try {
     const userId = req.userId; // Set by requireAuth middleware
     console.log('[Auth Me] User ID from token:', userId);
-    
+
     if (!userId) {
       return res.status(401).json({
         success: false,
@@ -1436,30 +1373,33 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
       });
     }
 
-    // Get user profile from database
-    const dbConnection = initializeDatabase();
-    
-    if (!dbConnection) {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
       return res.status(500).json({
         success: false,
-        error: 'Database connection not available',
+        error: 'Server configuration error',
       });
     }
 
-    // Use raw SQL to fetch user from users table
-    const result = await dbConnection.execute(sql`
-      SELECT u.id, u.whatsapp_number as "whatsappNumber", u.full_name as "fullName", 
-             u.email, us.currency as "defaultCurrency", 
-             us.language as "preferredLanguage"
-      FROM users u
-      LEFT JOIN user_settings us ON us.user_id = u.id
-      WHERE u.id = ${userId}
-      LIMIT 1
-    `);
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    const user = Array.isArray(result) ? result[0] : (result.rows ? result.rows[0] : result);
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, whatsapp_number, default_currency, preferred_language')
+      .eq('id', userId)
+      .maybeSingle();
 
-    if (!user) {
+    if (profileError) {
+      console.error('[Auth Me] ❌ Profile error:', profileError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch user',
+      });
+    }
+
+    if (!profile) {
       console.log('[Auth Me] ❌ User profile not found');
       return res.status(404).json({
         success: false,
@@ -1467,17 +1407,17 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
       });
     }
 
-    console.log('[Auth Me] ✅ Success:', user.id);
+    console.log('[Auth Me] ✅ Success:', profile.id);
 
     res.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email || null,
-        fullName: user.fullName,
-        whatsappNumber: user.whatsappNumber,
-        defaultCurrency: user.defaultCurrency || 'UGX',
-        preferredLanguage: user.preferredLanguage || 'en',
+        id: profile.id,
+        email: profile.email || null,
+        fullName: profile.full_name,
+        whatsappNumber: profile.whatsapp_number,
+        defaultCurrency: profile.default_currency || 'UGX',
+        preferredLanguage: profile.preferred_language || 'en',
       },
     });
   } catch (error) {

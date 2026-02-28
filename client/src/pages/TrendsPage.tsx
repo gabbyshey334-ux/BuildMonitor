@@ -37,13 +37,13 @@ function formatDate(s: string) {
 function TrendsSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="h-8 bg-zinc-800 rounded w-48" />
+      <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-48" />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-80 bg-zinc-800/50 rounded-lg" />
-        <div className="h-80 bg-zinc-800/50 rounded-lg" />
+        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
       </div>
-      <div className="h-64 bg-zinc-800/50 rounded-lg" />
-      <div className="h-48 bg-zinc-800/50 rounded-lg" />
+      <div className="h-64 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+      <div className="h-48 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
     </div>
   );
 }
@@ -51,8 +51,8 @@ function TrendsSkeleton() {
 function EmptyState({ message, hint }: { message: string; hint?: string }) {
   return (
     <div className="py-8 px-4 text-center">
-      <p className="text-zinc-400 text-sm font-medium">{message}</p>
-      {hint && <p className="text-zinc-500 text-xs mt-2 max-w-sm mx-auto">{hint}</p>}
+      <p className="dark:text-zinc-400 text-slate-600 text-sm font-medium">{message}</p>
+      {hint && <p className="dark:text-zinc-500 text-slate-500 text-xs mt-2 max-w-sm mx-auto">{hint}</p>}
     </div>
   );
 }
@@ -73,7 +73,7 @@ function TrendBadge({ trend }: { trend: "increasing" | "decreasing" | "stable" }
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-sm text-zinc-400">
+    <span className="inline-flex items-center gap-1 text-sm dark:text-zinc-400 text-slate-500">
       <Minus className="w-4 h-4" /> Stable
     </span>
   );
@@ -94,15 +94,15 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Trends & Insights</h1>
-          <p className="text-zinc-400 mb-4">
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Trends & Insights</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">
             {hasProjects
               ? "No project selected. Select a project from the sidebar or dashboard."
               : "Create your first project to view trends and insights."}
           </p>
           <Button
             onClick={() => setLocation("/projects")}
-            className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 bg-transparent"
+            className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {hasProjects ? "Back to Projects" : "Create your first project"}
@@ -116,7 +116,7 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-6">Trends & Insights</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Trends & Insights</h1>
           <TrendsSkeleton />
         </div>
       </AppLayout>
@@ -127,11 +127,11 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Trends & Insights</h1>
-          <p className="text-zinc-400 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Trends & Insights</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
           <Button
             onClick={() => refetch()}
-            className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 bg-transparent"
+            className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Try again
@@ -149,7 +149,7 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-6">Trends & Insights</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Trends & Insights</h1>
           <Card className="border-border bg-card">
             <CardContent className="pt-6">
               <EmptyState

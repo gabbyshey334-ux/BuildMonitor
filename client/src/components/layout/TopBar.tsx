@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Menu,
-  Building2,
   ChevronDown,
   Bell,
   User,
@@ -61,7 +60,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
     : "U";
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b dark:border-zinc-800/50 border-slate-200 dark:bg-[#0a0a0a] bg-white px-4 md:px-6">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between gap-4 border-b dark:border-zinc-700 border-slate-200 dark:bg-[#1a1d2e] bg-white px-4 md:px-6">
       {/* Left: hamburger (desktop) or logo (mobile) */}
       <div className="flex items-center gap-3 min-w-0">
         {showHamburger && (
@@ -74,10 +73,12 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
             >
               <Menu className="h-5 w-5" />
             </button>
-            <Link href={currentProject ? `/dashboard?project=${currentProject.id}` : "/dashboard"} className="md:hidden flex items-center gap-2 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-r from-[#22c55e] to-[#14b8a6]">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
+            <Link href="/projects" className="md:hidden flex items-center gap-2 min-w-0">
+              <img
+                src="/assets/images/logo.png"
+                alt="JengaTrack"
+                className="h-8 w-auto max-h-8 object-contain mix-blend-multiply dark:mix-blend-lighten shrink-0"
+              />
               <span className="font-heading font-semibold dark:text-white text-slate-800 truncate">
                 JengaTrack
               </span>

@@ -32,16 +32,21 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden py-12">
+    <div className="min-h-screen flex items-center justify-center dark:bg-[#0f1117] bg-slate-50 relative overflow-hidden py-12">
       {/* Background Orbs */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-[440px] px-6 relative z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-6 shadow-lg">
-            <span className="text-2xl font-black text-primary-foreground">CM</span>
-          </div>
+          <Link href="/" className="inline-flex flex-col items-center gap-2 group mb-6">
+            <img
+              src="/assets/images/logo.png"
+              alt="JengaTrack"
+              className="h-12 w-auto object-contain mix-blend-multiply dark:mix-blend-lighten group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.5)] transition-shadow duration-300"
+            />
+            <span className="text-xl font-bold text-foreground tracking-tight">JengaTrack</span>
+          </Link>
           <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
             Create Account
           </h1>
@@ -50,7 +55,7 @@ export default function Signup() {
           </p>
         </div>
 
-        <Card className="bg-card border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
+        <Card className="dark:bg-[#1e2235] bg-white border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg font-semibold text-card-foreground">
               Sign Up

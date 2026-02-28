@@ -32,7 +32,7 @@ export function BottomNav() {
   return (
     <>
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex items-center justify-around py-2 px-2 pb-safe dark:bg-[#0a0a0a] bg-white border-t dark:border-zinc-800/50 border-slate-200"
+        className="fixed bottom-0 left-0 right-0 z-40 md:hidden flex items-center justify-around py-2 px-2 pb-safe dark:bg-[#1a1d2e] bg-white border-t dark:border-zinc-700 border-slate-200"
       >
         {TABS.map((tab) => {
           const href = hrefWithProject(tab.href);
@@ -45,7 +45,7 @@ export function BottomNav() {
               <a
                 className={cn(
                   "flex flex-col items-center justify-center gap-1 min-w-[56px] py-2 rounded-lg transition-all duration-200",
-                  isActive ? "text-[#22c55e]" : "dark:text-zinc-500 dark:hover:text-zinc-300 text-slate-500 hover:text-slate-700"
+                  isActive ? "text-[#22c55e]" : "dark:text-zinc-500 dark:hover:text-zinc-300 text-slate-400 hover:text-slate-600"
                 )}
               >
                 <tab.icon className="h-6 w-6" />
@@ -59,7 +59,7 @@ export function BottomNav() {
           onClick={() => setMoreOpen(true)}
           className={cn(
             "flex flex-col items-center justify-center gap-1 min-w-[56px] py-2 rounded-lg transition-all duration-200",
-            moreOpen ? "text-[#22c55e]" : "dark:text-zinc-500 dark:hover:text-zinc-300 text-slate-500 hover:text-slate-700"
+            moreOpen ? "text-[#22c55e]" : "dark:text-zinc-500 dark:hover:text-zinc-300 text-slate-400 hover:text-slate-600"
           )}
           aria-label="More"
         >

@@ -34,18 +34,18 @@ function formatUgx(n: number) {
 function BudgetSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="h-8 bg-zinc-800 rounded w-48" />
+      <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-48" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 bg-zinc-800/50 rounded-lg" />
+          <div key={i} className="h-24 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-80 bg-zinc-800/50 rounded-lg" />
-        <div className="h-80 bg-zinc-800/50 rounded-lg" />
+        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
       </div>
-      <div className="h-64 bg-zinc-800/50 rounded-lg" />
-      <div className="h-48 bg-zinc-800/50 rounded-lg" />
+      <div className="h-64 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+      <div className="h-48 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
     </div>
   );
 }
@@ -53,8 +53,8 @@ function BudgetSkeleton() {
 function EmptyState({ message, hint }: { message: string; hint?: string }) {
   return (
     <div className="py-8 px-4 text-center">
-      <p className="text-zinc-400 text-sm font-medium">{message}</p>
-      {hint && <p className="text-zinc-500 text-xs mt-2 max-w-sm mx-auto">{hint}</p>}
+      <p className="dark:text-zinc-400 text-slate-600 text-sm font-medium">{message}</p>
+      {hint && <p className="dark:text-zinc-500 text-slate-500 text-xs mt-2 max-w-sm mx-auto">{hint}</p>}
     </div>
   );
 }
@@ -73,13 +73,13 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Budgets & Costs</h1>
-          <p className="text-zinc-400 max-w-md mx-auto mb-6">
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Budgets & Costs</h1>
+          <p className="dark:text-zinc-400 text-slate-500 max-w-md mx-auto mb-6">
             {hasProjects
               ? "Select a project from the sidebar or dashboard to view budget and expenses."
               : "Create your first project to track budget and expenses."}
           </p>
-          <Button asChild variant="outline" className="border-zinc-600 text-zinc-300">
+          <Button asChild variant="outline" className="dark:border-zinc-600 dark:text-zinc-300 border-slate-300 text-slate-700">
             <Link href="/projects">{hasProjects ? "Back to Projects" : "Create your first project"}</Link>
           </Button>
         </div>
@@ -91,7 +91,7 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold text-white mb-6">Budgets & Costs</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Budgets & Costs</h1>
           <BudgetSkeleton />
         </div>
       </AppLayout>
@@ -102,11 +102,11 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold text-white mb-2">Budgets & Costs</h1>
-          <p className="text-zinc-400 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Budgets & Costs</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
           <Button
             onClick={() => refetch()}
-            className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 bg-transparent"
+            className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Try again
@@ -129,35 +129,35 @@ export default function BudgetPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">Budgets & Costs</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Budgets & Costs</h1>
 
         {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <Card className="border-border bg-card">
+          <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-[#CBD5E1] mb-1">Total Budget</p>
-              <p className="text-2xl font-bold text-white">{formatUgx(summary.total)}</p>
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Total Budget</p>
+              <p className="text-2xl font-bold dark:text-white text-slate-800">{formatUgx(summary.total)}</p>
             </CardContent>
           </Card>
-          <Card className="border-border bg-card">
+          <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-[#CBD5E1] mb-1">Spent</p>
-              <p className="text-2xl font-bold text-white">
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Spent</p>
+              <p className="text-2xl font-bold dark:text-white text-slate-800">
                 {formatUgx(summary.spent)}
-                <span className="text-sm font-normal text-[#94A3B8] ml-2">({summary.percentage}%)</span>
+                <span className="text-sm font-normal dark:text-[#94A3B8] text-slate-500 ml-2">({summary.percentage}%)</span>
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border bg-card">
+          <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm text-[#CBD5E1] mb-1">Remaining</p>
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Remaining</p>
               <p className="text-2xl font-bold text-[#14b8a6]">{formatUgx(summary.remaining)}</p>
             </CardContent>
           </Card>
         </div>
 
         <div className="mb-6">
-          <div className="flex justify-between text-sm text-[#CBD5E1] mb-2">
+          <div className="flex justify-between text-sm dark:text-[#CBD5E1] text-slate-600 mb-2">
             <span>Budget used</span>
             <span>{summary.percentage}%</span>
           </div>
@@ -165,7 +165,7 @@ export default function BudgetPage() {
             value={summary.percentage}
             className={`h-2 ${summary.percentage > 80 ? "bg-red-500/20 [&>div]:bg-red-500" : ""}`}
           />
-          <div className="flex gap-6 mt-2 text-xs text-zinc-500">
+          <div className="flex gap-6 mt-2 text-xs dark:text-zinc-500 text-slate-500">
             {summary.weeklyBurnRate != null && summary.weeklyBurnRate > 0 && (
               <span>Weekly burn: {formatUgx(summary.weeklyBurnRate)}</span>
             )}
@@ -176,9 +176,9 @@ export default function BudgetPage() {
         </div>
 
         {/* Budget breakdown */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Budget Breakdown</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Budget Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             {byCategory.length > 0 ? (
@@ -209,9 +209,9 @@ export default function BudgetPage() {
                           className="w-3 h-3 rounded-full"
                           style={{ backgroundColor: COLORS[i % COLORS.length] }}
                         />
-                        <span className="text-sm text-[#E2E8F0]">{c.category}</span>
+                        <span className="text-sm dark:text-[#E2E8F0] text-slate-600">{c.category}</span>
                       </div>
-                      <span className="font-medium text-white">
+                      <span className="font-medium dark:text-white text-slate-800">
                         {formatUgx(c.total)} ({c.percentage}%)
                       </span>
                     </div>
@@ -228,9 +228,9 @@ export default function BudgetPage() {
         </Card>
 
         {/* Budget vs actual (by month) */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Spending by Month</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Spending by Month</CardTitle>
           </CardHeader>
           <CardContent>
             {byMonth.length > 0 ? (
@@ -250,9 +250,9 @@ export default function BudgetPage() {
         </Card>
 
         {/* Cumulative costs */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Cumulative Costs Over Time</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Cumulative Costs Over Time</CardTitle>
           </CardHeader>
           <CardContent>
             {cumulativeData.length > 0 ? (
@@ -275,16 +275,16 @@ export default function BudgetPage() {
         </Card>
 
         {/* Recent transactions */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Recent Transactions</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Recent Transactions</CardTitle>
           </CardHeader>
           <CardContent>
             {recent.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border text-left text-[#94A3B8]">
+                    <tr className="border-b border-border text-left dark:text-[#94A3B8] text-slate-500">
                       <th className="py-2 pr-4">Date</th>
                       <th className="py-2 pr-4">Description</th>
                       <th className="py-2 pr-4 text-right">Amount</th>
@@ -296,19 +296,19 @@ export default function BudgetPage() {
                   <tbody>
                     {recent.map((r) => (
                       <tr key={r.id} className="border-b border-border/50">
-                        <td className="py-2 pr-4 text-[#E2E8F0]">
+                        <td className="py-2 pr-4 dark:text-[#E2E8F0] text-slate-600">
                           {r.expense_date ? new Date(r.expense_date).toLocaleDateString() : "—"}
                         </td>
-                        <td className="py-2 pr-4 text-white">{r.description}</td>
-                        <td className="py-2 pr-4 text-right font-medium text-white">{formatUgx(r.amount)}</td>
-                        <td className="py-2 pr-4 text-[#94A3B8]">{r.category}</td>
+                        <td className="py-2 pr-4 dark:text-white text-slate-800">{r.description}</td>
+                        <td className="py-2 pr-4 text-right font-medium dark:text-white text-slate-800">{formatUgx(r.amount)}</td>
+                        <td className="py-2 pr-4 dark:text-[#94A3B8] text-slate-500">{r.category}</td>
                         <td className="py-2 pr-4">
                           {r.source === "whatsapp" ? (
                             <span className="text-[#22c55e]" title="WhatsApp">
                               <MessageCircle className="w-4 h-4 inline" />
                             </span>
                           ) : (
-                            <span className="text-zinc-500">Manual</span>
+                            <span className="dark:text-zinc-500 text-slate-500">Manual</span>
                           )}
                         </td>
                         <td className="py-2">
@@ -333,19 +333,19 @@ export default function BudgetPage() {
         </Card>
 
         {/* Vendor breakdown */}
-        <Card className="border-border bg-card">
+        <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Vendor Breakdown</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Vendor Breakdown</CardTitle>
           </CardHeader>
           <CardContent>
             {vendors.length > 0 ? (
               <ul className="space-y-3">
                 {vendors.map((v) => (
                   <li key={v.name} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
-                    <span className="text-white font-medium">{v.name}</span>
-                    <span className="text-[#94A3B8]">
+                    <span className="dark:text-white text-slate-800 font-medium">{v.name}</span>
+                    <span className="dark:text-[#94A3B8] text-slate-500">
                       {formatUgx(v.total)}
-                      {v.count > 0 && <span className="text-zinc-500 text-xs ml-2">({v.count} txns)</span>}
+                      {v.count > 0 && <span className="dark:text-zinc-500 text-slate-400 text-xs ml-2">({v.count} txns)</span>}
                     </span>
                   </li>
                 ))}
