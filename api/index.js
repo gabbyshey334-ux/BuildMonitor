@@ -1168,7 +1168,6 @@ app.post('/api/auth/login', async (req, res) => {
         message: 'SUPABASE_SERVICE_ROLE_KEY must be configured',
       });
     }
-    const { createClient } = await import('@supabase/supabase-js');
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
     const { data: profile, error: profileError } = await supabaseAdmin
