@@ -11,6 +11,9 @@ package-lock.json
 dist/
 build/
 .vite/
+# Compiled api serverless (from build-api.js; source is .ts)
+api/whatsapp-webhook.js
+api/daily-heartbeat.js
 
 # Don't ignore api folder (needed for Vercel)
 !api/
