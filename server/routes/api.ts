@@ -743,10 +743,33 @@ router.post('/auth/login', async (req: Request, res: Response) => {
 router.post('/auth/forgot-password', async (req: Request, res: Response) => {
   try {
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
-    const { supabase } = await import('../db.js');
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Password reset is not configured. Please contact support.',
+      });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    // Redirect URL must match the app origin and be allowed in Supabase Dashboard > Auth > URL Configuration
+    const baseUrl =
+      process.env.CLIENT_URL ||
+      process.env.FRONTEND_URL ||
+      (typeof process.env.VERCEL_URL === 'string' && process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'http://localhost:5173');
+    const redirectTo = `${baseUrl.replace(/\/$/, '')}/reset-password`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password`,
+      redirectTo,
     });
 
     if (error) {
@@ -764,6 +787,13 @@ router.post('/auth/forgot-password', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Forgot Password] Error:', error);
+    if (error?.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email',
+        message: 'Please enter a valid email address.',
+      });
+    }
     res.status(500).json({
       success: false,
       error: 'Failed to send reset link',
@@ -774,16 +804,78 @@ router.post('/auth/forgot-password', async (req: Request, res: Response) => {
 
 /**
  * POST /api/auth/reset-password
- * Set new password after clicking reset link
+ * Set new password after clicking reset link (sends token from URL hash) or with recovery token in body
  */
 router.post('/auth/reset-password', async (req: Request, res: Response) => {
   try {
-    const { password } = z.object({ password: z.string().min(6) }).parse(req.body);
-    const { supabase } = await import('../db.js');
+    const body = z
+      .object({
+        password: z.string().min(6, 'Password must be at least 6 characters'),
+        token: z.string().optional(),
+      })
+      .parse(req.body);
 
-    // This requires the user to be authenticated via the token in the URL
-    // The client should have handled the exchange of code for session
-    const { error } = await supabase.auth.updateUser({ password });
+    const { password, token } = body;
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Password reset is not configured. Please contact support.',
+      });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    let userId: string;
+
+    if (token) {
+      // Recovery flow: client sent the access_token from the reset link hash. Get user id from JWT payload (sub).
+      try {
+        const parts = token.split('.');
+        if (parts.length !== 3) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid reset link',
+            message: 'Invalid or expired reset link. Please request a new password reset.',
+          });
+        }
+        const payload = JSON.parse(
+          Buffer.from(parts[1], 'base64url').toString('utf8')
+        ) as { sub?: string };
+        if (!payload.sub) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid reset link',
+            message: 'Invalid or expired reset link. Please request a new password reset.',
+          });
+        }
+        userId = payload.sub;
+      } catch {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid reset link',
+          message: 'Invalid or expired reset link. Please request a new password reset.',
+        });
+      }
+    } else {
+      // No token: cannot identify user (server has no session for recovery). Client must send token from email link.
+      return res.status(400).json({
+        success: false,
+        error: 'Reset link required',
+        message:
+          'Please use the link from your password reset email to set a new password. If the link expired, request a new one from the Forgot Password page.',
+      });
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(userId, {
+      password,
+    });
 
     if (error) {
       console.error('[Reset Password] Error:', error);
@@ -800,6 +892,13 @@ router.post('/auth/reset-password', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Reset Password] Error:', error);
+    if (error?.name === 'ZodError') {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        message: 'Password must be at least 6 characters.',
+      });
+    }
     res.status(500).json({
       success: false,
       error: 'Failed to reset password',

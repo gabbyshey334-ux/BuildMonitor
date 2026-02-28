@@ -1,6 +1,6 @@
 import React from "react";
 import { Switch, Route, useLocation } from "wouter";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -108,12 +108,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
-        enableSystem={true}
-        storageKey="jengatrack-theme"
-      >
+      <ThemeProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <ProjectProvider>

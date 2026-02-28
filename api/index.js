@@ -308,6 +308,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       let projectRow = null;
       let totalSpent = 0;
       let expenseRowsForCumulative = [];
+      let materialsRows = [];
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -341,6 +342,15 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           expenseRowsForCumulative = expenseRows || [];
         }
 
+        if (projectRow) {
+          const { data: materialsData, error: materialsError } = await supabase
+            .from('materials_inventory')
+            .select('id, material_name, quantity, unit')
+            .eq('project_id', projectId);
+          if (materialsError) console.error('[Summary] Supabase materials_inventory error:', materialsError);
+          materialsRows = materialsData || [];
+        }
+
         console.log('[Summary Debug]', {
           projectId,
           source: 'supabase',
@@ -372,6 +382,19 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           const rows = Array.isArray(expenseResult) ? expenseResult : (expenseResult?.rows || []);
           totalSpent = rows.reduce((sum, row) => sum + parseFloat(String(row?.amount || 0)), 0);
           expenseRowsForCumulative = rows;
+        }
+
+        if (projectRow) {
+          try {
+            const matResult = await dbConnection.execute(sql`
+              SELECT id, material_name, quantity, unit
+              FROM materials_inventory
+              WHERE project_id = ${projectId}
+            `);
+            materialsRows = Array.isArray(matResult) ? matResult : (matResult?.rows || []);
+          } catch (matErr) {
+            console.warn('[Summary] materials_inventory query failed:', matErr?.message);
+          }
         }
 
         console.log('[Summary Debug]', {
@@ -438,6 +461,25 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         cumulativeCosts,
       };
 
+      const items = materialsRows.map((row) => {
+        const qty = parseFloat(String(row.quantity || 0));
+        return {
+          id: row.id,
+          name: row.material_name || 'Material',
+          unit: row.unit || 'units',
+          currentStock: qty,
+          totalStock: qty,
+          stockPercent: qty > 0 ? 100 : 0,
+          consumptionVsEstimate: 0,
+        };
+      });
+      const usage = materialsRows.map((row) => ({
+        material: row.material_name || 'Material',
+        used: 0,
+        remaining: parseFloat(String(row.quantity || 0)),
+      }));
+      const inventorySection = { items, usage };
+
       return res.json({
         success: true,
         project: {
@@ -475,10 +517,512 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         },
         activity: { heatmap: [] },
         budgetSection,
+        inventorySection,
       });
     } catch (err) {
       console.error('[Summary Error]', err.message, err.stack);
       return res.status(500).json({ success: false, error: err.message || 'Summary failed' });
+    }
+  });
+});
+
+// GET /api/projects/:projectId/expenses — Budget & Costs page data (Supabase-first, same as summary)
+app.get('/api/projects/:projectId/expenses', (req, res, next) => {
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.session?.userId || req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({ success: false, error: 'Server not configured for expenses' });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('id, name, budget')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (projectError || !projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+
+      const budgetTotal = parseFloat(String(projectRow.budget || 0));
+
+      const { data: expenseRows, error: expError } = await supabase
+        .from('expenses')
+        .select('id, description, amount, expense_date, source, created_at, disputed')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+
+      if (expError) {
+        console.error('[Expenses]', expError);
+        return res.status(500).json({ success: false, error: expError.message });
+      }
+
+      const expenses = expenseRows || [];
+      const spent = expenses.reduce((sum, e) => sum + parseFloat(String(e.amount || 0)), 0);
+      const remaining = Math.max(0, budgetTotal - spent);
+      const percentage = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
+      const minDate = expenses.length
+        ? Math.min(...expenses.map((e) => new Date(e.expense_date || e.created_at).getTime()))
+        : Date.now();
+      const daysSinceStart = Math.max(1, (Date.now() - minDate) / 86400000);
+      const dailyBurnRate = spent / daysSinceStart;
+      const weeklyBurnRate = dailyBurnRate * 7;
+      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
+
+      const summary = {
+        total: budgetTotal,
+        spent,
+        remaining,
+        percentage: Math.round(percentage * 10) / 10,
+        dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
+        weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
+        weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
+      };
+
+      const byCategoryMap = {};
+      for (const e of expenses) {
+        const cat = 'General';
+        if (!byCategoryMap[cat]) byCategoryMap[cat] = { total: 0, count: 0 };
+        byCategoryMap[cat].total += parseFloat(String(e.amount || 0));
+        byCategoryMap[cat].count += 1;
+      }
+      const byCategory = Object.entries(byCategoryMap).map(([category, v]) => ({
+        category,
+        total: v.total,
+        count: v.count,
+        percentage: spent > 0 ? Math.round((v.total / spent) * 1000) / 10 : 0,
+      })).sort((a, b) => b.total - a.total);
+
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      const byMonthMap = {};
+      for (const e of expenses) {
+        const d = e.expense_date;
+        const dateStr = typeof d === 'string' ? d.split('T')[0] : (d ? new Date(d).toISOString().split('T')[0] : null);
+        if (!dateStr || new Date(dateStr) < sixMonthsAgo) continue;
+        const monthKey = dateStr.substring(0, 7);
+        const monthLabel = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        if (!byMonthMap[monthKey]) byMonthMap[monthKey] = { month: monthLabel, amount: 0, sortKey: monthKey };
+        byMonthMap[monthKey].amount += parseFloat(String(e.amount || 0));
+      }
+      const byMonth = Object.values(byMonthMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(({ month, amount }) => ({ month, amount }));
+
+      const recent = expenses.slice(0, 20).map((e) => ({
+        id: e.id,
+        description: e.description || '',
+        amount: parseFloat(String(e.amount || 0)),
+        category: 'General',
+        expense_date: e.expense_date,
+        vendor: null,
+        source: e.source || null,
+        created_at: e.created_at,
+        disputed: !!e.disputed,
+      }));
+
+      let vendors = [];
+      try {
+        const { data: vendorRows } = await supabase
+          .from('vendors')
+          .select('name, total_spent')
+          .eq('project_id', projectId)
+          .order('total_spent', { ascending: false })
+          .limit(10);
+        vendors = (vendorRows || []).map((v) => ({
+          name: v.name || '',
+          total: parseFloat(String(v.total_spent || 0)),
+          count: 0,
+        }));
+      } catch (_) { /* vendors table may not exist */ }
+
+      return res.json({
+        success: true,
+        summary,
+        byCategory,
+        byMonth,
+        recent,
+        vendors,
+      });
+    } catch (err) {
+      console.error('[Expenses API Error]', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to load expenses' });
+    }
+  });
+});
+
+// GET /api/projects/:projectId/materials — Materials & Inventory page
+app.get('/api/projects/:projectId/materials', (req, res, next) => {
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.session?.userId || req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({ success: false, error: 'Server not configured' });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (projectError || !projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+
+      const { data: rows, error } = await supabase
+        .from('materials_inventory')
+        .select('id, material_name, quantity, unit, last_updated')
+        .eq('project_id', projectId)
+        .order('material_name', { ascending: true });
+
+      if (error) {
+        console.error('[Materials]', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      const inventory = (rows || []).map((r) => ({
+        id: r.id,
+        material_name: r.material_name || '',
+        quantity: parseFloat(String(r.quantity || 0)),
+        unit: r.unit || 'units',
+        last_updated: r.last_updated || null,
+      }));
+
+      const lowStock = inventory.filter((m) => m.quantity <= 5).map((m) => ({
+        material_name: m.material_name,
+        quantity: m.quantity,
+        unit: m.unit,
+      }));
+
+      const usage = [];
+
+      const maxQty = inventory.length ? Math.max(...inventory.map((m) => m.quantity), 1) : 1;
+      const lastUpdated = inventory.length
+        ? inventory.reduce((latest, m) => {
+            const t = m.last_updated ? new Date(m.last_updated).getTime() : 0;
+            return t > latest ? t : latest;
+          }, 0)
+        : null;
+
+      const summary = {
+        totalItems: inventory.length,
+        lowStockCount: lowStock.length,
+        lastUpdated: lastUpdated ? new Date(lastUpdated).toISOString() : null,
+      };
+
+      return res.json({
+        success: true,
+        inventory,
+        lowStock,
+        usage,
+        summary,
+      });
+    } catch (err) {
+      console.error('[Materials API Error]', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to load materials' });
+    }
+  });
+});
+
+// GET /api/projects/:projectId/daily — Daily Accountability page
+app.get('/api/projects/:projectId/daily', (req, res, next) => {
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.session?.userId || req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({ success: false, error: 'Server not configured' });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (projectError || !projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+
+      const { data: logRows, error } = await supabase
+        .from('daily_logs')
+        .select('id, log_date, worker_count, notes, weather_condition, photo_urls, created_at')
+        .eq('project_id', projectId)
+        .order('log_date', { ascending: false })
+        .limit(60);
+
+      if (error) {
+        console.error('[Daily]', error);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      const logs = logRows || [];
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayLog = logs.find((l) => (l.log_date || '').toString().substring(0, 10) === todayStr);
+
+      const last60Dates = [];
+      for (let i = 59; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        last60Dates.push(d.toISOString().split('T')[0]);
+      }
+
+      const logByDate = {};
+      for (const l of logs) {
+        const d = (l.log_date || '').toString().substring(0, 10);
+        if (d) logByDate[d] = l;
+      }
+
+      const heatmap = last60Dates.map((date) => {
+        const log = logByDate[date];
+        return {
+          date,
+          active: !!log,
+          workerCount: log ? (log.worker_count || 0) : 0,
+          hasNotes: !!(log && log.notes),
+        };
+      });
+
+      const recentLogs = logs.slice(0, 10).map((l) => ({
+        id: l.id,
+        log_date: l.log_date,
+        worker_count: l.worker_count,
+        notes: l.notes,
+        weather_condition: l.weather_condition,
+        photo_urls: Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []),
+        created_at: l.created_at,
+      }));
+
+      const totalPhotos = logs.reduce((sum, l) => {
+        const urls = Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []);
+        return sum + urls.length;
+      }, 0);
+
+      const workerCounts = logs.filter((l) => l.worker_count != null && l.worker_count > 0).map((l) => l.worker_count);
+      const avgWorkerCount = workerCounts.length > 0 ? workerCounts.reduce((a, b) => a + b, 0) / workerCounts.length : 0;
+
+      const startOfWeek = new Date();
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      startOfWeek.setHours(0, 0, 0, 0);
+      const thisWeekActive = logs.filter((l) => {
+        const d = new Date(l.log_date + 'T12:00:00');
+        return d >= startOfWeek;
+      }).length;
+
+      let currentStreak = 0;
+      const sortedDates = [...new Set(logs.map((l) => (l.log_date || '').toString().substring(0, 10)))].sort().reverse();
+      for (let i = 0; i < sortedDates.length; i++) {
+        const expected = new Date();
+        expected.setDate(expected.getDate() - i);
+        const expectedStr = expected.toISOString().split('T')[0];
+        if (sortedDates[i] === expectedStr) currentStreak++;
+        else break;
+      }
+
+      const stats = {
+        totalActiveDays: logs.length,
+        currentStreak,
+        avgWorkerCount: Math.round(avgWorkerCount * 10) / 10,
+        totalPhotos,
+        thisWeekActive,
+      };
+
+      const today = {
+        active: !!todayLog,
+        workerCount: todayLog ? (todayLog.worker_count || 0) : 0,
+        notes: todayLog ? (todayLog.notes || '') : '',
+        photos: todayLog
+          ? (Array.isArray(todayLog.photo_urls) ? todayLog.photo_urls : todayLog.photo_urls ? [todayLog.photo_urls] : [])
+          : [],
+      };
+
+      return res.json({
+        success: true,
+        heatmap,
+        recentLogs,
+        stats,
+        today,
+      });
+    } catch (err) {
+      console.error('[Daily API Error]', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to load daily logs' });
+    }
+  });
+});
+
+// GET /api/projects/:projectId/trends — Trends & Insights page
+app.get('/api/projects/:projectId/trends', (req, res, next) => {
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.session?.userId || req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({ success: false, error: 'Server not configured' });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('id, budget')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (projectError || !projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+
+      const budgetTotal = parseFloat(String(projectRow.budget || 0));
+
+      const { data: expenseRows } = await supabase
+        .from('expenses')
+        .select('amount, expense_date, created_at')
+        .eq('project_id', projectId);
+
+      const { data: logRows } = await supabase
+        .from('daily_logs')
+        .select('log_date, worker_count')
+        .eq('project_id', projectId)
+        .order('log_date', { ascending: false })
+        .limit(90);
+
+      const { data: materialRows } = await supabase
+        .from('materials_inventory')
+        .select('material_name, quantity, unit')
+        .eq('project_id', projectId)
+        .order('quantity', { ascending: false })
+        .limit(5);
+
+      const { data: vendorRows } = await supabase
+        .from('vendors')
+        .select('name, total_spent')
+        .eq('project_id', projectId)
+        .order('total_spent', { ascending: false })
+        .limit(5);
+
+      const expenses = expenseRows || [];
+      const logs = logRows || [];
+      const materials = materialRows || [];
+      const vendorList = vendorRows || [];
+
+      const totalSpent = expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
+      const remaining = Math.max(0, budgetTotal - totalSpent);
+      const daysSinceFirst = expenses.length
+        ? Math.max(1, (Date.now() - Math.min(...expenses.map((e) => new Date(e.expense_date || e.created_at).getTime()))) / 86400000)
+        : 1;
+      const dailyBurn = totalSpent / daysSinceFirst;
+      const weeklyBurnRate = dailyBurn * 7;
+      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
+      const budgetRunout = weeksRemaining != null && weeksRemaining < 999
+        ? new Date(Date.now() + weeksRemaining * 7 * 86400000).toISOString().split('T')[0]
+        : null;
+
+      const byMonthMap = {};
+      for (const e of expenses) {
+        const d = e.expense_date || e.created_at;
+        const dateStr = typeof d === 'string' ? d.split('T')[0] : (d ? new Date(d).toISOString().split('T')[0] : null);
+        if (!dateStr) continue;
+        const monthKey = dateStr.substring(0, 7);
+        const label = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        if (!byMonthMap[monthKey]) byMonthMap[monthKey] = { month: label, amount: 0, sortKey: monthKey };
+        byMonthMap[monthKey].amount += parseFloat(String(e.amount || 0));
+      }
+      const byMonth = Object.values(byMonthMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(({ month, amount }) => ({ month, amount }));
+
+      const last3Months = byMonth.slice(-3);
+      const spendingTrend = last3Months.length < 2 ? 'stable'
+        : last3Months[last3Months.length - 1].amount > last3Months[last3Months.length - 2].amount ? 'increasing'
+        : last3Months[last3Months.length - 1].amount < last3Months[last3Months.length - 2].amount ? 'decreasing'
+        : 'stable';
+
+      const byDay = logs.map((l) => ({
+        date: l.log_date,
+        count: l.worker_count || 0,
+      })).slice(0, 30);
+      const workerCounts = logs.filter((l) => l.worker_count != null && l.worker_count > 0).map((l) => l.worker_count);
+      const workerAvg = workerCounts.length > 0 ? workerCounts.reduce((a, b) => a + b, 0) / workerCounts.length : 0;
+      const workerPeak = workerCounts.length > 0 ? Math.max(...workerCounts) : 0;
+      const workersTrend = byDay.length < 2 ? 'stable'
+        : (byDay[byDay.length - 1]?.count || 0) > (byDay[byDay.length - 2]?.count || 0) ? 'increasing'
+        : (byDay[byDay.length - 1]?.count || 0) < (byDay[byDay.length - 2]?.count || 0) ? 'decreasing'
+        : 'stable';
+
+      const mostUsed = materials.map((m) => ({
+        name: m.material_name || '',
+        quantity: parseFloat(String(m.quantity || 0)),
+        unit: m.unit || 'units',
+      }));
+
+      const topVendors = vendorList.map((v) => ({
+        name: v.name || '',
+        total: parseFloat(String(v.total_spent || 0)),
+      }));
+
+      const alerts = [];
+      if (budgetTotal > 0 && (totalSpent / budgetTotal) > 0.8) {
+        alerts.push({ type: 'budget_warning', message: 'Over 80% of budget used', severity: 'high', date: new Date().toISOString().split('T')[0] });
+      }
+      const lowStockMaterials = materials.filter((m) => parseFloat(String(m.quantity || 0)) <= 5);
+      for (const m of lowStockMaterials) {
+        alerts.push({ type: 'low_stock', message: `${m.material_name} low on stock (${m.quantity} ${m.unit})`, severity: 'medium', date: new Date().toISOString().split('T')[0] });
+      }
+
+      return res.json({
+        success: true,
+        spending: {
+          byMonth,
+          byWeek: [],
+          trend: spendingTrend,
+          projectedCompletion: null,
+        },
+        workers: {
+          byDay,
+          average: Math.round(workerAvg * 10) / 10,
+          peak: workerPeak,
+          trend: workersTrend,
+        },
+        materials: {
+          mostUsed,
+          topVendors,
+        },
+        alerts,
+        predictions: {
+          estimatedCompletion: null,
+          budgetRunout,
+          weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
+        },
+      });
+    } catch (err) {
+      console.error('[Trends API Error]', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to load trends' });
     }
   });
 });
@@ -1316,6 +1860,189 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('[Create Project] ❌ Unexpected error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create project',
+      message: error.message || 'An unexpected error occurred',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
+// GET /api/projects/:projectId/settings
+app.get('/api/projects/:projectId/settings', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { projectId } = req.params;
+
+    if (!userId || !projectId) {
+      return res.status(400).json({ success: false, error: 'Missing projectId' });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server configuration error' });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id, name, description, budget, status, channel_type, created_at')
+      .eq('id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    if (projectError || !project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('full_name, whatsapp_number, default_currency, preferred_language')
+      .eq('id', userId)
+      .single();
+
+    const profileData = profileError ? {} : {
+      full_name: profile?.full_name || '',
+      whatsapp_number: profile?.whatsapp_number || '',
+      default_currency: profile?.default_currency || 'UGX',
+      preferred_language: profile?.preferred_language || 'en',
+    };
+
+    res.json({
+      success: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        budget: parseFloat(project.budget || 0),
+        status: project.status || 'active',
+        channel_type: project.channel_type || 'direct',
+        created_at: project.created_at,
+      },
+      profile: profileData,
+    });
+  } catch (err) {
+    console.error('[Settings GET] Error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to load settings' });
+  }
+});
+
+// PATCH /api/projects/:projectId/settings
+app.patch('/api/projects/:projectId/settings', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { projectId } = req.params;
+    const { name, description, budget, status, channel_type, whatsapp_number, full_name } = req.body;
+
+    if (!userId || !projectId) {
+      return res.status(400).json({ success: false, error: 'Missing projectId' });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server configuration error' });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data: existing } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const projectUpdates = {};
+    if (name !== undefined) projectUpdates.name = String(name).trim();
+    if (description !== undefined) projectUpdates.description = description?.trim() || null;
+    if (budget !== undefined) {
+      const b = parseFloat(budget);
+      if (!isNaN(b) && b >= 0) projectUpdates.budget = b;
+    }
+    if (channel_type !== undefined && ['direct', 'group'].includes(String(channel_type))) {
+      projectUpdates.channel_type = channel_type;
+    }
+    if (status !== undefined && ['active', 'completed', 'on_hold', 'paused'].includes(String(status))) {
+      projectUpdates.status = status === 'paused' ? 'on_hold' : status;
+    }
+
+    if (Object.keys(projectUpdates).length > 0) {
+      const { data: updatedProject, error: updateErr } = await supabase
+        .from('projects')
+        .update({ ...projectUpdates, updated_at: new Date().toISOString() })
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (updateErr) {
+        return res.status(500).json({ success: false, error: updateErr.message || 'Failed to update project' });
+      }
+    }
+
+    const profileUpdates = {};
+    if (whatsapp_number !== undefined) profileUpdates.whatsapp_number = String(whatsapp_number).trim();
+    if (full_name !== undefined) profileUpdates.full_name = String(full_name).trim();
+
+    if (Object.keys(profileUpdates).length > 0) {
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({ ...profileUpdates, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (profileErr) {
+        return res.status(500).json({ success: false, error: profileErr.message || 'Failed to update profile' });
+      }
+    }
+
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id, name, description, budget, status, channel_type, created_at, updated_at')
+      .eq('id', projectId)
+      .eq('user_id', userId)
+      .single();
+
+    res.json({
+      success: true,
+      project: project ? {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        budget: parseFloat(project.budget || 0),
+        status: project.status || 'active',
+        channel_type: project.channel_type || 'direct',
+        created_at: project.created_at,
+      } : null,
+    });
+  } catch (err) {
+    console.error('[Settings PATCH] Error:', err);
+    res.status(500).json({ success: false, error: err.message || 'Failed to save settings' });
+  }
+});
+
+// ============================================================================
+// DASHBOARD ENDPOINTS (always available - BEFORE server app mounts)
+// ============================================================================
       message: error.message,
       stack: error.stack,
       name: error.name,

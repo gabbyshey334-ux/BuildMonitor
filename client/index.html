@@ -11,12 +11,17 @@
     <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
   </head>
   <body>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('jenga_theme');
+          document.documentElement.classList.add(t === 'light' ? 'light' : 'dark');
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
-    <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
-  </body>
-</html>
-    <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
 </html>

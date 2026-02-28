@@ -24,7 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsData, setProjects]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-zinc-200">
+    <div className="min-h-screen dark:bg-[#0a0a0a] bg-slate-50 dark:text-zinc-200 text-slate-800">
       <TopBar onMenuClick={toggle} showHamburger />
       <Sidebar open={open} onToggle={toggle} />
 

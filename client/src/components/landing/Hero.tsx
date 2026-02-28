@@ -12,7 +12,7 @@ export default function Hero() {
   ];
 
   return (
-    <section className="relative min-h-screen flex flex-col bg-[#0a0a0a] overflow-hidden">
+    <section className="relative min-h-screen flex flex-col dark:bg-[#0a0a0a] bg-slate-50 overflow-hidden">
       {/* Background Gradient */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(34,197,94,0.12),transparent_70%)]" />
       
@@ -23,7 +23,7 @@ export default function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
-            className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-5 leading-tight"
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold dark:text-white text-slate-800 mb-5 leading-tight"
           >
             Message Anywhere.
             <br />
@@ -34,7 +34,7 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
-            className="text-base sm:text-lg text-zinc-400 mb-8 max-w-xl mx-auto"
+            className="text-base sm:text-lg dark:text-zinc-400 text-slate-600 mb-8 max-w-xl mx-auto"
           >
             Use your favorite chat app to manage your construction project.
           </motion.p>
@@ -54,7 +54,7 @@ export default function Hero() {
             </Link>
             <Button 
               variant="outline" 
-              className="border border-zinc-700 text-white hover:bg-zinc-800/50 hover:border-zinc-600 px-8 py-5 text-sm font-semibold rounded-lg transition-all duration-300 bg-transparent"
+              className="dark:border-zinc-700 dark:text-white dark:bg-transparent dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 bg-white hover:bg-slate-100 px-8 py-5 text-sm font-semibold rounded-lg transition-all duration-300"
             >
               Learn More
             </Button>
@@ -92,7 +92,7 @@ export default function Hero() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, delay: 0.5 }}
-        className="relative z-10 border-t border-zinc-800/30 bg-[#0a0a0a]"
+        className="relative z-10 border-t dark:border-zinc-800/30 dark:bg-[#0a0a0a] border-slate-200 bg-white"
       >
         <div className="container mx-auto max-w-6xl px-4 py-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -105,10 +105,10 @@ export default function Hero() {
                 className="flex flex-col items-center text-center"
               >
                 <stat.icon className="w-5 h-5 text-[#22c55e] mb-2" strokeWidth={1.5} />
-                <div className="text-xl sm:text-2xl font-bold text-white mb-0.5">
+                <div className="text-xl sm:text-2xl font-bold dark:text-white text-slate-800 mb-0.5">
                   {stat.value}
                 </div>
-                <div className="text-xs text-zinc-500 font-medium">
+                <div className="text-xs dark:text-zinc-500 text-slate-500 font-medium">
                   {stat.label}
                 </div>
               </motion.div>

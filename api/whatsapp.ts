@@ -26,6 +26,8 @@ const twilioClient = twilio(
 
 const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
 
+const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://build-monitor-lac.vercel.app';
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
@@ -62,7 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await twilioClient.messages.create({
         from: TWILIO_WHATSAPP_NUMBER,
         to: From,
-        body: '👋 Welcome to JengaTrack!\n\nPlease register at https://build-monitor-lac.vercel.app to get started.\n\nOnce registered, you can track your construction projects via WhatsApp!'
+        body: `👋 Welcome to JengaTrack!\n\nPlease register at ${DASHBOARD_URL} to get started.\n\nOnce registered, you can track your construction projects via WhatsApp!`
       });
       
       return res.status(200).send('<Response></Response>');
@@ -77,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await twilioClient.messages.create({
         from: TWILIO_WHATSAPP_NUMBER,
         to: From,
-        body: `Hello ${userName}! 👋\n\nI see you haven't completed onboarding yet. Please visit https://build-monitor-lac.vercel.app to set up your first project.\n\nOnce set up, you can send me updates via WhatsApp!`
+        body: `Hello ${userName}! 👋\n\nI see you haven't completed onboarding yet. Please visit ${DASHBOARD_URL} to set up your first project.\n\nOnce set up, you can send me updates via WhatsApp!`
       });
     } else {
       // User has completed onboarding - simple acknowledgment

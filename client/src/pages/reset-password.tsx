@@ -7,6 +7,17 @@ import { Link, useLocation } from "wouter";
 import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+function parseHashParams(): { access_token?: string; refresh_token?: string; type?: string } {
+  if (typeof window === "undefined") return {};
+  const hash = window.location.hash?.replace(/^#/, "") || "";
+  const params = new URLSearchParams(hash);
+  return {
+    access_token: params.get("access_token") ?? undefined,
+    refresh_token: params.get("refresh_token") ?? undefined,
+    type: params.get("type") ?? undefined,
+  };
+}
+
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -14,8 +25,21 @@ export default function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recoveryToken, setRecoveryToken] = useState<string | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const { access_token, type } = parseHashParams();
+    if (type === "recovery" && access_token) {
+      setRecoveryToken(access_token);
+      setError(null);
+      // Clear hash from URL so the token is not visible in address bar or history
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else if (!access_token && !type && window.location.hash) {
+      setError("Invalid or expired reset link. Please request a new password reset from the Forgot Password page.");
+    }
+  }, []);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,19 +55,24 @@ export default function ResetPassword() {
       return;
     }
 
+    if (!recoveryToken) {
+      setError("Please use the link from your password reset email to set a new password.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, token: recoveryToken }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to reset password");
+        throw new Error(data.message || data.error || "Failed to reset password");
       }
 
       setIsSuccess(true);
@@ -51,14 +80,14 @@ export default function ResetPassword() {
         title: "Success",
         description: "Your password has been reset successfully.",
       });
-      
-      // Redirect to login after 3 seconds
+
       setTimeout(() => setLocation("/login"), 3000);
-    } catch (error: any) {
-      setError(error.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to reset password";
+      setError(message);
       toast({
         title: "Error",
-        description: error.message,
+        description: message,
         variant: "destructive",
       });
     } finally {
@@ -114,6 +143,18 @@ export default function ResetPassword() {
 
         <Card className="bg-[#121624]/80 border-white/5 backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
           <CardContent className="pt-6">
+            {!recoveryToken && !error ? (
+              <div className="space-y-4 text-center py-4">
+                <p className="text-slate-400">
+                  Use the link from your password reset email to set a new password. If you don&apos;t have it, request a new one.
+                </p>
+                <Link href="/forgot-password">
+                  <Button className="bg-amber-600 hover:bg-amber-500 text-white">
+                    Request reset link
+                  </Button>
+                </Link>
+              </div>
+            ) : (
             <form onSubmit={handleReset} className="space-y-5">
               {error && (
                 <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-3 rounded-xl flex items-center gap-2">
@@ -164,7 +205,7 @@ export default function ResetPassword() {
               <Button
                 type="submit"
                 className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold h-12 rounded-xl shadow-lg shadow-amber-900/20 transition-all active:scale-[0.98]"
-                disabled={isLoading}
+                disabled={isLoading || !recoveryToken}
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
@@ -176,6 +217,7 @@ export default function ResetPassword() {
                 )}
               </Button>
             </form>
+            )}
           </CardContent>
           <CardFooter className="bg-white/[0.02] border-t border-white/5 py-4 flex justify-center">
             <Link href="/login">

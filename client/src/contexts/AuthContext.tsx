@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: {
             "Authorization": `Bearer ${token}`,
           },
+          credentials: "include",
         });
 
         // If unauthorized, token is invalid - clear it
@@ -99,6 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ email, password }),
+        credentials: "include",
       });
 
       if (!res.ok) {
@@ -148,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(userData),
+        credentials: "include",
       });
 
       if (!res.ok) {
@@ -194,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: token ? {
           "Authorization": `Bearer ${token}`,
         } : {},
+        credentials: "include",
       });
 
       // Logout always succeeds on client side, even if server fails

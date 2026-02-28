@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, Moon, Sun } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +13,7 @@ import {
 export default function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,10 +22,6 @@ export default function Navigation() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  const toggleTheme = () => {
-    setTheme(resolvedTheme === "dark" ? "light" : "dark");
-  };
 
   const navLinks = [
     { name: "Features", href: "#features", hasDropdown: true },
@@ -38,7 +34,7 @@ export default function Navigation() {
     <nav
       className={`fixed top-0 w-full z-50 transition-all duration-300 ${
         isScrolled 
-          ? "bg-[#0a0a0a]/95 backdrop-blur-md border-b border-zinc-800/50 py-3" 
+          ? "dark:bg-[#0a0a0a]/95 dark:border-zinc-800/50 bg-white/95 border-slate-200 backdrop-blur-md border-b py-3" 
           : "bg-transparent py-4"
       }`}
     >
@@ -51,7 +47,7 @@ export default function Navigation() {
               alt="JengaTrack"
               className="w-8 h-8 sm:w-10 sm:h-10 object-contain mix-blend-multiply dark:mix-blend-lighten group-hover:drop-shadow-[0_0_12px_rgba(34,197,94,0.5)] transition-shadow duration-300"
             />
-            <span className="text-xl font-bold text-white tracking-tight">JengaTrack</span>
+            <span className="text-xl font-bold dark:text-white text-slate-800 tracking-tight">JengaTrack</span>
           </Link>
 
           {/* Desktop Nav */}
@@ -60,7 +56,7 @@ export default function Navigation() {
               <a 
                 key={link.name} 
                 href={link.href} 
-                className="relative px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors group"
+                className="relative px-4 py-2 text-sm font-medium dark:text-zinc-300 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors group"
               >
                 <span className="flex items-center gap-1">
                   {link.name}
@@ -79,7 +75,7 @@ export default function Navigation() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button 
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-300 hover:text-white transition-colors rounded-lg hover:bg-zinc-800/50"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors rounded-lg"
                   aria-label="Select Language"
                 >
                   <span className="text-base">🇺🇬</span>
@@ -87,8 +83,8 @@ export default function Navigation() {
                   <ChevronDown className="w-4 h-4 opacity-50" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-zinc-900 border-zinc-800">
-                <DropdownMenuItem className="text-zinc-200 focus:bg-zinc-800 focus:text-white">
+              <DropdownMenuContent align="end" className="dark:bg-zinc-900 dark:border-zinc-800 bg-white border-slate-200">
+                <DropdownMenuItem className="dark:text-zinc-200 dark:focus:bg-zinc-800 dark:focus:text-white text-slate-800 focus:bg-slate-100">
                   English
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -97,13 +93,13 @@ export default function Navigation() {
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 text-zinc-400 hover:text-white transition-colors rounded-lg hover:bg-zinc-800/50"
+              className="p-2 dark:text-zinc-400 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors rounded-lg dark:hover:bg-zinc-800/50 hover:bg-slate-200 duration-200"
               aria-label="Toggle Theme"
             >
-              {resolvedTheme === "dark" ? (
-                <Moon className="w-5 h-5" />
-              ) : (
+              {isDark ? (
                 <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
               )}
             </button>
 
@@ -121,18 +117,18 @@ export default function Navigation() {
           <div className="md:hidden flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className="p-2 text-zinc-400 hover:text-white transition-colors"
+              className="p-2 dark:text-zinc-400 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors"
               aria-label="Toggle Theme"
             >
-              {resolvedTheme === "dark" ? (
-                <Moon className="w-5 h-5" />
-              ) : (
+              {isDark ? (
                 <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
               )}
             </button>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 text-zinc-300 hover:text-white transition-colors"
+              className="p-2 dark:text-zinc-300 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors"
               aria-label="Toggle Menu"
             >
               {isMobileMenuOpen ? (
@@ -147,7 +143,7 @@ export default function Navigation() {
 
       {/* Mobile Menu */}
       <div 
-        className={`md:hidden absolute top-full left-0 right-0 bg-[#0a0a0a]/98 backdrop-blur-lg border-b border-zinc-800/50 overflow-hidden transition-all duration-300 ${
+        className={`md:hidden absolute top-full left-0 right-0 dark:bg-[#0a0a0a]/98 dark:border-zinc-800/50 bg-white border-slate-200 backdrop-blur-lg border-b overflow-hidden transition-all duration-300 ${
           isMobileMenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
         }`}
       >
@@ -157,16 +153,16 @@ export default function Navigation() {
               key={link.name} 
               href={link.href} 
               onClick={() => setIsMobileMenuOpen(false)} 
-              className="flex items-center justify-between px-4 py-3 text-zinc-300 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors"
+              className="flex items-center justify-between px-4 py-3 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
             >
               <span className="font-medium">{link.name}</span>
               {link.hasDropdown && <ChevronDown className="w-4 h-4 opacity-50" />}
             </a>
           ))}
           
-          <div className="pt-4 mt-4 border-t border-zinc-800/50 space-y-3">
+          <div className="pt-4 mt-4 border-t dark:border-zinc-800/50 border-slate-200 space-y-3">
             {/* Mobile Language Selector */}
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-3 text-zinc-300 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors">
+            <button className="w-full flex items-center justify-center gap-2 px-4 py-3 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
               <span className="text-lg">🇺🇬</span>
               <span>English</span>
             </button>

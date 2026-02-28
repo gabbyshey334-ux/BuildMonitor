@@ -2,6 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme variables: dark (default) and light. Class .dark / .light on html. */
+:root,
+.dark {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #1a1d2e;
+  --bg-card: #1e2235;
+  --text-primary: #ffffff;
+  --text-muted: #94a3b8;
+  --border-color: #2d3748;
+  --accent-primary: #06b6d4;
+}
+
+.light {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --accent-primary: #06b6d4;
+}
+
 :root {
   /* Light Mode (Default) */
   --background: 0 0% 100%;

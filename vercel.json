@@ -5,10 +5,32 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
+  "crons": [
+    {
+      "path": "/api/daily-heartbeat",
+      "schedule": "0 17 * * *"
+    }
+  ],
   "rewrites": [
-    { "source": "/webhook/webhook", "destination": "/api/whatsapp-webhook" },
-    { "source": "/api/:path*", "destination": "/api/index" },
-    { "source": "/health", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/daily-heartbeat",
+      "destination": "/api/daily-heartbeat"
+    },
+    {
+      "source": "/webhook/webhook",
+      "destination": "/api/whatsapp-webhook"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
