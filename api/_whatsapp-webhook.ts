@@ -329,6 +329,18 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
 }
 
 async function createProjectFromOnboarding(userId: string): Promise<string> {
+  // Verify profile exists before inserting (projects.user_id references profiles.id)
+  const { data: profileExists } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (!profileExists) {
+    console.error('[Create Project] Profile not found:', userId);
+    throw new Error('User profile not found. Please try again.');
+  }
+
   const { data: profile } = await supabase.from('profiles').select('onboarding_data').eq('id', userId).single();
   const d = (profile?.onboarding_data as OnboardingData) || {};
   const typeLabel = d.project_type === 'btn_residential' ? 'Residential home'

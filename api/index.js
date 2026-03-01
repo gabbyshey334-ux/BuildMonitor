@@ -1646,35 +1646,22 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
-    // Verify user exists in users table before creating project
-    const dbConnection = initializeDatabase();
-    if (dbConnection) {
-      try {
-        const userCheckResult = await dbConnection.execute(sql`
-          SELECT id FROM users WHERE id = ${userId} LIMIT 1
-        `);
-        const userExists = Array.isArray(userCheckResult) 
-          ? userCheckResult.length > 0 
-          : (userCheckResult.rows ? userCheckResult.rows.length > 0 : !!userCheckResult);
-        
-        if (!userExists) {
-          console.error('[Create Project] ❌ User does not exist in users table:', userId);
-          return res.status(400).json({
-            success: false,
-            error: 'User account not found',
-            message: 'Your user account is not properly set up. Please log out and register again, or contact support.',
-            debug: {
-              userId,
-              suggestion: 'User may need to be migrated from old schema or re-registered'
-            }
-          });
-        }
-        console.log('[Create Project] ✅ User verified in users table');
-      } catch (userCheckError) {
-        console.error('[Create Project] ⚠️ Could not verify user (non-critical):', userCheckError.message);
-        // Continue anyway - let database foreign key constraint catch it if user doesn't exist
-      }
+    // Verify profile exists before creating project (projects reference profiles.id)
+    const { data: profileCheck } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .single();
+
+    if (!profileCheck) {
+      console.error('[Create Project] ❌ User profile not found:', userId);
+      return res.status(400).json({
+        success: false,
+        error: 'User profile not found',
+        message: 'Your profile was not found. Please log out and log in again, or contact support.',
+      });
     }
+    console.log('[Create Project] ✅ Profile verified');
 
     // Prepare insert data
     const insertData = {
@@ -2750,9 +2737,9 @@ app.get('/api/test/supabase', async (req, res) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Test users table
-    const { data: users, error: usersError } = await supabase
-      .from('users')
+    // Test profiles table
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
       .select('id, whatsapp_number, full_name')
       .limit(5);
 
@@ -2800,10 +2787,10 @@ app.get('/api/test/supabase', async (req, res) => {
         hasKey: !!supabaseKey,
       },
       data: {
-        users: { 
-          count: users?.length || 0, 
-          error: usersError?.message || null, 
-          sample: users?.slice(0, 2) || []
+        profiles: { 
+          count: profiles?.length || 0, 
+          error: profilesError?.message || null, 
+          sample: profiles?.slice(0, 2) || []
         },
         projects: { 
           count: projects?.length || 0, 

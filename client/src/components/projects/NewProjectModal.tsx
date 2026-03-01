@@ -18,8 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { parseBudget } from "@/lib/budgetUtils";
 
 export interface NewProjectFormData {
   name: string;
@@ -54,15 +54,36 @@ export function NewProjectModal({
 }: NewProjectModalProps) {
   const { t } = useLanguage();
   const [form, setForm] = useState<NewProjectFormData>(DEFAULT_FORM);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
+    // Only name and budget required; budget must be a valid positive number
+    if (!form.name.trim()) {
+      setValidationError("Project name is required");
+      return;
+    }
+    if (!form.totalBudget.trim()) {
+      setValidationError("Budget is required");
+      return;
+    }
+    const budgetNum = parseBudget(form.totalBudget);
+    if (isNaN(budgetNum) || budgetNum <= 0) {
+      setValidationError("Please enter a valid budget amount (e.g. 30M or 30,000,000)");
+      return;
+    }
+
     await onSubmit(form);
     setForm(DEFAULT_FORM);
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) setForm(DEFAULT_FORM);
+    if (!next) {
+      setForm(DEFAULT_FORM);
+      setValidationError(null);
+    }
     onOpenChange(next);
   };
 
@@ -135,8 +156,8 @@ export function NewProjectModal({
               e.g. 30,000,000 or 30M for 30 million UGX
             </p>
           </div>
-          {errorMessage && (
-            <p className="text-sm text-red-400">{errorMessage}</p>
+          {(validationError || errorMessage) && (
+            <p className="text-sm text-red-400">{validationError || errorMessage}</p>
           )}
           <DialogFooter className="gap-2 sm:gap-0 pt-4">
             <Button
