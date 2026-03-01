@@ -8,8 +8,6 @@
 
 import 'dotenv/config';
 import express from 'express';
-import session from 'express-session';
-import connectPg from 'connect-pg-simple';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -31,14 +29,13 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS - CRITICAL: Allow credentials for session cookies (specific origin, never *)
+// CORS - allow credentials for same-origin; JWT sent via Authorization header
 app.use((req, res, next) => {
   const origin = req.headers.origin || 'https://build-monitor-lac.vercel.app';
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Cookie');
-  res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -48,86 +45,13 @@ app.use((req, res, next) => {
 // Trust proxy for Vercel
 app.set('trust proxy', 1);
 
-// Request logging middleware (for debugging)
+// Request logging (no session — we use JWT only)
 app.use((req, res, next) => {
-  // Log all API requests for debugging
   if (req.path.startsWith('/api')) {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-    console.log('  Session ID:', req.sessionID);
-    console.log('  User ID in session:', req.session?.userId || 'none');
   }
-  // Log all requests to webhook routes
   if (req.path.startsWith('/webhook')) {
     console.log(`[Request] ${req.method} ${req.path} - ${req.url}`);
-    console.log(`[Request] Route stack length: ${app._router?.stack?.length || 0}`);
-  }
-  next();
-});
-
-// ============================================================================
-// SESSION MIDDLEWARE (needed for debug/session endpoint)
-// ============================================================================
-
-// Session configuration
-const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-
-// Initialize session store with PostgreSQL
-let sessionStore = null;
-try {
-  const pgStore = connectPg(session);
-  sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: true,
-    ttl: sessionTtl,
-    tableName: "sessions",
-    pruneSessionInterval: 60, // Prune expired sessions every 60 seconds
-  });
-  console.log('✅ Session store initialized with PostgreSQL');
-} catch (error) {
-  console.error('⚠️ Failed to initialize session store:', error.message);
-  console.warn('⚠️ Sessions will use memory store (not persistent across serverless invocations)');
-}
-
-// Get session secret
-const sessionSecret = process.env.SESSION_SECRET || (() => {
-  if (process.env.NODE_ENV === 'production') {
-    console.error('❌ CRITICAL: SESSION_SECRET not set in production!');
-    console.error('   Sessions will NOT work properly. Set SESSION_SECRET in Vercel environment variables.');
-  } else {
-    console.warn('⚠️ SESSION_SECRET not set - using fallback (sessions may not persist)');
-  }
-  return 'jengatrack-dev-secret-' + Date.now();
-})();
-
-app.use(session({
-  secret: sessionSecret,
-  store: sessionStore, // null = memory store (not ideal for serverless)
-  resave: false, // Don't save session if unmodified
-  saveUninitialized: false, // Don't create session until something is stored
-  name: 'buildmonitor.sid', // Custom session cookie name
-  proxy: true, // Trust proxy (required for Vercel)
-  rolling: true, // Reset expiration on every request
-  cookie: {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    domain: undefined,
-    path: '/',
-  },
-}));
-
-// Session debug middleware
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    console.log('[Session Debug]', {
-      path: req.path,
-      method: req.method,
-      sessionID: req.sessionID,
-      hasSession: !!req.session,
-      userId: req.session?.userId || null,
-      cookie: req.headers.cookie ? 'present' : 'missing',
-    });
   }
   next();
 });
@@ -184,8 +108,19 @@ app.get('/health', (req, res) => {
 // ============================================================================
 // WEBHOOK ROUTES
 // ============================================================================
-// NOTE: Webhook routes are handled by dedicated serverless functions:
-// api/whatsapp-webhook.js and api/daily-heartbeat.js (see vercel.json rewrites).
+// Twilio WhatsApp webhook — handle inside index so we never 404 when rewrite hits index
+app.all('/api/whatsapp-webhook', async (req, res) => {
+  try {
+    const { default: webhookHandler } = await import('./whatsapp-webhook.js');
+    return webhookHandler(req, res);
+  } catch (err) {
+    console.error('[Webhook] Error:', err);
+    res.setHeader('Content-Type', 'text/xml');
+    return res.status(200).send(
+      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+    );
+  }
+});
 
 // ============================================================================
 // API ROUTES (all handlers are defined below — no external server file)
@@ -195,7 +130,7 @@ app.get('/health', (req, res) => {
 app.get('/api/projects/:projectId/summary', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
-    const userId = req.session?.userId || req.userId || req.user?.id;
+    const userId = req.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
@@ -427,7 +362,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
 app.get('/api/projects/:projectId/expenses', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
-    const userId = req.session?.userId || req.userId || req.user?.id;
+    const userId = req.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
@@ -559,7 +494,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 app.get('/api/projects/:projectId/materials', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
-    const userId = req.session?.userId || req.userId || req.user?.id;
+    const userId = req.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
@@ -641,7 +576,7 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
 app.get('/api/projects/:projectId/daily', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
-    const userId = req.session?.userId || req.userId || req.user?.id;
+    const userId = req.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
@@ -774,7 +709,7 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
 app.get('/api/projects/:projectId/trends', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
-    const userId = req.session?.userId || req.userId || req.user?.id;
+    const userId = req.userId || req.user?.id;
     if (!userId) {
       return res.status(401).json({ success: false, error: 'Not authenticated' });
     }
@@ -928,26 +863,24 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 // TEST ENDPOINTS (available even when server app is loaded)
 // ============================================================================
 
-// Debug Session Endpoint (always available)
+// Debug Auth Endpoint (JWT only — no session)
 app.get('/api/debug/session', async (req, res) => {
   try {
+    const token = extractToken(req);
+    const decoded = token ? verifyToken(token) : null;
     res.json({
       success: true,
-      session: {
-        sessionID: req.sessionID,
-        hasSession: !!req.session,
-        userId: req.session?.userId || null,
-        whatsappNumber: req.session?.whatsappNumber || null,
-      },
+      auth: 'JWT only (no session)',
+      userId: decoded?.userId || null,
       env: {
-        SESSION_SECRET_SET: !!process.env.SESSION_SECRET,
+        JWT_SECRET_SET: !!process.env.JWT_SECRET,
         NODE_ENV: process.env.NODE_ENV,
       },
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      error: 'Session check failed',
+      error: 'Auth check failed',
       details: error.message
     });
   }
@@ -979,45 +912,28 @@ app.get('/webhook/debug', async (req, res) => {
 // AUTHENTICATION ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================
 
-// Middleware to check authentication (supports both JWT token and session)
+// Middleware to check authentication (JWT only — no session)
 function requireAuth(req, res, next) {
-  console.log('[Auth Check]', {
-    sessionId: req.sessionID,
-    userId: req.session?.userId,
-    path: req.path,
-  });
-  // Try JWT token first
   const token = extractToken(req);
-  
-  if (token) {
-    const decoded = verifyToken(token);
-    if (decoded) {
-      // JWT token is valid
-      req.userId = decoded.userId;
-      req.userEmail = decoded.email;
-      req.user = { id: decoded.userId };
-      console.log('[Auth Check] ✅ SUCCESS - JWT token authenticated:', decoded.userId);
-      return next();
-    }
-    console.log('[Auth Check] ⚠️ JWT token invalid, trying session fallback');
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: 'Not authenticated',
+      message: 'Please log in to access this resource',
+    });
   }
-
-  // Fallback to session-based auth
-  if (req.session && req.session.userId) {
-    req.userId = req.session.userId;
-    req.userEmail = req.session.email;
-    req.user = { id: req.session.userId };
-    console.log('[Auth Check] ✅ SUCCESS - Session authenticated:', req.session.userId);
-    return next();
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid or expired token',
+      message: 'Please log in again',
+    });
   }
-
-  // No valid authentication found
-  console.log('[Auth Check] ❌ FAILED - No valid token or session');
-  return res.status(401).json({
-    success: false,
-    error: 'Not authenticated',
-    message: 'Please log in to access this resource',
-  });
+  req.userId = decoded.userId;
+  req.userEmail = decoded.email;
+  req.user = { id: decoded.userId };
+  return next();
 }
 
 // POST /api/auth/login - Login user with Supabase Auth
@@ -1129,18 +1045,7 @@ app.post('/api/auth/login', async (req, res) => {
       console.log('[Login] ✅ Profile created in profiles table');
     }
 
-    // Save session so cookie is sent
-    req.session.userId = authData.user.id;
-    req.session.email = userProfile.email || authData.user.email;
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    console.log('[Login] Session saved:', { sessionId: req.sessionID, userId: req.session.userId });
-
-    // Generate JWT token
+    // Generate JWT token (client stores it and sends via Authorization header)
     const token = generateToken(authData.user.id, userProfile.email || authData.user.email);
 
     return res.json({
@@ -1495,15 +1400,13 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       status,
       bodyKeys: Object.keys(req.body),
     });
-    console.log('[Create Project] Session:', {
-      hasSession: !!req.session,
-      sessionID: req.sessionID,
-      userId: req.session?.userId,
+    console.log('[Create Project] Auth:', {
+      userId: req.userId || null,
     });
 
     // Check authentication
     if (!userId) {
-      console.error('[Create Project] ❌ No user ID in session');
+      console.error('[Create Project] ❌ No user ID (JWT required)');
       return res.status(401).json({ 
         success: false,
         error: 'Not authenticated',
