@@ -66,7 +66,6 @@ export default function ProjectsPage() {
         budgetAmount: parseBudget(form.totalBudget) || undefined,
         status: "active",
         channelType: "direct",
-        whatsappNumber: form.whatsappNumber || undefined,
       });
       const data = await res.json();
       if (!data.success || !data.project) throw new Error(data.error || "Create failed");

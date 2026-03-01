@@ -27,7 +27,6 @@ export interface NewProjectFormData {
   location: string;
   startDate: string;
   totalBudget: string;
-  whatsappNumber: string;
 }
 
 const DEFAULT_FORM: NewProjectFormData = {
@@ -36,7 +35,6 @@ const DEFAULT_FORM: NewProjectFormData = {
   location: "",
   startDate: "",
   totalBudget: "",
-  whatsappNumber: "",
 };
 
 interface NewProjectModalProps {
@@ -136,16 +134,6 @@ export function NewProjectModal({
             <p className="text-xs text-zinc-500 mt-1">
               e.g. 30,000,000 or 30M for 30 million UGX
             </p>
-          </div>
-          <div>
-            <Label htmlFor="whatsapp" className="text-zinc-300">{t("projects.whatsappLink")}</Label>
-            <Input
-              id="whatsapp"
-              value={form.whatsappNumber}
-              onChange={(e) => setForm((p) => ({ ...p, whatsappNumber: e.target.value }))}
-              placeholder="+256 ..."
-              className="mt-1 bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
-            />
           </div>
           {errorMessage && (
             <p className="text-sm text-red-400">{errorMessage}</p>
