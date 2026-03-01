@@ -1,6 +1,6 @@
 /**
- * Compile api/*.ts to api/*.js so Vercel can run plain JS (avoids "Unexpected token ':'" from TS).
- * We do NOT delete the .ts files: Vercel's function discovery expects them to exist.
+ * Compile api/_*.ts to api/*.js so Vercel runs plain JS.
+ * Source files are _*.ts so Vercel does not treat them as serverless functions (only the .js are).
  */
 import * as esbuild from 'esbuild';
 import { existsSync } from 'fs';
@@ -12,8 +12,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const apiDir = join(__dirname, 'api');
 
 const entries = [
-  { in: 'whatsapp-webhook.ts', out: 'whatsapp-webhook.js' },
-  { in: 'daily-heartbeat.ts', out: 'daily-heartbeat.js' },
+  { in: '_whatsapp-webhook.ts', out: 'whatsapp-webhook.js' },
+  { in: '_daily-heartbeat.ts', out: 'daily-heartbeat.js' },
 ];
 
 async function main() {

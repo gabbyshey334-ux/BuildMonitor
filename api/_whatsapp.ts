@@ -5,7 +5,9 @@
  * of the main server codebase. It handles incoming Twilio WhatsApp messages
  * and responds directly.
  * 
- * Route: /webhook/webhook -> /api/whatsapp
+ * Route: /webhook/webhook -> /api/whatsapp-webhook (main handler)
+ * This file is prefixed with _ so Vercel does NOT deploy it as a function.
+ * The active webhook is api/whatsapp-webhook.js
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -134,4 +136,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
-

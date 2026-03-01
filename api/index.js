@@ -1982,22 +1982,6 @@ app.patch('/api/projects/:projectId/settings', requireAuth, async (req, res) => 
 // ============================================================================
 // DASHBOARD ENDPOINTS (always available - BEFORE server app mounts)
 // ============================================================================
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create project',
-      message: error.message || 'An unexpected error occurred',
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-    });
-  }
-});
-
-// ============================================================================
-// DASHBOARD ENDPOINTS (always available - BEFORE server app mounts)
-// ============================================================================
 
 // GET /api/dashboard/summary
 app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
