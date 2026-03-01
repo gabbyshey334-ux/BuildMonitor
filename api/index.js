@@ -2775,24 +2775,18 @@ app.get('/api/test/supabase', async (req, res) => {
 });
 
 // ============================================================================
-// FALLBACK ROUTES (if compiled server not available)
+// FALLBACK ROUTES (non-auth debug etc.)
 // ============================================================================
 
-if (!serverApp) {
-  // Note: Auth endpoints are defined above, before this fallback section
-  // This section only contains non-auth fallback routes
-
-  app.get('/api/debug/db', async (req, res) => {
-    res.json({
-      status: 'ok',
-      message: 'Debug endpoint (fallback mode)',
-      database: {
-        url: process.env.DATABASE_URL ? 'configured' : 'not configured'
-      }
-    });
+app.get('/api/debug/db', async (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Debug endpoint (fallback mode)',
+    database: {
+      url: process.env.DATABASE_URL ? 'configured' : 'not configured'
+    }
   });
-
-}
+});
 
 // ============================================================================
 // STATIC FILES
