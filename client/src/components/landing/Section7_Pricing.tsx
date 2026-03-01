@@ -35,7 +35,7 @@ export default function Pricing() {
   ];
 
   return (
-    <section id="pricing" className="py-24 bg-[#0a0a0a]">
+    <section id="pricing" className="py-24 dark:bg-[#0a0a0a] bg-slate-50">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Header */}
         <motion.div
@@ -45,23 +45,23 @@ export default function Pricing() {
           transition={{ duration: 0.6 }}
           className="text-center mb-12"
         >
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">
+          <h2 className="text-4xl lg:text-5xl font-bold dark:text-white text-slate-900 mb-4">
             Start Managing <span className="text-[#22c55e]">Smarter</span>
           </h2>
-          <p className="text-zinc-400 max-w-2xl mx-auto">
+          <p className="dark:text-zinc-400 text-slate-500 max-w-2xl mx-auto">
             Whether you're managing a single site or multiple projects, JengaTrack scales with you.
           </p>
 
           {/* Toggle */}
           <div className="flex items-center justify-center gap-3 mt-8">
-            <span className={`text-sm ${!isYearly ? "text-white" : "text-zinc-500"}`}>Monthly</span>
+            <span className={`text-sm ${!isYearly ? "dark:text-white text-slate-900" : "dark:text-zinc-500 text-slate-500"}`}>Monthly</span>
             <button
               onClick={() => setIsYearly(!isYearly)}
-              className="relative w-12 h-6 bg-zinc-700 rounded-full transition-colors"
+              className="relative w-12 h-6 dark:bg-zinc-700 bg-slate-300 rounded-full transition-colors"
             >
               <div className={`absolute top-1 w-4 h-4 bg-[#22c55e] rounded-full transition-all ${isYearly ? "left-7" : "left-1"}`} />
             </button>
-            <span className={`text-sm ${isYearly ? "text-white" : "text-zinc-500"}`}>
+            <span className={`text-sm ${isYearly ? "dark:text-white text-slate-900" : "dark:text-zinc-500 text-slate-500"}`}>
               Annually
               <span className="ml-2 px-2 py-0.5 bg-[#22c55e]/20 text-[#22c55e] text-xs rounded-full">Save 20%</span>
             </span>
@@ -77,10 +77,10 @@ export default function Pricing() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="bg-[#1a1a1a] rounded-3xl p-4 border border-zinc-800/50 flex flex-col"
+              className="dark:bg-[#1a1a1a] bg-white rounded-3xl p-4 dark:border-zinc-800/50 border-slate-200 border flex flex-col"
             >
               {/* Inner Box - Plan Details - FIXED HEIGHT */}
-              <div className={`rounded-2xl p-6 text-center flex flex-col justify-between min-h-[280px] ${plan.highlighted ? "bg-gradient-to-br from-[#14b8a6] to-[#22c55e]" : "bg-[#111111]"}`}>
+              <div className={`rounded-2xl p-6 text-center flex flex-col justify-between min-h-[280px] ${plan.highlighted ? "bg-gradient-to-br from-[#14b8a6] to-[#22c55e]" : "dark:bg-[#111111] bg-slate-50"}`}>
                 <div>
                   {plan.badge && (
                     <span className="inline-block px-3 py-1 bg-white/20 text-white text-xs font-semibold rounded-full mb-3">
@@ -88,7 +88,7 @@ export default function Pricing() {
                     </span>
                   )}
                   <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
-                  <p className={`text-sm min-h-[40px] ${plan.highlighted ? "text-white/80" : "text-zinc-400"}`}>
+                  <p className={`text-sm min-h-[40px] ${plan.highlighted ? "text-white/80" : "dark:text-zinc-400 text-slate-600"}`}>
                     {plan.description}
                   </p>
                 </div>
@@ -102,7 +102,7 @@ export default function Pricing() {
                       <span className="text-4xl font-bold text-white">
                         ${isYearly ? plan.price.yearly : plan.price.monthly}
                       </span>
-                      <span className={`text-sm ${plan.highlighted ? "text-white/70" : "text-zinc-500"}`}>
+                      <span className={`text-sm ${plan.highlighted ? "text-white/70" : "dark:text-zinc-500 text-slate-500"}`}>
                         /month
                       </span>
                     </div>
@@ -121,11 +121,11 @@ export default function Pricing() {
 
               {/* Benefits Section */}
               <div className="px-2 pb-2 pt-6 flex-1">
-                <p className="text-sm font-semibold text-white mb-4">Benefits</p>
+                <p className="text-sm font-semibold dark:text-white text-slate-900 mb-4">Benefits</p>
                 <ul className="space-y-3">
                   {plan.features.map((feature, i) => (
-                    <li key={i} className="flex items-start gap-3 text-sm text-zinc-400">
-                      <span className="text-zinc-500">•</span>
+                    <li key={i} className="flex items-start gap-3 text-sm dark:text-zinc-400 text-slate-600">
+                      <span className="dark:text-zinc-500 text-slate-500">•</span>
                       <span>{feature}</span>
                     </li>
                   ))}

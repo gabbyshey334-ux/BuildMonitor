@@ -6,7 +6,7 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-[#0a0a0a] border-t border-zinc-800/50">
+    <footer className="dark:bg-[#0a0a0a] bg-slate-100 border-t dark:border-zinc-800/50 border-slate-200">
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-12">
           {/* Left Side - Logo & Social */}
@@ -17,26 +17,26 @@ export default function Footer() {
                 alt="JengaTrack"
                 className="w-8 h-8 object-contain mix-blend-multiply dark:mix-blend-lighten"
               />
-              <span className="text-xl font-bold text-white">JengaTrack</span>
+              <span className="text-xl font-bold dark:text-white text-slate-900">JengaTrack</span>
             </Link>
             
-            <p className="text-zinc-500 text-sm">Build With Clarity</p>
+            <p className="dark:text-zinc-500 text-slate-500 text-sm">Build With Clarity</p>
 
             {/* Social Icons */}
             <div className="flex gap-4">
-              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Facebook">
+              <a href="#" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors" aria-label="Facebook">
                 <Facebook className="w-5 h-5" />
               </a>
-              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="LinkedIn">
+              <a href="#" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors" aria-label="LinkedIn">
                 <Linkedin className="w-5 h-5" />
               </a>
-              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="Instagram">
+              <a href="#" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors" aria-label="Instagram">
                 <Instagram className="w-5 h-5" />
               </a>
-              <a href="#" className="text-zinc-400 hover:text-white transition-colors" aria-label="YouTube">
+              <a href="#" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors" aria-label="YouTube">
                 <Youtube className="w-5 h-5" />
               </a>
-              <a href="mailto:info@jengatrack.com" className="text-zinc-400 hover:text-white transition-colors" aria-label="Email">
+              <a href="mailto:info@jengatrack.com" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors" aria-label="Email">
                 <Mail className="w-5 h-5" />
               </a>
             </div>
@@ -44,22 +44,22 @@ export default function Footer() {
 
           {/* Center - Navigation Links (CENTERED) */}
           <div className="flex items-center justify-center gap-8 lg:gap-12 lg:w-2/4 lg:justify-center">
-            <a href="#about" className="text-zinc-400 hover:text-white transition-colors text-sm">About</a>
-            <a href="#features" className="text-zinc-400 hover:text-white transition-colors text-sm">Features</a>
-            <a href="#pricing" className="text-zinc-400 hover:text-white transition-colors text-sm">Pricing</a>
-            <a href="#waitlist" className="text-zinc-400 hover:text-white transition-colors text-sm">Waitlist</a>
-            <a href="#blog" className="text-zinc-400 hover:text-white transition-colors text-sm">Blog</a>
+            <a href="#about" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors text-sm">About</a>
+            <a href="#features" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors text-sm">Features</a>
+            <a href="#pricing" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors text-sm">Pricing</a>
+            <a href="#waitlist" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors text-sm">Waitlist</a>
+            <a href="#blog" className="dark:text-zinc-400 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors text-sm">Blog</a>
           </div>
 
           {/* Right Side - Contact Info */}
-          <div className="space-y-4 lg:w-1/4 lg:border-l lg:border-zinc-800 lg:pl-8">
+          <div className="space-y-4 lg:w-1/4 lg:border-l dark:lg:border-zinc-800 lg:border-slate-200 lg:pl-8">
             <div>
-              <p className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Location:</p>
-              <p className="text-zinc-400 text-sm">10 Lumumba Av, Nairobi, Kenya</p>
+              <p className="dark:text-zinc-500 text-slate-500 text-xs uppercase tracking-wider mb-1">Location:</p>
+              <p className="dark:text-zinc-400 text-slate-600 text-sm">10 Lumumba Av, Nairobi, Kenya</p>
             </div>
             <div>
-              <p className="text-zinc-500 text-xs uppercase tracking-wider mb-1">Email:</p>
-              <p className="text-zinc-400 text-sm">info@jengatrack.com</p>
+              <p className="dark:text-zinc-500 text-slate-500 text-xs uppercase tracking-wider mb-1">Email:</p>
+              <p className="dark:text-zinc-400 text-slate-600 text-sm">info@jengatrack.com</p>
             </div>
             <a href="#contact">
               <Button 
@@ -72,13 +72,13 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-12 pt-8 border-t border-zinc-800/50 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div className="mt-12 pt-8 border-t dark:border-zinc-800/50 border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex gap-6 text-sm">
-            <a href="/privacy" className="text-zinc-500 hover:text-white transition-colors">Privacy Policy</a>
-            <span className="text-zinc-700">|</span>
-            <a href="/terms" className="text-zinc-500 hover:text-white transition-colors">Terms & Conditions</a>
+            <a href="/privacy" className="dark:text-zinc-500 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors">Privacy Policy</a>
+            <span className="dark:text-zinc-700 text-slate-300">|</span>
+            <a href="/terms" className="dark:text-zinc-500 dark:hover:text-white text-slate-500 hover:text-slate-800 transition-colors">Terms & Conditions</a>
           </div>
-          <p className="text-sm text-zinc-500">© {currentYear} JengaTrack. All rights reserved.</p>
+          <p className="text-sm dark:text-zinc-500 text-slate-500">© {currentYear} JengaTrack. All rights reserved.</p>
         </div>
       </div>
     </footer>

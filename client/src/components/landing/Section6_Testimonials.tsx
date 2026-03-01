@@ -37,7 +37,7 @@ export default function Testimonials() {
   ];
 
   return (
-    <section id="testimonials" className="py-24 bg-[#0a0a0a]">
+    <section id="testimonials" className="py-24 dark:bg-[#0a0a0a] bg-slate-50">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Section Header */}
         <motion.h2
@@ -45,7 +45,7 @@ export default function Testimonials() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="text-3xl lg:text-4xl font-bold text-white text-center mb-4"
+          className="text-3xl lg:text-4xl font-bold dark:text-white text-slate-900 text-center mb-4"
         >
           What Our Users
           <br />

@@ -5,7 +5,7 @@ import { Link } from "wouter";
 
 export default function Features() {
   return (
-    <section id="features" className="py-24 bg-[#0a0a0a] relative overflow-hidden">
+    <section id="features" className="py-24 dark:bg-[#0a0a0a] bg-slate-50 relative overflow-hidden">
       <div className="container mx-auto px-4 max-w-6xl relative z-10">
         {/* Section Header */}
         <motion.div
@@ -15,12 +15,12 @@ export default function Features() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
+          <h2 className="text-4xl lg:text-5xl font-bold dark:text-white text-slate-900 mb-6 leading-tight">
             Turn Site Messages Into
             <br />
             Structured Control
           </h2>
-          <p className="text-lg text-zinc-400 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-lg dark:text-zinc-400 text-slate-500 max-w-3xl mx-auto leading-relaxed">
             JengaTrack transforms everyday construction updates into organized trackable data. 
             Using AI and familiar chat apps, it converts informal communication into real-time 
             financial and progress insights
@@ -67,7 +67,7 @@ export default function Features() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="relative rounded-3xl overflow-hidden bg-zinc-900 aspect-[4/3] md:aspect-auto"
+            className="relative rounded-3xl overflow-hidden dark:bg-zinc-900 bg-slate-200 aspect-[4/3] md:aspect-auto"
           >
             <img
               src="/assets/images/construction-team.jpg"
@@ -92,23 +92,23 @@ export default function Features() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50"
+            className="dark:bg-[#1a1a1a] bg-white rounded-3xl p-6 dark:border-zinc-800/50 border-slate-200 border"
           >
             {/* Notification Badge */}
-            <div className="inline-flex items-center gap-3 bg-zinc-800/80 rounded-full px-4 py-3 mb-8">
+            <div className="inline-flex items-center gap-3 dark:bg-zinc-800/80 bg-slate-100 rounded-full px-4 py-3 mb-8">
               <div className="w-8 h-8 rounded-full bg-[#14b8a6] flex items-center justify-center">
                 <CheckCircle2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs text-white font-medium">Budget Updated Successfully</p>
-                <p className="text-[10px] text-zinc-500">Today, 10:31am</p>
+                <p className="text-xs dark:text-white text-slate-800 font-medium">Budget Updated Successfully</p>
+                <p className="text-[10px] dark:text-zinc-500 text-slate-500">Today, 10:31am</p>
               </div>
             </div>
             
-            <h4 className="text-lg font-semibold text-white mb-3">
+            <h4 className="text-lg font-semibold dark:text-white text-slate-900 mb-3">
               Built for Real-World Construction
             </h4>
-            <p className="text-zinc-400 text-sm leading-relaxed">
+            <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
               Updates can be sent in familiar language, simple text or voice notes. Reducing friction 
               improving adoption across teams.
             </p>
@@ -120,37 +120,37 @@ export default function Features() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50"
+            className="dark:bg-[#1a1a1a] bg-white rounded-3xl p-6 dark:border-zinc-800/50 border-slate-200 border"
           >
             {/* Mini Chart */}
-            <div className="mb-6 bg-zinc-800/50 rounded-xl p-4">
-              <p className="text-xs text-zinc-400 mb-3">Running Projects</p>
+            <div className="mb-6 dark:bg-zinc-800/50 bg-slate-100 rounded-xl p-4">
+              <p className="text-xs dark:text-zinc-400 text-slate-600 mb-3">Running Projects</p>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-500 w-14">Project A</span>
-                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <span className="text-[10px] dark:text-zinc-500 text-slate-500 w-14">Project A</span>
+                  <div className="flex-1 h-1.5 dark:bg-zinc-700 bg-slate-200 rounded-full overflow-hidden">
                     <div className="h-full w-[75%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-500 w-14">Project B</span>
-                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <span className="text-[10px] dark:text-zinc-500 text-slate-500 w-14">Project B</span>
+                  <div className="flex-1 h-1.5 dark:bg-zinc-700 bg-slate-200 rounded-full overflow-hidden">
                     <div className="h-full w-[60%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-zinc-500 w-14">Project C</span>
-                  <div className="flex-1 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+                  <span className="text-[10px] dark:text-zinc-500 text-slate-500 w-14">Project C</span>
+                  <div className="flex-1 h-1.5 dark:bg-zinc-700 bg-slate-200 rounded-full overflow-hidden">
                     <div className="h-full w-[90%] bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full" />
                   </div>
                 </div>
               </div>
             </div>
 
-            <h4 className="text-lg font-semibold text-white mb-3">
+            <h4 className="text-lg font-semibold dark:text-white text-slate-900 mb-3">
               Full Financial Visibility
             </h4>
-            <p className="text-zinc-400 text-sm leading-relaxed">
+            <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
               Monitor Spending in real time, compare actuals against budgets, and identify 
               overspending before it becomes a crisis.
             </p>
@@ -164,17 +164,17 @@ export default function Features() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: 0.25 }}
-              className="bg-[#1a1a1a] rounded-3xl p-6 border border-zinc-800/50 flex-1"
+              className="dark:bg-[#1a1a1a] bg-white rounded-3xl p-6 border dark:border-zinc-800/50 border-slate-200 flex-1"
             >
               <div className="flex items-center gap-2 mb-3">
                 <div className="flex -space-x-2">
-                  <img src="/assets/images/avatar-1.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
-                  <img src="/assets/images/avatar-2.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
-                  <img src="/assets/images/avatar-3.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
-                  <img src="/assets/images/avatar-4.jpg" alt="User" className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] object-cover" />
+                  <img src="/assets/images/avatar-1.jpg" alt="User" className="w-8 h-8 rounded-full border-2 dark:border-[#1a1a1a] border-white object-cover" />
+                  <img src="/assets/images/avatar-2.jpg" alt="User" className="w-8 h-8 rounded-full border-2 dark:border-[#1a1a1a] border-white object-cover" />
+                  <img src="/assets/images/avatar-3.jpg" alt="User" className="w-8 h-8 rounded-full border-2 dark:border-[#1a1a1a] border-white object-cover" />
+                  <img src="/assets/images/avatar-4.jpg" alt="User" className="w-8 h-8 rounded-full border-2 dark:border-[#1a1a1a] border-white object-cover" />
                 </div>
               </div>
-              <p className="text-zinc-400 text-sm leading-relaxed">
+              <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
                 Our users span across different countries in Africa.
               </p>
             </motion.div>

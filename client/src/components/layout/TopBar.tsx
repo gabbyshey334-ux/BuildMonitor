@@ -5,7 +5,6 @@ import { Link, useLocation } from "wouter";
 import {
   Menu,
   ChevronDown,
-  Bell,
   User,
   Settings,
   LogOut,
@@ -27,14 +26,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { cn } from "@/lib/utils";
 import { Sun, Moon } from "lucide-react";
 
-// Mock notifications for UI
-const MOCK_NOTIFICATIONS = [
-  { id: "1", type: "price", title: "Cement price alert", time: "2h ago", icon: "⚠️" },
-  { id: "2", type: "stock", title: "Low stock: Sand", time: "5h ago", icon: "🚨" },
-  { id: "3", type: "heartbeat", title: "Daily summary", time: "Yesterday", icon: "🌆" },
-];
-const UNREAD_COUNT = 2;
-
 interface TopBarProps {
   onMenuClick?: () => void;
   showHamburger?: boolean;
@@ -47,7 +38,6 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
   const { currentProject, projects, setCurrentProject } = useProject();
   const { theme, toggleTheme, isDark } = useTheme();
   const [projectOpen, setProjectOpen] = useState(false);
-  const [notifOpen, setNotifOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   const initials = user?.fullName
@@ -87,7 +77,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
         )}
       </div>
 
-      {/* Right: project switcher, theme toggle, notifications, profile */}
+      {/* Right: project switcher, theme toggle, profile */}
       <div className="flex items-center gap-2">
         {/* Project switcher */}
         <DropdownMenu open={projectOpen} onOpenChange={setProjectOpen}>
@@ -141,36 +131,6 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
         >
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-
-        {/* Notifications */}
-        <DropdownMenu open={notifOpen} onOpenChange={setNotifOpen}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative dark:text-zinc-400 dark:hover:text-white text-slate-600 hover:text-slate-800">
-              <Bell className="h-5 w-5" />
-              {UNREAD_COUNT > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-[10px] font-medium text-white flex items-center justify-center">
-                  {UNREAD_COUNT}
-                </span>
-              )}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-72 dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800"
-          >
-            <DropdownMenuLabel className="dark:text-zinc-400 text-slate-500">Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator className="dark:bg-zinc-700 bg-slate-200" />
-            {MOCK_NOTIFICATIONS.map((n) => (
-              <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-0.5 py-3 cursor-pointer">
-                <span className="flex items-center gap-2">
-                  <span>{n.icon}</span>
-                  <span className="font-medium">{n.title}</span>
-                </span>
-                <span className="text-xs dark:text-zinc-500 text-slate-500">{n.time}</span>
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
 
         {/* Profile */}
         <DropdownMenu open={profileOpen} onOpenChange={setProfileOpen}>

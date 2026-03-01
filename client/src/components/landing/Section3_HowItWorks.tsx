@@ -40,7 +40,7 @@ export default function HowItWorks() {
   ];
 
   return (
-    <section id="how-it-works" className="py-24 bg-[#0a0a0a]">
+    <section id="how-it-works" className="py-24 dark:bg-[#0a0a0a] bg-slate-50">
       <div className="container mx-auto px-4 max-w-6xl">
         {/* Section Header */}
         <motion.h2
@@ -48,7 +48,7 @@ export default function HowItWorks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
-          className="text-3xl lg:text-4xl font-bold text-white text-center mb-16"
+          className="text-3xl lg:text-4xl font-bold dark:text-white text-slate-900 text-center mb-16"
         >
           How It Works
         </motion.h2>
@@ -62,21 +62,21 @@ export default function HowItWorks() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: index * 0.15 }}
-              className="bg-[#111111] rounded-2xl border border-zinc-800/50 overflow-hidden hover:border-zinc-700/50 transition-colors"
+              className="dark:bg-[#111111] bg-white rounded-2xl dark:border-zinc-800/50 border-slate-200 border overflow-hidden hover:border-zinc-700/50 hover:border-slate-300 transition-colors"
             >
               {/* Image/Preview Area */}
-              <div className="h-48 bg-zinc-900/50 relative p-4 flex items-center justify-center">
+              <div className="h-48 dark:bg-zinc-900/50 bg-slate-100 relative p-4 flex items-center justify-center">
                 {index === 0 && (
                   /* Chat Preview for Step 1 */
-                  <div className="w-full max-w-[240px] bg-[#1a1a1a] rounded-xl p-3 space-y-2 shadow-xl">
-                    <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+                  <div className="w-full max-w-[240px] dark:bg-[#1a1a1a] bg-white rounded-xl p-3 space-y-2 shadow-xl border dark:border-transparent border-slate-200">
+                    <div className="flex items-center gap-2 pb-2 border-b dark:border-zinc-800 border-slate-200">
                       <div className="w-6 h-6 rounded-full bg-[#22c55e]" />
-                      <span className="text-xs text-zinc-400">Site Manager</span>
+                      <span className="text-xs dark:text-zinc-400 text-slate-500">Site Manager</span>
                     </div>
                     {step.chatPreview.messages.map((msg, i) => (
                       <div key={i} className="bg-[#22c55e]/20 rounded-lg p-2 rounded-tl-none">
-                        <p className="text-xs text-white">{msg.text}</p>
-                        <span className="text-[10px] text-zinc-500">{msg.time}</span>
+                        <p className="text-xs dark:text-white text-slate-800">{msg.text}</p>
+                        <span className="text-[10px] dark:text-zinc-500 text-slate-500">{msg.time}</span>
                       </div>
                     ))}
                   </div>
@@ -84,14 +84,14 @@ export default function HowItWorks() {
 
                 {index === 1 && (
                   /* Notification for Step 2 */
-                  <div className="w-full max-w-[240px] bg-[#1a1a1a] rounded-xl p-4 shadow-xl border border-zinc-800">
+                  <div className="w-full max-w-[240px] dark:bg-[#1a1a1a] bg-white rounded-xl p-4 shadow-xl border dark:border-zinc-800 border-slate-200">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-[#22c55e]/20 flex items-center justify-center">
                         {step.notification.icon}
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-white">{step.notification.title}</p>
-                        <p className="text-xs text-zinc-500">{step.notification.subtitle}</p>
+                        <p className="text-sm font-medium dark:text-white text-slate-800">{step.notification.title}</p>
+                        <p className="text-xs dark:text-zinc-500 text-slate-500">{step.notification.subtitle}</p>
                       </div>
                     </div>
                   </div>
@@ -99,17 +99,17 @@ export default function HowItWorks() {
 
                 {index === 2 && (
                   /* Chart Preview for Step 3 */
-                  <div className="w-full max-w-[240px] bg-[#1a1a1a] rounded-xl p-3 shadow-xl border border-zinc-800">
+                  <div className="w-full max-w-[240px] dark:bg-[#1a1a1a] bg-white rounded-xl p-3 shadow-xl border dark:border-zinc-800 border-slate-200">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <p className="text-xs font-medium text-[#22c55e]">{step.chartPreview.title}</p>
-                        <p className="text-[10px] text-zinc-500">{step.chartPreview.status}</p>
+                        <p className="text-[10px] dark:text-zinc-500 text-slate-500">{step.chartPreview.status}</p>
                       </div>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-zinc-400 w-12">Progress</span>
-                        <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <span className="text-[10px] dark:text-zinc-400 text-slate-500 w-12">Progress</span>
+                        <div className="flex-1 h-2 dark:bg-zinc-800 bg-slate-200 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-gradient-to-r from-[#14b8a6] to-[#22c55e] rounded-full"
                             style={{ width: `${step.chartPreview.progress}%` }}
@@ -127,9 +127,9 @@ export default function HowItWorks() {
                   <span className="w-8 h-8 rounded-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] flex items-center justify-center text-sm font-bold text-white">
                     {step.step}
                   </span>
-                  <h3 className="text-lg font-semibold text-white">{step.title}</h3>
+                  <h3 className="text-lg font-semibold dark:text-white text-slate-900">{step.title}</h3>
                 </div>
-                <p className="text-zinc-400 text-sm leading-relaxed">
+                <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
                   {step.description}
                 </p>
               </div>
