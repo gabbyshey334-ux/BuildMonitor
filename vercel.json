@@ -6,9 +6,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
   "functions": {
-    "api/index.js": { "maxDuration": 30 },
-    "api/whatsapp-webhook.js": { "maxDuration": 30 },
-    "api/daily-heartbeat.js": { "maxDuration": 30 }
+    "api/index.js": { "maxDuration": 30 }
   },
   "crons": [
     { "path": "/api/daily-heartbeat", "schedule": "0 17 * * *" }
