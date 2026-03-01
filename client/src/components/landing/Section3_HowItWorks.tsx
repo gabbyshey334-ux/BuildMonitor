@@ -1,12 +1,14 @@
 import { motion } from "framer-motion";
 import { CheckCircle2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function HowItWorks() {
+  const { t } = useLanguage();
   const steps = [
     {
       step: "1",
-      title: "Send site updates",
-      description: "Message a purchase, task, or site activity in your chat app",
+      titleKey: "landing.howitworks.step1",
+      descKey: "landing.howitworks.desc1",
       image: "/assets/images/step1-chat.png",
       chatPreview: {
         messages: [
@@ -17,19 +19,19 @@ export default function HowItWorks() {
     },
     {
       step: "2",
-      title: "Data Updates Automatically",
-      description: "JengaTrack logs the information and updates the project database instantly",
+      titleKey: "landing.howitworks.step2",
+      descKey: "landing.howitworks.desc2",
       image: "/assets/images/step2-update.png",
       notification: {
         icon: <CheckCircle2 className="w-5 h-5 text-[#22c55e]" />,
-        title: "Expense Updated Successfully",
+        titleKey: "landing.features.budgetUpdated",
         subtitle: "Today, 10:31am"
       }
     },
     {
       step: "3",
-      title: "View or Request Insights",
-      description: "Check progress on your dashboard or ask JengaTrack for reports directly in your chat",
+      titleKey: "landing.howitworks.step3",
+      descKey: "landing.howitworks.desc3",
       image: "/assets/images/step3-insights.png",
       chartPreview: {
         title: "KDF Apartments Ntungi",
@@ -50,7 +52,7 @@ export default function HowItWorks() {
           transition={{ duration: 0.6 }}
           className="text-3xl lg:text-4xl font-bold dark:text-white text-slate-900 text-center mb-16"
         >
-          How It Works
+          {t("landing.howitworks.title")}
         </motion.h2>
 
         {/* Steps Grid */}
@@ -90,8 +92,8 @@ export default function HowItWorks() {
                         {step.notification.icon}
                       </div>
                       <div>
-                        <p className="text-sm font-medium dark:text-white text-slate-800">{step.notification.title}</p>
-                        <p className="text-xs dark:text-zinc-500 text-slate-500">{step.notification.subtitle}</p>
+                        <p className="text-sm font-medium dark:text-white text-slate-800">{step.notification?.titleKey ? t(step.notification.titleKey) : ""}</p>
+                        <p className="text-xs dark:text-zinc-500 text-slate-500">{step.notification?.subtitle}</p>
                       </div>
                     </div>
                   </div>
@@ -127,10 +129,10 @@ export default function HowItWorks() {
                   <span className="w-8 h-8 rounded-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] flex items-center justify-center text-sm font-bold text-white">
                     {step.step}
                   </span>
-                  <h3 className="text-lg font-semibold dark:text-white text-slate-900">{step.title}</h3>
+                  <h3 className="text-lg font-semibold dark:text-white text-slate-900">{t(step.titleKey)}</h3>
                 </div>
                 <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
-                  {step.description}
+                  {t(step.descKey)}
                 </p>
               </div>
             </motion.div>

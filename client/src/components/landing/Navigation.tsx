@@ -3,9 +3,11 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 export default function Navigation() {
+  const { t } = useLanguage();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { isDark, toggleTheme } = useTheme();
@@ -19,10 +21,10 @@ export default function Navigation() {
   }, []);
 
   const navLinks = [
-    { name: "Features", href: "#features", hasDropdown: true },
-    { name: "Pricing", href: "#pricing" },
-    { name: "Blog", href: "#blog" },
-    { name: "Contact", href: "#contact" },
+    { nameKey: "landing.nav.features", href: "#features", hasDropdown: true },
+    { nameKey: "landing.nav.pricing", href: "#pricing" },
+    { nameKey: "landing.nav.blog", href: "#blog" },
+    { nameKey: "landing.nav.contact", href: "#contact" },
   ];
 
   return (
@@ -49,12 +51,12 @@ export default function Navigation() {
           <div className="hidden md:flex items-center space-x-1">
             {navLinks.map((link) => (
               <a 
-                key={link.name} 
+                key={link.nameKey} 
                 href={link.href} 
                 className="relative px-4 py-2 text-sm font-medium dark:text-zinc-300 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors group"
               >
                 <span className="flex items-center gap-1">
-                  {link.name}
+                  {t(link.nameKey)}
                   {link.hasDropdown && (
                     <ChevronDown className="w-4 h-4 opacity-50 group-hover:opacity-100 transition-opacity" />
                   )}
@@ -85,7 +87,7 @@ export default function Navigation() {
               <Button 
                 className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-6 py-2 rounded-lg font-semibold shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all duration-300 border-0 ml-2"
               >
-                Login/SignUp
+                {t("landing.nav.loginSignUp")}
               </Button>
             </Link>
           </div>
@@ -127,12 +129,12 @@ export default function Navigation() {
         <div className="px-4 py-4 space-y-1">
           {navLinks.map((link) => (
             <a 
-              key={link.name} 
+              key={link.nameKey} 
               href={link.href} 
               onClick={() => setIsMobileMenuOpen(false)} 
               className="flex items-center justify-between px-4 py-3 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
             >
-              <span className="font-medium">{link.name}</span>
+              <span className="font-medium">{t(link.nameKey)}</span>
               {link.hasDropdown && <ChevronDown className="w-4 h-4 opacity-50" />}
             </a>
           ))}
@@ -145,7 +147,7 @@ export default function Navigation() {
               <Button 
                 className="w-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white py-3 rounded-lg font-semibold"
               >
-                Login/SignUp
+                {t("landing.nav.loginSignUp")}
               </Button>
             </Link>
           </div>

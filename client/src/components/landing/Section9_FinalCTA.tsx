@@ -2,8 +2,10 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function FinalCTA() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -50,17 +52,16 @@ export default function FinalCTA() {
           className="text-center max-w-3xl mx-auto"
         >
           <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6 tracking-tight">
-            Build Smarter from Day One
+            {t("landing.cta.title")}
           </h2>
           <p className="text-lg text-white/85 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Join the JengaTrack waitlist to get early access, product updates, 
-            and behind-the-scenes progress as we prepare to launch.
+            {t("landing.cta.waitlistDesc")}
           </p>
           
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-4 justify-center max-w-xl mx-auto">
             <input
               type="email"
-              placeholder="Enter email address"
+              placeholder={t("landing.cta.enterEmail")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -71,12 +72,12 @@ export default function FinalCTA() {
               disabled={isSubmitting}
               className="bg-black hover:bg-zinc-800 text-white px-10 py-4 rounded-xl font-medium shadow-lg transition-all hover:scale-105 disabled:opacity-70"
             >
-              {isSubmitting ? "Submitting…" : "Submit"}
+              {isSubmitting ? t("landing.cta.submitting") : t("landing.cta.button")}
             </Button>
           </form>
           
           <p className="text-sm text-white/70 mt-6">
-            Be the first to try new features and receive occasional updates
+            {t("landing.cta.waitlistNote")}
           </p>
         </motion.div>
       </div>

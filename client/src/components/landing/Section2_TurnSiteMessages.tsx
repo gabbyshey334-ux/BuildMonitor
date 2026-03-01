@@ -2,8 +2,10 @@ import { motion } from "framer-motion";
 import { Play, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Features() {
+  const { t } = useLanguage();
   return (
     <section id="features" className="py-24 dark:bg-[#0a0a0a] bg-slate-50 relative overflow-hidden">
       <div className="container mx-auto px-4 max-w-6xl relative z-10">
@@ -15,15 +17,11 @@ export default function Features() {
           transition={{ duration: 0.6 }}
           className="text-center mb-16"
         >
-          <h2 className="text-4xl lg:text-5xl font-bold dark:text-white text-slate-900 mb-6 leading-tight">
-            Turn Site Messages Into
-            <br />
-            Structured Control
+          <h2 className="text-4xl lg:text-5xl font-bold dark:text-white text-slate-900 mb-6 leading-tight whitespace-pre-line">
+            {t("landing.features.title")}
           </h2>
           <p className="text-lg dark:text-zinc-400 text-slate-500 max-w-3xl mx-auto leading-relaxed">
-            JengaTrack transforms everyday construction updates into organized trackable data. 
-            Using AI and familiar chat apps, it converts informal communication into real-time 
-            financial and progress insights
+            {t("landing.features.subtitle")}
           </p>
         </motion.div>
 
@@ -44,18 +42,16 @@ export default function Features() {
                   <Button 
                     className="bg-black/20 hover:bg-black/30 text-white border-0 rounded-full px-6 text-sm backdrop-blur-sm mb-6"
                   >
-                    Learn More
+                    {t("landing.features.learnMore")}
                   </Button>
                 </Link>
                 
                 <h3 className="text-3xl lg:text-4xl font-bold text-white leading-tight mb-4">
-                  Manage Projects Through Chats
+                  {t("landing.features.manageProjects")}
                 </h3>
                 
                 <p className="text-white/85 leading-relaxed text-sm max-w-md">
-                  Log purchases, labor payments, deliveries, and site updates by sending a 
-                  simple message on WhatsApp or Telegram. No spreadsheets. No complicated tools. 
-                  Just messages and results.
+                  {t("landing.features.manageProjectsDesc")}
                 </p>
               </div>
             </div>
@@ -100,17 +96,16 @@ export default function Features() {
                 <CheckCircle2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-xs dark:text-white text-slate-800 font-medium">Budget Updated Successfully</p>
+                <p className="text-xs dark:text-white text-slate-800 font-medium">{t("landing.features.budgetUpdated")}</p>
                 <p className="text-[10px] dark:text-zinc-500 text-slate-500">Today, 10:31am</p>
               </div>
             </div>
             
             <h4 className="text-lg font-semibold dark:text-white text-slate-900 mb-3">
-              Built for Real-World Construction
+              {t("landing.features.builtForReal")}
             </h4>
             <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
-              Updates can be sent in familiar language, simple text or voice notes. Reducing friction 
-              improving adoption across teams.
+              {t("landing.features.builtForRealDesc")}
             </p>
           </motion.div>
 
@@ -148,11 +143,10 @@ export default function Features() {
             </div>
 
             <h4 className="text-lg font-semibold dark:text-white text-slate-900 mb-3">
-              Full Financial Visibility
+              {t("landing.features.fullVisibility")}
             </h4>
             <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
-              Monitor Spending in real time, compare actuals against budgets, and identify 
-              overspending before it becomes a crisis.
+              {t("landing.features.fullVisibilityDesc")}
             </p>
           </motion.div>
 
@@ -175,7 +169,7 @@ export default function Features() {
                 </div>
               </div>
               <p className="dark:text-zinc-400 text-slate-600 text-sm leading-relaxed">
-                Our users span across different countries in Africa.
+                {t("landing.features.usersSpan")}
               </p>
             </motion.div>
 
@@ -188,11 +182,10 @@ export default function Features() {
               className="bg-gradient-to-br from-[#14b8a6] to-[#22c55e] rounded-3xl p-6 relative overflow-hidden flex-1"
             >
               <h4 className="text-lg font-semibold text-white mb-3">
-                Actionable Project Insights
+                {t("landing.features.actionableInsights")}
               </h4>
               <p className="text-white/90 text-sm leading-relaxed">
-                Identify risks, track patterns, and operational inefficiencies. Transform raw data 
-                into structured insights that support faster, smarter decisions.
+                {t("landing.features.actionableInsightsDesc")}
               </p>
             </motion.div>
           </div>

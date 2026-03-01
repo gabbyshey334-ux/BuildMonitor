@@ -7,10 +7,10 @@ import { useLanguage } from "@/contexts/LanguageContext";
 export default function Hero() {
   const { t } = useLanguage();
   const stats = [
-    { icon: Users, value: "500+", label: "Active Contractors" },
-    { icon: DollarSign, value: "50M+", label: "UGX Tracked" },
-    { icon: BarChart3, value: "10,000+", label: "Expenses Logged" },
-    { icon: Star, value: "98%", label: "Satisfaction" },
+    { icon: Users, value: "500+", labelKey: "landing.hero.stats.contractors" },
+    { icon: DollarSign, value: "50M+", labelKey: "landing.hero.stats.ugxTracked" },
+    { icon: BarChart3, value: "10,000+", labelKey: "landing.hero.stats.expensesLogged" },
+    { icon: Star, value: "98%", labelKey: "landing.hero.stats.satisfaction" },
   ];
 
   return (
@@ -109,7 +109,7 @@ export default function Hero() {
                   {stat.value}
                 </div>
                 <div className="text-xs dark:text-zinc-500 text-slate-500 font-medium">
-                  {stat.label}
+                  {t(stat.labelKey)}
                 </div>
               </motion.div>
             ))}
