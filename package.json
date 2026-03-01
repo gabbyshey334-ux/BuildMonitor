@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "tsx watch server/index.ts",
-    "build": "npm run build:client",
+    "build": "npm run build:client && node build-api.js",
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.build.json || echo 'Warning: Server build has TypeScript errors but continuing deployment'",
     "vercel-build": "npm run build:client && node build-api.js",

@@ -51,7 +51,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   const trendIcons = {
     up: <TrendingUp className="w-4 h-4 text-success-green" />,
     down: <TrendingDown className="w-4 h-4 text-alert-red" />,
-    neutral: <MinusCircle className="w-4 h-4 text-[#94A3B8]" />,
+    neutral: <MinusCircle className="w-4 h-4 dark:text-[#94A3B8] text-slate-500" />,
   };
 
   return (

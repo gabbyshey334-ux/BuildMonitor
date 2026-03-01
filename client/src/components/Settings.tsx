@@ -21,7 +21,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
         </DialogHeader>
         <div className="py-6">
           <p className="text-sm text-muted-foreground text-center">
-            Settings panel - Coming Soon
+            Settings panel - In development
           </p>
           <p className="text-xs text-muted-foreground text-center mt-2">
             Configure your preferences, notifications, and account settings.

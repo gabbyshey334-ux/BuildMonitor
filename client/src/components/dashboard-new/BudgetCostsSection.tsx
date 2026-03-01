@@ -38,29 +38,29 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
   const { breakdown = [], vsActual = [], cumulativeCosts = [], totalBudget = 0, spent = 0, remaining = 0, spentPercent = 0 } = data || {};
 
   return (
-    <Card className="col-span-1 lg:col-span-2">
+    <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 col-span-1 lg:col-span-2">
       <CardHeader>
-        <CardTitle className="text-white font-bold">Budget & Costs</CardTitle>
+        <CardTitle className="dark:text-white text-slate-800 font-bold">Budget & Costs</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           {/* Key Budget Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="text-center p-4 rounded-lg border border-border bg-card">
-              <p className="text-sm text-[#CBD5E1] mb-1">Total Budget</p>
-              <p className="text-2xl font-bold text-white">UGX {totalBudget.toLocaleString()}</p>
+            <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Total Budget</p>
+              <p className="text-2xl font-bold dark:text-white text-slate-900">UGX {totalBudget.toLocaleString()}</p>
             </div>
-            <div className="text-center p-4 rounded-lg border border-border bg-card">
-              <p className="text-sm text-[#CBD5E1] mb-1">Spent</p>
-              <p className="text-2xl font-bold text-white">
+            <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Spent</p>
+              <p className="text-2xl font-bold dark:text-white text-slate-900">
                 UGX {spent.toLocaleString()}
-                <span className="text-sm font-normal text-[#94A3B8] ml-2">
+                <span className="text-sm font-normal dark:text-[#94A3B8] text-slate-500 ml-2">
                   ({spentPercent}%)
                 </span>
               </p>
             </div>
-            <div className="text-center p-4 rounded-lg border border-border bg-card">
-              <p className="text-sm text-[#CBD5E1] mb-1">Remaining</p>
+            <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Remaining</p>
               <p className="text-2xl font-bold text-ocean-pine">
                 UGX {remaining.toLocaleString()}
               </p>
@@ -71,7 +71,7 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Budget Breakdown - Pie Chart */}
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Budget Breakdown</h3>
+              <h3 className="text-lg font-semibold mb-3 dark:text-white text-slate-800">Budget Breakdown</h3>
               {breakdown.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={300}>
@@ -107,9 +107,9 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                               backgroundColor: category.colorHex || '#A0AEC0'
                             }}
                           />
-                          <span className="text-sm text-[#E2E8F0]">{category.category}</span>
+                          <span className="text-sm dark:text-[#E2E8F0] text-slate-700">{category.category}</span>
                         </div>
-                        <span className="font-medium text-white">
+                        <span className="font-medium dark:text-white text-slate-900">
                           UGX {category.amount.toLocaleString()}
                         </span>
                       </div>
@@ -117,13 +117,13 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                   </div>
                 </>
               ) : (
-                <p className="text-center text-[#94A3B8] py-8">No budget data available</p>
+                <p className="text-center dark:text-[#94A3B8] text-slate-500 py-8">No budget data available</p>
               )}
             </div>
 
             {/* Budget vs Actual - Bar Chart */}
             <div>
-              <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Budget vs. Actual Spend</h3>
+              <h3 className="text-lg font-semibold mb-3 dark:text-white text-slate-800">Budget vs. Actual Spend</h3>
               {vsActual.length > 0 ? (
                 <>
                   <ResponsiveContainer width="100%" height={300}>
@@ -155,14 +155,14 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                   </div>
                 </>
               ) : (
-                <p className="text-center text-[#94A3B8] py-8">No comparison data available</p>
+                <p className="text-center dark:text-[#94A3B8] text-slate-500 py-8">No comparison data available</p>
               )}
             </div>
           </div>
 
           {/* Cumulative costs trend line */}
           <div>
-            <h3 className="text-lg font-semibold mb-3 text-[#E2E8F0]">Cumulative Costs Over Time</h3>
+            <h3 className="text-lg font-semibold mb-3 dark:text-white text-slate-800">Cumulative Costs Over Time</h3>
             {cumulativeCosts.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={cumulativeCosts}>
@@ -179,7 +179,7 @@ export function BudgetCostsSection({ data }: { data?: BudgetCostsSectionData }) 
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-center text-[#94A3B8] py-8">No cost trend data available</p>
+              <p className="text-center dark:text-[#94A3B8] text-slate-500 py-8">No cost trend data available</p>
             )}
           </div>
         </div>

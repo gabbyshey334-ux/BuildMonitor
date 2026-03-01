@@ -57,15 +57,15 @@ export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsight
   }));
 
   return (
-    <Card>
+    <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
       <CardHeader>
-        <CardTitle className="text-lg font-heading text-white font-bold">Quick Insights</CardTitle>
+        <CardTitle className="text-lg font-heading dark:text-white text-slate-800 font-bold">Quick Insights</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Progress trend sparkline */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium font-body text-[#E2E8F0]">Progress Trend (30 days)</span>
+            <span className="text-sm font-medium font-body dark:text-[#E2E8F0] text-slate-700">Progress Trend (30 days)</span>
             <TrendingUp className="w-4 h-4 text-success-green" />
           </div>
           {progressChartData.length > 0 ? (
@@ -81,15 +81,15 @@ export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsight
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-xs text-[#94A3B8]">No progress data available</p>
+            <p className="text-xs dark:text-[#94A3B8] text-slate-500">No progress data available</p>
           )}
         </div>
 
         {/* Cost burn rate */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium font-body text-[#E2E8F0]">Daily Cost Burn</span>
-            <span className="text-sm text-[#CBD5E1] font-body">
+            <span className="text-sm font-medium font-body dark:text-[#E2E8F0] text-slate-700">Daily Cost Burn</span>
+            <span className="text-sm dark:text-[#CBD5E1] text-slate-600 font-body">
               {dailyBurnRate > 0 ? `UGX ${dailyBurnRate.toLocaleString()}/day` : 'N/A'}
             </span>
           </div>
@@ -106,13 +106,13 @@ export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsight
               </LineChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-xs text-[#94A3B8]">No cost data available</p>
+            <p className="text-xs dark:text-[#94A3B8] text-slate-500">No cost data available</p>
           )}
         </div>
 
         {/* Key insights bullets */}
-        <div className="space-y-2 pt-4 border-t border-border">
-          <h5 className="font-semibold text-sm font-heading text-[#E2E8F0]">This Week's Highlights</h5>
+        <div className="space-y-2 pt-4 dark:border-zinc-700 border-slate-200 border-t">
+          <h5 className="font-semibold text-sm font-heading dark:text-white text-slate-800">This Week's Highlights</h5>
           
           <div className="space-y-2">
             {finalInsights.map((insight, index) => {
@@ -124,7 +124,7 @@ export function TrendsQuickInsightsSection({ data }: { data?: TrendsQuickInsight
               return (
                 <div key={insight.id} className="flex items-start gap-2">
                   <Icon className={`w-4 h-4 ${color} mt-0.5 flex-shrink-0`} />
-                  <p className="text-sm font-body text-[#CBD5E1]">{insight.text}</p>
+                  <p className="text-sm font-body dark:text-[#CBD5E1] text-slate-700">{insight.text}</p>
                 </div>
               );
             })}

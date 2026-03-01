@@ -36,36 +36,36 @@ export function SiteReportsMediaSection({ data }: { data?: SiteReportsMediaSecti
   const photosUploaded = recentPhotos.length;
   const totalPhotos = photosUploaded; // In real app, this would come from API
   return (
-    <Card>
+    <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-heading text-white font-bold">Site Reports & Media</CardTitle>
+          <CardTitle className="font-heading dark:text-white text-slate-800 font-bold">Site Reports & Media</CardTitle>
           <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="font-body text-[#E2E8F0]">{recentPhotos.length} photos</Badge>
-            <Badge variant="secondary" className="font-body text-[#E2E8F0]">{dailyLogsThisWeek} logs this week</Badge>
+            <Badge variant="secondary" className="font-body dark:text-[#E2E8F0] text-slate-700">{recentPhotos.length} photos</Badge>
+            <Badge variant="secondary" className="font-body dark:text-[#E2E8F0] text-slate-700">{dailyLogsThisWeek} logs this week</Badge>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="text-center p-4 rounded-lg border border-border bg-card">
-            <p className="text-2xl font-bold font-heading text-white">{dailyLogsThisWeek}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Daily Logs This Week</p>
+          <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
+            <p className="text-2xl font-bold font-heading dark:text-white text-slate-900">{dailyLogsThisWeek}</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Daily Logs This Week</p>
           </div>
-          <div className="text-center p-4 rounded-lg border border-border bg-card">
-            <p className="text-2xl font-bold font-heading text-white">{photosUploaded}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Photos Uploaded</p>
+          <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
+            <p className="text-2xl font-bold font-heading dark:text-white text-slate-900">{photosUploaded}</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Photos Uploaded</p>
           </div>
-          <div className="text-center p-4 rounded-lg border border-border bg-card">
+          <div className="text-center p-4 rounded-lg dark:border-zinc-700 border-slate-200 border dark:bg-zinc-800/50 bg-white">
             <p className="text-2xl font-bold text-success-green font-heading">Good</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Site Condition</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Site Condition</p>
           </div>
         </div>
 
         {/* Photo gallery - thumbnail grid */}
         <div>
-          <h4 className="font-semibold mb-3 font-heading text-[#E2E8F0]">Recent Site Photos</h4>
+          <h4 className="font-semibold mb-3 font-heading dark:text-white text-slate-800">Recent Site Photos</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {recentPhotos.map(photo => (
               <div 
@@ -89,7 +89,7 @@ export function SiteReportsMediaSection({ data }: { data?: SiteReportsMediaSecti
             ))}
           </div>
           
-          <Button variant="outline" className="w-full mt-4 font-body text-white border-white/20 hover:bg-white/10">
+          <Button variant="outline" className="w-full mt-4 font-body dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100">
             View All Photos ({totalPhotos})
           </Button>
         </div>

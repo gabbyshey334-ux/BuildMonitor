@@ -30,7 +30,13 @@ export default defineConfig({
     assetsDir: "assets",
     rollupOptions: {
       output: {
-        manualChunks: undefined,
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
+          query: ['@tanstack/react-query'],
+          supabase: ['@supabase/supabase-js'],
+          ui: ['lucide-react'],
+        },
       },
     },
   },

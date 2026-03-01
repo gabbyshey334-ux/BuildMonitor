@@ -464,7 +464,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                                 onClick={() => {
                                   toast({
                                     title: "Edit Expense",
-                                    description: "Edit functionality coming soon",
+                                    description: "Edit (in development)",
                                   });
                                 }}
                               >
@@ -477,7 +477,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
                                 onClick={() => {
                                   toast({
                                     title: "Delete Expense",
-                                    description: "Delete functionality coming soon",
+                                    description: "Delete (in development)",
                                   });
                                 }}
                               >

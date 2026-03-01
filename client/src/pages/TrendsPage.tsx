@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectTrends } from "@/hooks/useDashboard";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +74,7 @@ function TrendBadge({ trend }: { trend: "increasing" | "decreasing" | "stable" }
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-sm dark:text-zinc-400 text-slate-500">
+    <span className="inline-flex items-center gap-1 text-sm dark:text-zinc-300 text-slate-700">
       <Minus className="w-4 h-4" /> Stable
     </span>
   );
@@ -81,6 +82,7 @@ function TrendBadge({ trend }: { trend: "increasing" | "decreasing" | "stable" }
 
 export default function TrendsPage() {
   const [, setLocation] = useLocation();
+  const { isDark } = useTheme();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];
@@ -150,7 +152,7 @@ export default function TrendsPage() {
       <AppLayout>
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Trends & Insights</h1>
-          <Card className="border-border bg-card">
+          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardContent className="pt-6">
               <EmptyState
                 message="Trends will appear after a few days of WhatsApp updates."
@@ -166,12 +168,12 @@ export default function TrendsPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">Trends & Insights</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-900 mb-6">Trends & Insights</h1>
 
         {/* Alerts */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Alerts & Anomalies</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Alerts & Anomalies</CardTitle>
           </CardHeader>
           <CardContent>
             {alerts.length > 0 ? (
@@ -184,7 +186,7 @@ export default function TrendsPage() {
                         ? "bg-red-500/10 border border-red-500/20"
                         : a.severity === "medium"
                         ? "bg-amber-500/10 border border-amber-500/20"
-                        : "bg-zinc-800/50 border border-zinc-700"
+                        : "dark:bg-zinc-800/50 dark:border-zinc-700 bg-slate-100 border-slate-200"
                     }`}
                   >
                     <AlertTriangle
@@ -193,39 +195,39 @@ export default function TrendsPage() {
                           ? "text-red-500"
                           : a.severity === "medium"
                           ? "text-amber-500"
-                          : "text-zinc-500"
+                          : "dark:text-zinc-500 text-slate-500"
                       }`}
                     />
-                    <p className="text-sm text-white">{a.message}</p>
+                    <p className="text-sm dark:text-white text-slate-800">{a.message}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-zinc-400 text-sm font-medium">No issues detected</p>
+              <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">No issues detected</p>
             )}
           </CardContent>
         </Card>
 
         {/* Predictions */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Predictions</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Predictions</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-xs text-zinc-500 mb-1">Weekly Burn Rate</p>
-                <p className="text-lg font-bold text-white">{formatUgx(predictions.weeklyBurnRate)}</p>
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Weekly Burn Rate</p>
+                <p className="text-lg font-bold dark:text-white text-slate-900">{formatUgx(predictions.weeklyBurnRate)}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500 mb-1">Budget Runout Estimate</p>
-                <p className="text-lg font-medium text-white">
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Budget Runout Estimate</p>
+                <p className="text-lg font-medium dark:text-white text-slate-900">
                   {predictions.budgetRunout ? formatDate(predictions.budgetRunout) : "—"}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500 mb-1">Project Completion</p>
-                <p className="text-lg font-medium text-white">
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Project Completion</p>
+                <p className="text-lg font-medium dark:text-white text-slate-900">
                   {predictions.estimatedCompletion || "—"}
                 </p>
               </div>
@@ -235,19 +237,36 @@ export default function TrendsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Spending trend */}
-          <Card className="border-border bg-card">
+          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-white font-bold">Spending Trend</CardTitle>
+              <CardTitle className="dark:text-white text-slate-800 font-bold">Spending Trend</CardTitle>
               <TrendBadge trend={spending.trend} />
             </CardHeader>
             <CardContent>
               {spending.byMonth.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <LineChart data={spending.byMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="month" stroke="#94A3B8" />
-                    <YAxis stroke="#94A3B8" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip formatter={(v: number) => formatUgx(v)} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
+                    <XAxis
+                      dataKey="month"
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                    />
+                    <YAxis
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                    />
+                    <Tooltip
+                      formatter={(v: number) => formatUgx(v)}
+                      contentStyle={{
+                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
+                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
+                        borderRadius: '8px',
+                        color: isDark ? '#ffffff' : '#0f172a',
+                      }}
+                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
+                    />
                     <Line type="monotone" dataKey="amount" stroke="#22c55e" strokeWidth={2} name="Spent" />
                   </LineChart>
                 </ResponsiveContainer>
@@ -258,19 +277,35 @@ export default function TrendsPage() {
           </Card>
 
           {/* Worker activity */}
-          <Card className="border-border bg-card">
+          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-white font-bold">Worker Activity</CardTitle>
+              <CardTitle className="dark:text-white text-slate-800 font-bold">Worker Activity</CardTitle>
               <TrendBadge trend={workers.trend} />
             </CardHeader>
             <CardContent>
               {workers.byDay.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={workers.byDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis dataKey="date" stroke="#94A3B8" tickFormatter={(v) => formatDate(v)} />
-                    <YAxis stroke="#94A3B8" />
-                    <Tooltip />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
+                    <XAxis
+                      dataKey="date"
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                      tickFormatter={(v) => formatDate(v)}
+                    />
+                    <YAxis
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
+                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
+                        borderRadius: '8px',
+                        color: isDark ? '#ffffff' : '#0f172a',
+                      }}
+                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
+                    />
                     <ReferenceLine y={workers.average} stroke="#14b8a6" strokeDasharray="3 3" name="Avg" />
                     <Bar dataKey="count" fill="#14b8a6" name="Workers" />
                   </BarChart>
@@ -278,7 +313,7 @@ export default function TrendsPage() {
               ) : (
                 <EmptyState message="No worker data yet." />
               )}
-              <div className="flex gap-4 mt-2 text-sm text-zinc-500">
+              <div className="flex gap-4 mt-2 text-sm dark:text-zinc-400 text-slate-600">
                 <span>Avg: {workers.average}</span>
                 <span>Peak: {workers.peak}</span>
               </div>
@@ -287,34 +322,51 @@ export default function TrendsPage() {
         </div>
 
         {/* Materials usage */}
-        <Card className="border-border bg-card mb-6">
+        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="text-white font-bold">Materials Usage</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">Materials Usage</CardTitle>
           </CardHeader>
           <CardContent>
             {materials.mostUsed.length > 0 ? (
               <div className="space-y-4">
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={materials.mostUsed} layout="vertical" margin={{ left: 80 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                    <XAxis type="number" stroke="#94A3B8" />
-                    <YAxis type="category" dataKey="name" stroke="#94A3B8" width={80} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
+                    <XAxis
+                      type="number"
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      stroke={isDark ? '#94A3B8' : '#64748b'}
+                      width={80}
+                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+                    />
                     <Tooltip
                       formatter={(v: number, name: string, props: { payload?: { unit?: string } }) =>
                         `${(v as number).toLocaleString()} ${props?.payload?.unit || ""}`
                       }
+                      contentStyle={{
+                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
+                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
+                        borderRadius: '8px',
+                        color: isDark ? '#ffffff' : '#0f172a',
+                      }}
+                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
                     />
                     <Bar dataKey="quantity" fill="#22c55e" name="Quantity" />
                   </BarChart>
                 </ResponsiveContainer>
                 {materials.topVendors.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium text-zinc-400 mb-2">Top Vendors</h4>
+                    <h4 className="text-sm font-medium dark:text-zinc-400 text-slate-600 mb-2">Top Vendors</h4>
                     <ul className="space-y-2">
                       {materials.topVendors.map((v) => (
                         <li key={v.name} className="flex justify-between text-sm">
-                          <span className="text-white">{v.name}</span>
-                          <span className="text-zinc-400">{formatUgx(v.total)}</span>
+                          <span className="dark:text-white text-slate-800">{v.name}</span>
+                          <span className="dark:text-zinc-400 text-slate-600">{formatUgx(v.total)}</span>
                         </li>
                       ))}
                     </ul>

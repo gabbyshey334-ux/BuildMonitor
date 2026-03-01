@@ -47,14 +47,14 @@ const ISSUE_TYPE_COLORS: { [key: string]: string } = {
 const formatDate = (date: Date) => new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 const IssueCard = ({ issue }: { issue: Issue }) => (
-  <Card className={`cursor-pointer hover:shadow-md transition-shadow ${
+  <Card className={`cursor-pointer hover:shadow-md transition-shadow dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 ${
     issue.priority === 'critical' ? 'border-l-4 border-l-alert-red' :
     issue.priority === 'high' ? 'border-l-4 border-l-warning-yellow' :
     ''
   }`}>
     <CardContent className="p-3">
       <div className="flex items-start justify-between mb-2">
-        <h5 className="font-medium text-sm font-heading text-white">{issue.title}</h5>
+        <h5 className="font-medium text-sm font-heading dark:text-white text-slate-800">{issue.title}</h5>
         <Badge
           variant={ issue.priority === 'critical' ? 'destructive' : issue.priority === 'high' ? 'secondary' : 'secondary'}
           className={`text-xs ${issue.priority === 'critical' ? 'bg-alert-red/10 text-alert-red' : issue.priority === 'high' ? 'bg-warning-yellow/10 text-warning-yellow' : ''}`}
@@ -62,8 +62,8 @@ const IssueCard = ({ issue }: { issue: Issue }) => (
           {issue.priority}
         </Badge>
       </div>
-      <p className="text-xs text-[#CBD5E1] mb-2 font-body">{issue.description}</p>
-      <div className="flex items-center justify-between text-xs text-[#94A3B8] font-body">
+      <p className="text-xs dark:text-[#CBD5E1] text-slate-600 mb-2 font-body">{issue.description}</p>
+      <div className="flex items-center justify-between text-xs dark:text-[#94A3B8] text-slate-500 font-body">
         <span>{issue.reportedBy}</span>
         <span>{formatDate(issue.reportedDate)}</span>
       </div>
@@ -82,11 +82,11 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
   const issueTypes = data?.types || [];
 
   return (
-    <Card>
+    <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="font-heading text-white font-bold">Issues & Risks</CardTitle>
-          <Button size="sm" className="text-white border-white/20 hover:bg-white/10">
+          <CardTitle className="font-heading dark:text-white text-slate-800 font-bold">Issues & Risks</CardTitle>
+          <Button size="sm" className="dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100">
             <Plus className="w-4 h-4 mr-2" />
             Report Issue
           </Button>
@@ -97,19 +97,19 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
         <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="text-center">
             <p className="text-3xl font-bold text-alert-red font-heading">{criticalIssues}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Critical</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Critical</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-warning-yellow font-heading">{highIssues}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">High Priority</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">High Priority</p>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-white font-heading">{openIssues}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Open</p>
+            <p className="text-3xl font-bold dark:text-white text-slate-800 font-heading">{openIssues}</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Open</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-success-green font-heading">{resolvedThisWeek}</p>
-            <p className="text-xs text-[#CBD5E1] font-body">Resolved This Week</p>
+            <p className="text-xs dark:text-[#CBD5E1] text-slate-600 font-body">Resolved This Week</p>
           </div>
         </div>
 
@@ -117,8 +117,8 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* To Do */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
-              <Circle className="w-4 h-4 text-[#94A3B8]" />
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading dark:text-white text-slate-800">
+              <Circle className="w-4 h-4 dark:text-[#94A3B8] text-slate-500" />
               To Do ({issuesTodo.length})
             </h4>
             <div className="space-y-2">
@@ -130,7 +130,7 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
 
           {/* In Progress */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading dark:text-white text-slate-800">
               <AlertCircle className="w-4 h-4 text-ocean-pine" />
               In Progress ({issuesInProgress.length})
             </h4>
@@ -143,7 +143,7 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
 
           {/* Resolved */}
           <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading text-white">
+            <h4 className="font-semibold mb-3 flex items-center gap-2 font-heading dark:text-white text-slate-800">
               <CheckCircle className="w-4 h-4 text-success-green" />
               Resolved ({issuesResolved.length})
             </h4>
@@ -157,7 +157,7 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
 
         {/* Issue type breakdown - Small pie chart */}
         <div className="mt-6">
-          <h4 className="font-semibold mb-3 font-heading">Issue Types</h4>
+          <h4 className="font-semibold mb-3 font-heading dark:text-white text-slate-800">Issue Types</h4>
           <div className="flex items-center gap-6">
             <ResponsiveContainer width={200} height={200}>
               <PieChart>
@@ -181,13 +181,13 @@ export function IssuesRisksSection({ data }: IssuesRisksSectionProps) {
               {issueTypes.map(type => (
                 <div key={type.type} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div 
+                    <div
                       className="w-3 h-3 rounded-full"
                       style={{ backgroundColor: ISSUE_TYPE_COLORS[type.type] }}
                     />
-                    <span className="text-sm font-body">{type.type}</span>
+                    <span className="text-sm font-body dark:text-white text-slate-800">{type.type}</span>
                   </div>
-                  <span className="font-medium font-body">{type.count} ({type.percentage}%)</span>
+                  <span className="font-medium font-body dark:text-zinc-300 text-slate-700">{type.count} ({type.percentage}%)</span>
                 </div>
               ))}
             </div>
