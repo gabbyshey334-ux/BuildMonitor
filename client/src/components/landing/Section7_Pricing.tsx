@@ -54,14 +54,14 @@ export default function Pricing() {
 
           {/* Toggle */}
           <div className="flex items-center justify-center gap-3 mt-8">
-            <span className={`text-sm ${!isYearly ? "dark:text-white text-slate-900" : "dark:text-zinc-500 text-slate-500"}`}>Monthly</span>
+            <span className={`text-sm font-medium ${!isYearly ? "dark:text-white text-slate-800" : "dark:text-zinc-500 text-slate-500"}`}>Monthly</span>
             <button
               onClick={() => setIsYearly(!isYearly)}
               className="relative w-12 h-6 dark:bg-zinc-700 bg-slate-300 rounded-full transition-colors"
             >
               <div className={`absolute top-1 w-4 h-4 bg-[#22c55e] rounded-full transition-all ${isYearly ? "left-7" : "left-1"}`} />
             </button>
-            <span className={`text-sm ${isYearly ? "dark:text-white text-slate-900" : "dark:text-zinc-500 text-slate-500"}`}>
+            <span className={`text-sm font-medium ${isYearly ? "dark:text-white text-slate-800" : "dark:text-zinc-500 text-slate-500"}`}>
               Annually
               <span className="ml-2 px-2 py-0.5 bg-[#22c55e]/20 text-[#22c55e] text-xs rounded-full">Save 20%</span>
             </span>
@@ -87,7 +87,9 @@ export default function Pricing() {
                       {plan.badge}
                     </span>
                   )}
-                  <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
+                  <h3 className={`text-xl font-bold mb-2 ${plan.highlighted ? "text-white" : "dark:text-white text-slate-900"}`}>
+                    {plan.name}
+                  </h3>
                   <p className={`text-sm min-h-[40px] ${plan.highlighted ? "text-white/80" : "dark:text-zinc-400 text-slate-600"}`}>
                     {plan.description}
                   </p>
@@ -96,11 +98,11 @@ export default function Pricing() {
                 {/* Price */}
                 <div className="my-4">
                   {plan.price === "Custom" ? (
-                    <span className="text-4xl font-bold text-white">Custom</span>
+                    <span className={`text-4xl font-bold ${plan.highlighted ? "text-white" : "dark:text-white text-slate-900"}`}>Custom</span>
                   ) : (
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">
-                        ${isYearly ? plan.price.yearly : plan.price.monthly}
+                      <span className={`text-4xl font-bold ${plan.highlighted ? "text-white" : "dark:text-white text-slate-900"}`}>
+                        ${typeof plan.price === "object" ? (isYearly ? plan.price.yearly : plan.price.monthly) : ""}
                       </span>
                       <span className={`text-sm ${plan.highlighted ? "text-white/70" : "dark:text-zinc-500 text-slate-500"}`}>
                         /month
