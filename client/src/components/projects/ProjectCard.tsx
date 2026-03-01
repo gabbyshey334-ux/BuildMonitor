@@ -5,13 +5,14 @@ import { Link } from "wouter";
 import { MapPin } from "lucide-react";
 import type { Project } from "@/contexts/ProjectContext";
 import { useProject } from "@/contexts/ProjectContext";
+import { formatBudget } from "@/lib/budgetUtils";
 import { cn } from "@/lib/utils";
 
 interface ProjectCardProps {
   project: Project;
 }
 
-/** Format number with commas and UGX (e.g. 1,900,000 UGX) */
+/** Format number with commas and UGX (e.g. 1,900,000 UGX) — for exact amounts */
 function formatUgxWithCommas(n: number): string {
   const whole = Math.floor(n);
   const withCommas = whole.toLocaleString("en-US");
@@ -80,7 +81,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
               <p className="mt-2 text-sm dark:text-zinc-400 text-slate-500">
                 <span className="dark:text-zinc-300 text-slate-700 font-medium">{formatUgxWithCommas(spent)}</span>
                 {" of "}
-                <span>{formatUgxWithCommas(total)}</span>
+                <span>{formatBudget(total)} UGX</span>
               </p>
             </>
           ) : (

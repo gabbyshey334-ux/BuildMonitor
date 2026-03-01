@@ -126,13 +126,16 @@ export function NewProjectModal({
             <Label htmlFor="totalBudget" className="text-zinc-300">{t("projects.totalBudgetUgx")}</Label>
             <Input
               id="totalBudget"
-              type="number"
-              min={0}
+              type="text"
+              inputMode="numeric"
               value={form.totalBudget}
               onChange={(e) => setForm((p) => ({ ...p, totalBudget: e.target.value }))}
-              placeholder="0"
+              placeholder="e.g. 30,000,000 or 30M"
               className="mt-1 bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
             />
+            <p className="text-xs text-zinc-500 mt-1">
+              e.g. 30,000,000 or 30M for 30 million UGX
+            </p>
           </div>
           <div>
             <Label htmlFor="whatsapp" className="text-zinc-300">{t("projects.whatsappLink")}</Label>

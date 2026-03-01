@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, AlertCircle, FileText } from 'lucide-react';
+import { Plus, Upload, AlertCircle, FileText, X } from 'lucide-react';
 import { useProjectSummary } from '@/hooks/useDashboard';
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjects } from '@/hooks/useProjects';
+import { useQueryClient } from '@tanstack/react-query';
+import { getToken } from '@/lib/authToken';
+import { useToast } from '@/hooks/use-toast';
 
 import { ProjectHealthSummary } from './ProjectHealthSummary';
 import { ProgressScheduleSection } from './ProgressScheduleSection';
@@ -59,6 +62,123 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   } = useProjectSummary(effectiveProjectId);
 
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showDailyModal, setShowDailyModal] = useState(false);
+  const [expenseForm, setExpenseForm] = useState({ description: '', amount: '' });
+  const [issueForm, setIssueForm] = useState({ title: '', description: '', priority: 'medium' });
+  const [dailyForm, setDailyForm] = useState({ workerCount: '', notes: '' });
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const token = getToken();
+
+  const handleLogExpense = async () => {
+    if (!expenseForm.description.trim() || !expenseForm.amount.trim()) return;
+    try {
+      const amount = parseFloat(expenseForm.amount.replace(/,/g, ''));
+      if (isNaN(amount)) {
+        toast({ title: 'Invalid amount', variant: 'destructive' });
+        return;
+      }
+      const res = await fetch(`/api/projects/${effectiveProjectId}/expenses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify({
+          description: expenseForm.description.trim(),
+          amount,
+          expense_date: new Date().toISOString().split('T')[0],
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to log expense');
+      setShowExpenseModal(false);
+      setExpenseForm({ description: '', amount: '' });
+      queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+      queryClient.invalidateQueries({ queryKey: ['api', 'projects'] });
+      toast({ title: 'Expense logged! ✅' });
+    } catch {
+      toast({ title: 'Failed to log expense', variant: 'destructive' });
+    }
+  };
+
+  const handleReportIssue = async () => {
+    if (!issueForm.title.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${effectiveProjectId}/issues`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: issueForm.title.trim(),
+          description: issueForm.description.trim(),
+          priority: issueForm.priority,
+          status: 'open',
+          reported_date: new Date().toISOString().split('T')[0],
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to report issue');
+      setShowIssueModal(false);
+      setIssueForm({ title: '', description: '', priority: 'medium' });
+      queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+      toast({ title: 'Issue reported! 🚩' });
+    } catch {
+      toast({ title: 'Failed to report issue', variant: 'destructive' });
+    }
+  };
+
+  const handleDailyLog = async () => {
+    if (!dailyForm.workerCount.trim() && !dailyForm.notes.trim()) return;
+    try {
+      const res = await fetch(`/api/projects/${effectiveProjectId}/daily/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify({
+          worker_count: parseInt(dailyForm.workerCount, 10) || 0,
+          notes: dailyForm.notes.trim(),
+          log_date: new Date().toISOString().split('T')[0],
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to save daily log');
+      setShowDailyModal(false);
+      setDailyForm({ workerCount: '', notes: '' });
+      queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+      toast({ title: 'Daily log saved! ✅' });
+    } catch {
+      toast({ title: 'Failed to save daily log', variant: 'destructive' });
+    }
+  };
+
+  const handleUploadPhoto = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const dataUrl = reader.result as string;
+        try {
+          const res = await fetch(`/api/projects/${effectiveProjectId}/daily/photo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            credentials: 'include',
+            body: JSON.stringify({ photoUrl: dataUrl }),
+          });
+          if (!res.ok) throw new Error('Upload failed');
+          queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+          toast({ title: 'Photo saved to daily log! 📸' });
+        } catch {
+          toast({ title: 'Upload failed', variant: 'destructive' });
+        }
+      };
+      reader.readAsDataURL(file);
+    };
+    input.click();
+  };
+
   useEffect(() => {
     const update = () => {
       if (!dataUpdatedAt) {
@@ -208,32 +328,171 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               <CardTitle className="text-lg dark:text-white text-slate-800 font-bold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Button className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100" variant="outline" asChild>
-                <Link href={effectiveProjectId ? `/budget?project=${effectiveProjectId}` : "/budget"}>
-                  <a>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Log Expense
-                  </a>
-                </Link>
+              <Button
+                className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
+                variant="outline"
+                onClick={() => setShowExpenseModal(true)}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Log Expense
               </Button>
-              <Button className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100" variant="outline">
+              <Button
+                className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
+                variant="outline"
+                onClick={handleUploadPhoto}
+              >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Photo
               </Button>
-              <Button className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100" variant="outline">
+              <Button
+                className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
+                variant="outline"
+                onClick={() => setShowIssueModal(true)}
+              >
                 <AlertCircle className="w-4 h-4 mr-2" />
                 Report Issue
               </Button>
-              <Button className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100" variant="outline" asChild>
-                <Link href={effectiveProjectId ? `/daily?project=${effectiveProjectId}` : "/daily"}>
-                  <a>
-                    <FileText className="w-4 h-4 mr-2" />
-                    Daily Log
-                  </a>
-                </Link>
+              <Button
+                className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
+                variant="outline"
+                onClick={() => setShowDailyModal(true)}
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Daily Log
               </Button>
             </CardContent>
           </Card>
+
+          {showExpenseModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="dark:bg-[#1e2235] bg-white rounded-xl p-6 w-full max-w-md mx-4 dark:border-zinc-700 border-slate-200 border shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="dark:text-white text-slate-900 font-semibold text-lg">Log Expense</h3>
+                  <button type="button" onClick={() => setShowExpenseModal(false)} className="dark:text-zinc-400 text-slate-500 hover:text-red-500">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Description</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bought 50 bags cement"
+                      value={expenseForm.description}
+                      onChange={(e) => setExpenseForm((p) => ({ ...p, description: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Amount (UGX)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 500,000"
+                      value={expenseForm.amount}
+                      onChange={(e) => setExpenseForm((p) => ({ ...p, amount: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowExpenseModal(false)}>Cancel</Button>
+                  <Button type="button" className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white" onClick={handleLogExpense}>Save Expense</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showIssueModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="dark:bg-[#1e2235] bg-white rounded-xl p-6 w-full max-w-md mx-4 dark:border-zinc-700 border-slate-200 border shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="dark:text-white text-slate-900 font-semibold text-lg">Report Issue</h3>
+                  <button type="button" onClick={() => setShowIssueModal(false)} className="dark:text-zinc-400 text-slate-500 hover:text-red-500">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Title</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Foundation delay"
+                      value={issueForm.title}
+                      onChange={(e) => setIssueForm((p) => ({ ...p, title: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Description</label>
+                    <textarea
+                      placeholder="Optional details"
+                      value={issueForm.description}
+                      onChange={(e) => setIssueForm((p) => ({ ...p, description: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Priority</label>
+                    <select
+                      value={issueForm.priority}
+                      onChange={(e) => setIssueForm((p) => ({ ...p, priority: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowIssueModal(false)}>Cancel</Button>
+                  <Button type="button" className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white" onClick={handleReportIssue}>Report Issue</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showDailyModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="dark:bg-[#1e2235] bg-white rounded-xl p-6 w-full max-w-md mx-4 dark:border-zinc-700 border-slate-200 border shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="dark:text-white text-slate-900 font-semibold text-lg">Daily Log</h3>
+                  <button type="button" onClick={() => setShowDailyModal(false)} className="dark:text-zinc-400 text-slate-500 hover:text-red-500">
+                    <X size={20} />
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Workers on site</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="0"
+                      value={dailyForm.workerCount}
+                      onChange={(e) => setDailyForm((p) => ({ ...p, workerCount: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="dark:text-zinc-300 text-slate-700 text-sm mb-1 block">Notes</label>
+                    <textarea
+                      placeholder="e.g. Foundation 80% complete"
+                      value={dailyForm.notes}
+                      onChange={(e) => setDailyForm((p) => ({ ...p, notes: e.target.value }))}
+                      rows={3}
+                      className="w-full px-3 py-2 rounded-lg dark:bg-zinc-800 bg-slate-50 dark:border-zinc-700 border-slate-200 border dark:text-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <Button type="button" variant="outline" className="flex-1" onClick={() => setShowDailyModal(false)}>Cancel</Button>
+                  <Button type="button" className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white" onClick={handleDailyLog}>Save Log</Button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -10,6 +10,7 @@ import { NewProjectModal, type NewProjectFormData } from "@/components/projects/
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { apiRequest } from "@/lib/queryClient";
+import { parseBudget } from "@/lib/budgetUtils";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Project } from "@/contexts/ProjectContext";
@@ -62,7 +63,7 @@ export default function ProjectsPage() {
       const res = await apiRequest("POST", "/api/projects", {
         name: form.name,
         description: form.location || undefined,
-        budgetAmount: form.totalBudget || undefined,
+        budgetAmount: parseBudget(form.totalBudget) || undefined,
         status: "active",
         channelType: "direct",
         whatsappNumber: form.whatsappNumber || undefined,

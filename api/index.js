@@ -490,6 +490,150 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
   });
 });
 
+// POST /api/projects/:projectId/expenses — Log expense from dashboard
+app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const { description, amount, expense_date } = req.body;
+    const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    const { error } = await supabase.from('expenses').insert({
+      project_id: projectId,
+      user_id: userId,
+      description: description || 'Expense',
+      amount: String(amount ?? 0),
+      expense_date: today,
+      currency: 'UGX',
+      source: 'dashboard',
+    });
+    if (error) throw error;
+    return res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('[POST expenses]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to log expense' });
+  }
+});
+
+// POST /api/projects/:projectId/issues — Report issue (tasks table)
+app.post('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const { title, description, priority, status, reported_date } = req.body;
+    const dueDate = (reported_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    const { error } = await supabase.from('tasks').insert({
+      project_id: projectId,
+      user_id: userId,
+      title: title || 'Untitled issue',
+      description: description || '',
+      priority: priority || 'medium',
+      status: status || 'open',
+      due_date: dueDate,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+    return res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('[POST issues]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to report issue' });
+  }
+});
+
+// POST /api/projects/:projectId/daily/log — Daily log entry
+app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const { worker_count, notes, log_date } = req.body;
+    const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', today).maybeSingle();
+    if (existing) {
+      const updatedNotes = notes ? (existing.notes ? `${existing.notes}\n${notes}` : notes) : existing.notes;
+      await supabase.from('daily_logs').update({ worker_count: worker_count ?? existing.worker_count, notes: updatedNotes }).eq('id', existing.id);
+    } else {
+      await supabase.from('daily_logs').insert({
+        project_id: projectId,
+        log_date: today,
+        worker_count: worker_count || 0,
+        notes: notes || '',
+        created_at: new Date().toISOString(),
+      });
+    }
+    return res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('[POST daily/log]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save daily log' });
+  }
+});
+
+// POST /api/projects/:projectId/daily/photo — Add photo to today's daily log
+app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const { photoUrl } = req.body;
+    const today = new Date().toISOString().split('T')[0];
+    const { data: existing } = await supabase.from('daily_logs').select('id, photo_urls').eq('project_id', projectId).eq('log_date', today).maybeSingle();
+    const newUrls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, photoUrl] : (existing?.photo_urls ? [existing.photo_urls, photoUrl] : [photoUrl]);
+    if (existing) {
+      await supabase.from('daily_logs').update({ photo_urls: newUrls }).eq('id', existing.id);
+    } else {
+      await supabase.from('daily_logs').insert({
+        project_id: projectId,
+        log_date: today,
+        worker_count: 0,
+        notes: '',
+        photo_urls: [photoUrl],
+        created_at: new Date().toISOString(),
+      });
+    }
+    return res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('[POST daily/photo]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save photo' });
+  }
+});
+
 // GET /api/projects/:projectId/materials — Materials & Inventory page
 app.get('/api/projects/:projectId/materials', (req, res, next) => {
   requireAuth(req, res, async () => {
@@ -1360,6 +1504,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       budget: parseFloat(project.budget || 0),
       budgetAmount: parseFloat(project.budget || 0), // Keep for backward compatibility
       spent: parseFloat(project.spent || 0),
+      totalSpent: parseFloat(project.spent || 0), // For frontend mapping
       currency: project.currency || 'UGX',
       status: project.status || 'active',
       createdAt: project.created_at,
@@ -1388,14 +1533,26 @@ app.post('/api/projects', requireAuth, async (req, res) => {
     const { name, description, budget, budgetAmount, currency = 'UGX', status = 'active' } = req.body;
 
     // Support both 'budget' and 'budgetAmount' for backward compatibility
-    const budgetValue = budget || budgetAmount;
+    const budgetRaw = budget || budgetAmount;
+    function parseBudgetValue(val) {
+      if (val == null || val === '') return NaN;
+      const s = String(val).replace(/,/g, '').replace(/\s/g, '').trim();
+      if (!s) return NaN;
+      const mMatch = s.match(/^(\d+(?:\.\d+)?)[Mm]$/);
+      const bMatch = s.match(/^(\d+(?:\.\d+)?)[Bb]$/);
+      if (mMatch) return parseFloat(mMatch[1]) * 1e6;
+      if (bMatch) return parseFloat(bMatch[1]) * 1e9;
+      return parseFloat(s);
+    }
+    const parsedBudget = parseBudgetValue(budgetRaw);
 
     console.log('[Create Project] ============================================');
     console.log('[Create Project] Request received:', {
       userId,
       name,
       description,
-      budget: budgetValue,
+      budget: budgetRaw,
+      parsedBudget,
       currency,
       status,
       bodyKeys: Object.keys(req.body),
@@ -1424,12 +1581,12 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       });
     }
 
-    if (!budgetValue || parseFloat(budgetValue) <= 0) {
+    if (!budgetRaw || isNaN(parsedBudget) || parsedBudget <= 0) {
       console.error('[Create Project] ❌ Validation failed: invalid budget');
       return res.status(400).json({
         success: false,
         error: 'Valid budget amount is required',
-        message: 'Budget amount must be greater than 0',
+        message: 'Budget amount must be greater than 0 (e.g. 30000000 or 30M)',
       });
     }
 
@@ -1479,14 +1636,13 @@ app.post('/api/projects', requireAuth, async (req, res) => {
       }
     }
 
-    // Parse budget amount
-    const parsedBudget = parseFloat(budgetValue);
+    // Parse budget amount (already parsed above)
     if (isNaN(parsedBudget) || parsedBudget < 0) {
-      console.error('[Create Project] ❌ Invalid budget amount:', budgetValue);
+      console.error('[Create Project] ❌ Invalid budget amount:', budgetRaw);
       return res.status(400).json({
         success: false,
         error: 'Invalid budget amount',
-        message: 'Budget must be a valid positive number',
+        message: 'Budget must be a valid positive number (e.g. 30M or 30,000,000)',
       });
     }
 
