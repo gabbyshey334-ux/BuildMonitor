@@ -40,7 +40,6 @@ export default function ProjectsPage() {
   const { data: fetched = [], isLoading, isError, error, refetch } = useProjects();
   const { projects, setProjects, setCurrentProject } = useProject();
   const { t } = useLanguage();
-  const { t } = useLanguage();
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
