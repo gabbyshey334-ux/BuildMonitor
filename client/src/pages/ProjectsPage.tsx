@@ -11,6 +11,7 @@ import { useProject } from "@/contexts/ProjectContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 import type { Project } from "@/contexts/ProjectContext";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
@@ -38,6 +39,8 @@ function ProjectsLoadingSkeleton() {
 export default function ProjectsPage() {
   const { data: fetched = [], isLoading, isError, error, refetch } = useProjects();
   const { projects, setProjects, setCurrentProject } = useProject();
+  const { t } = useLanguage();
+  const { t } = useLanguage();
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -95,13 +98,13 @@ export default function ProjectsPage() {
     <AppLayout>
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800">My Projects</h1>
+          <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800">{t("projects.title")}</h1>
           <Button
             onClick={() => setModalOpen(true)}
             className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 shrink-0"
           >
             <Plus className="h-4 w-4 mr-2" />
-            New Project
+            {t("projects.new")}
           </Button>
         </div>
 

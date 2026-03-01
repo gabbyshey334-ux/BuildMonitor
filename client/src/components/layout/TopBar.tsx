@@ -23,6 +23,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { useProject } from "@/contexts/ProjectContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 import { cn } from "@/lib/utils";
 import { Sun, Moon } from "lucide-react";
 
@@ -37,6 +39,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
   const { user, logout } = useAuth();
   const { currentProject, projects, setCurrentProject } = useProject();
   const { theme, toggleTheme, isDark } = useTheme();
+  const { t } = useLanguage();
   const [projectOpen, setProjectOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -87,7 +90,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
               className="dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white dark:border-zinc-700/50 text-slate-700 hover:bg-slate-100 border border-slate-200"
             >
               <span className="truncate max-w-[140px] md:max-w-[200px]">
-                {currentProject?.name ?? "Select project"}
+                {currentProject?.name ?? t("projects.select")}
               </span>
               <ChevronDown className="h-4 w-4 shrink-0 ml-1" />
             </Button>
@@ -114,7 +117,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
               <Link href="/projects">
                 <a className="flex items-center gap-2 cursor-pointer text-[#22c55e]">
                   <Plus className="h-4 w-4" />
-                  New Project
+                  {t("projects.new")}
                 </a>
               </Link>
             </DropdownMenuItem>
@@ -122,6 +125,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
         </DropdownMenu>
 
         {/* Theme toggle */}
+        <LanguageSwitcher variant="compact" />
         <button
           type="button"
           onClick={toggleTheme}
@@ -158,7 +162,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
               <Link href={currentProject ? `/settings?project=${currentProject.id}` : "/settings"}>
                 <a className="flex items-center gap-2 cursor-pointer">
                   <Settings className="h-4 w-4" />
-                  Settings
+                  {t("nav.settings")}
                 </a>
               </Link>
             </DropdownMenuItem>
@@ -167,7 +171,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
               onClick={() => logout()}
             >
               <LogOut className="h-4 w-4 mr-2" />
-              Logout
+              {t("nav.logout")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

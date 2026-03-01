@@ -12,18 +12,20 @@ import {
 } from "lucide-react";
 import { MoreBottomSheet } from "./MoreBottomSheet";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const TABS = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Budget", href: "/budget", icon: Wallet },
-  { label: "Materials", href: "/materials", icon: Package },
-  { label: "Daily", href: "/daily", icon: Calendar },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.budgets", href: "/budget", icon: Wallet },
+  { labelKey: "nav.materials", href: "/materials", icon: Package },
+  { labelKey: "nav.daily", href: "/daily", icon: Calendar },
 ];
 
 export function BottomNav() {
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const { currentProject } = useProject();
+  const { t } = useLanguage();
 
   const hrefWithProject = (path: string) => {
     return currentProject ? `${path}?project=${currentProject.id}` : path;
@@ -49,7 +51,7 @@ export function BottomNav() {
                 )}
               >
                 <tab.icon className="h-6 w-6" />
-                <span className="text-xs font-medium">{tab.label}</span>
+                <span className="text-xs font-medium">{t(tab.labelKey)}</span>
               </a>
             </Link>
           );
@@ -64,7 +66,7 @@ export function BottomNav() {
           aria-label="More"
         >
           <Menu className="h-6 w-6" />
-          <span className="text-xs font-medium">More</span>
+          <span className="text-xs font-medium">{t("nav.more")}</span>
         </button>
       </nav>
       <MoreBottomSheet open={moreOpen} onOpenChange={setMoreOpen} />

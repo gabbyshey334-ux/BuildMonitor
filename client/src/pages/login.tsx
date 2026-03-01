@@ -6,8 +6,10 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { LogIn, UserPlus, Lock, Mail, Eye, EyeOff } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Login() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,10 +42,10 @@ export default function Login() {
             <span className="text-xl font-bold text-foreground tracking-tight">JengaTrack</span>
           </Link>
           <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
-            Welcome Back
+            {t("auth.login.title")}
           </h1>
           <p className="text-muted-foreground text-sm">
-            Log in to manage your construction projects
+            {t("auth.login.subtitle")}
           </p>
         </div>
 
@@ -56,7 +58,7 @@ export default function Login() {
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground/80 text-xs uppercase tracking-wider font-bold">Email Address</Label>
+                <Label htmlFor="email" className="text-foreground/80 text-xs uppercase tracking-wider font-bold">{t("auth.login.email")}</Label>
                 <div className="relative group">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
                   <Input
@@ -73,10 +75,10 @@ export default function Login() {
               
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password" className="text-foreground/80 text-xs uppercase tracking-wider font-bold">Password</Label>
+                  <Label htmlFor="password" className="text-foreground/80 text-xs uppercase tracking-wider font-bold">{t("auth.login.password")}</Label>
                   <Link href="/forgot-password">
                     <span className="text-xs text-primary hover:text-primary/80 transition-colors font-medium cursor-pointer">
-                      Forgot password?
+                      {t("auth.login.forgot")}
                     </span>
                   </Link>
                 </div>
@@ -114,7 +116,7 @@ export default function Login() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <LogIn className="h-4 w-4" />
-                    <span>Sign In</span>
+                    <span>{t("auth.login.button")}</span>
                   </div>
                 )}
               </Button>
@@ -122,10 +124,10 @@ export default function Login() {
           </CardContent>
           <CardFooter className="bg-secondary/30 border-t border-border py-4 flex justify-center">
             <p className="text-muted-foreground text-sm">
-              Don't have an account?{" "}
+              {t("auth.login.noaccount")}{" "}
               <Link href="/signup">
                 <span className="text-primary hover:text-primary/80 font-bold transition-colors cursor-pointer inline-flex items-center gap-1">
-                  Create one <UserPlus className="h-3 w-3" />
+                  {t("auth.login.create")} <UserPlus className="h-3 w-3" />
                 </span>
               </Link>
             </p>

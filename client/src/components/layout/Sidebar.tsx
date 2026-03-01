@@ -23,21 +23,22 @@ import {
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const SIDEBAR_OPEN_KEY = "jengatrack-sidebar-open";
 
 const MAIN_NAV = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Budgets & Costs", href: "/budget", icon: Wallet },
-  { label: "Materials & Supplies", href: "/materials", icon: Package },
-  { label: "Daily Accountability", href: "/daily", icon: Calendar },
-  { label: "Trends & Insights", href: "/trends", icon: TrendingUp },
+  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { labelKey: "nav.budgets", href: "/budget", icon: Wallet },
+  { labelKey: "nav.materials", href: "/materials", icon: Package },
+  { labelKey: "nav.daily", href: "/daily", icon: Calendar },
+  { labelKey: "nav.trends", href: "/trends", icon: TrendingUp },
 ];
 
 const BOTTOM_NAV = [
-  { label: "My Projects", href: "/projects", icon: FolderOpen },
-  { label: "Settings", href: "/settings", icon: Settings },
-  { label: "Help", href: "/help", icon: HelpCircle },
+  { labelKey: "nav.projects", href: "/projects", icon: FolderOpen },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings },
+  { labelKey: "nav.help", href: "/help", icon: HelpCircle },
 ];
 
 interface SidebarProps {
@@ -49,6 +50,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
   const [location] = useLocation();
   const { currentProject } = useProject();
   const { logout } = useAuth();
+  const { t } = useLanguage();
 
   const hrefWithProject = (path: string) => {
     if (path === "/projects" || path === "/help") return path;
@@ -123,7 +125,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               <Link key={item.href} href={href}>
                 <a className={linkClass(active)}>
                   <item.icon className="h-5 w-5 shrink-0" />
-                  {open && <span className="truncate">{item.label}</span>}
+                  {open && <span className="truncate">{t(item.labelKey)}</span>}
                 </a>
               </Link>
             );
@@ -133,7 +135,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                   <Tooltip>
                     <TooltipTrigger asChild>{el}</TooltipTrigger>
                     <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
-                      {item.label}
+                      {t(item.labelKey)}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -151,7 +153,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               <Link key={item.href} href={href}>
                 <a className={linkClass(active)}>
                   <item.icon className="h-5 w-5 shrink-0" />
-                  {open && <span className="truncate">{item.label}</span>}
+                  {open && <span className="truncate">{t(item.labelKey)}</span>}
                 </a>
               </Link>
             );
@@ -161,7 +163,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                   <Tooltip>
                     <TooltipTrigger asChild>{el}</TooltipTrigger>
                     <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
-                      {item.label}
+                      {t(item.labelKey)}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -184,7 +186,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
-                  Logout
+                  {t("nav.logout")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -197,7 +199,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               )}
             >
               <LogOut className="h-5 w-5 shrink-0" />
-              <span className="truncate">Logout</span>
+              <span className="truncate">{t("nav.logout")}</span>
             </button>
           )}
         </div>

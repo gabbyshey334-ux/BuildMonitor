@@ -18,12 +18,13 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const MORE_ITEMS = [
-  { label: "Trends & Insights", href: "/trends", icon: TrendingUp },
-  { label: "My Projects", href: "/projects", icon: FolderOpen },
-  { label: "Settings", href: "/settings", icon: Settings },
-  { label: "Help & How To Use", href: "/help", icon: HelpCircle },
+  { labelKey: "nav.trends", href: "/trends", icon: TrendingUp },
+  { labelKey: "nav.projects", href: "/projects", icon: FolderOpen },
+  { labelKey: "nav.settings", href: "/settings", icon: Settings },
+  { labelKey: "help.title", href: "/help", icon: HelpCircle },
 ];
 
 interface MoreBottomSheetProps {
@@ -34,6 +35,7 @@ interface MoreBottomSheetProps {
 export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
   const { logout } = useAuth();
   const { currentProject } = useProject();
+  const { t } = useLanguage();
 
   const hrefWithProject = (path: string) => {
     if (path === "/projects") return path;
@@ -56,7 +58,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
         style={{ maxHeight: "85vh" }}
       >
         <SheetHeader className="sr-only">
-          <SheetTitle>More</SheetTitle>
+          <SheetTitle>{t("nav.more")}</SheetTitle>
         </SheetHeader>
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-12 rounded-full dark:bg-zinc-600 bg-slate-300" aria-hidden />
@@ -69,7 +71,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
                 className="flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left text-base font-medium dark:text-zinc-200 dark:hover:bg-zinc-700 text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <item.icon className="h-5 w-5 shrink-0 dark:text-zinc-400 text-slate-500" />
-                {item.label}
+                {t(item.labelKey)}
               </a>
             </Link>
           ))}
@@ -79,7 +81,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
             className="flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left text-base font-medium dark:text-zinc-200 dark:hover:bg-red-500/20 dark:hover:text-red-400 text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
           >
             <LogOut className="h-5 w-5 shrink-0" />
-            Logout
+            {t("nav.logout")}
           </button>
         </nav>
       </SheetContent>

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -29,6 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 interface SettingsData {
   project: {
@@ -50,6 +52,7 @@ interface SettingsData {
 
 export default function SettingsPage() {
   const { currentProject } = useProject();
+  const { t } = useLanguage();
   const projectIdFromUrl =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("project")
@@ -143,7 +146,7 @@ export default function SettingsPage() {
       );
       await invalidateProjects();
       toast({
-        title: "Settings saved! ✅",
+        title: t("settings.saved"),
         description: "Your project and profile settings have been updated.",
       });
     } catch (err) {
@@ -233,7 +236,7 @@ export default function SettingsPage() {
   return (
     <AppLayout>
       <div className="max-w-2xl mx-auto">
-        <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">Settings</h1>
+        <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("settings.title")}</h1>
 
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm mb-6">
@@ -245,12 +248,12 @@ export default function SettingsPage() {
         <form onSubmit={handleSave} className="space-y-6">
           <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
             <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">Project</CardTitle>
+              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.project")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="name" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  Project Name
+                  {t("settings.projectname")}
                 </Label>
                 <Input
                   id="name"
@@ -262,7 +265,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <Label htmlFor="description" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  Location / Description
+                  {t("settings.location")}
                 </Label>
                 <Input
                   id="description"
@@ -274,7 +277,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <Label htmlFor="budget" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  Total Budget (UGX)
+                  {t("settings.budget")}
                 </Label>
                 <Input
                   id="budget"
@@ -288,7 +291,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <Label className="dark:text-zinc-400 text-slate-600 text-sm">Project Status</Label>
+                <Label className="dark:text-zinc-400 text-slate-600 text-sm">{t("settings.status")}</Label>
                 <Select
                   value={form.status}
                   onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
@@ -298,10 +301,10 @@ export default function SettingsPage() {
                   </SelectTrigger>
                   <SelectContent className="dark:bg-zinc-900 dark:border-zinc-700 bg-white border-slate-200">
                     <SelectItem value="active" className="dark:text-zinc-200 text-slate-800">
-                      Active
+                      {t("projects.active")}
                     </SelectItem>
                     <SelectItem value="completed" className="dark:text-zinc-200 text-slate-800">
-                      Completed
+                      {t("projects.completed")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -330,12 +333,12 @@ export default function SettingsPage() {
 
           <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
             <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">Profile</CardTitle>
+              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.profile")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="whatsapp_number" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  WhatsApp Number
+                  {t("settings.whatsapp")}
                 </Label>
                 <Input
                   id="whatsapp_number"
@@ -347,7 +350,7 @@ export default function SettingsPage() {
               </div>
               <div>
                 <Label htmlFor="full_name" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  Display Name
+                  {t("settings.displayname")}
                 </Label>
                 <Input
                   id="full_name"
@@ -356,6 +359,25 @@ export default function SettingsPage() {
                   className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
                   placeholder="Your name"
                 />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
+            <CardHeader>
+              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.language")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <p className="dark:text-zinc-300 text-slate-700 text-sm">
+                    {t("settings.languageHint")}
+                  </p>
+                  <p className="dark:text-zinc-500 text-slate-400 text-xs mt-1">
+                    {t("settings.languageHintExtra")}
+                  </p>
+                </div>
+                <LanguageSwitcher variant="full" />
               </div>
             </CardContent>
           </Card>
@@ -371,18 +393,18 @@ export default function SettingsPage() {
                 Saving…
               </>
             ) : (
-              "Save Settings"
+              t("settings.save")
             )}
           </Button>
         </form>
 
         <Card className="mt-8 border-red-500/50 bg-red-500/5">
           <CardHeader>
-            <CardTitle className="text-red-400 text-lg">Danger Zone</CardTitle>
+            <CardTitle className="text-red-400 text-lg">{t("settings.danger")}</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="dark:text-zinc-400 text-slate-600 text-sm mb-4">
-              Mark this project as completed. You won&apos;t be able to log new expenses or updates.
+              {t("settings.complete")}. You won&apos;t be able to log new expenses or updates.
             </p>
             <AlertDialog open={confirmCompletedOpen} onOpenChange={setConfirmCompletedOpen}>
               <Button
@@ -392,17 +414,17 @@ export default function SettingsPage() {
                 onClick={() => setConfirmCompletedOpen(true)}
                 className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
               >
-                Mark project as completed
+                {t("settings.complete")}
               </Button>
               <AlertDialogContent className="dark:bg-zinc-900 dark:border-zinc-700 bg-white border-slate-200">
                 <AlertDialogHeader>
-                  <AlertDialogTitle className="dark:text-white text-slate-800">Mark project as completed?</AlertDialogTitle>
+                  <AlertDialogTitle className="dark:text-white text-slate-800">{t("settings.completeConfirm")}</AlertDialogTitle>
                   <AlertDialogDescription className="dark:text-zinc-400 text-slate-600">
-                    This will set the project status to completed. You won&apos;t be able to log new expenses or daily updates. You can still view all data.
+                    {t("settings.completeDescription")}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel className="dark:border-zinc-600 dark:text-zinc-300">Cancel</AlertDialogCancel>
+                  <AlertDialogCancel className="dark:border-zinc-600 dark:text-zinc-300">{t("common.cancel")}</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={(e) => {
                       e.preventDefault();
@@ -410,8 +432,8 @@ export default function SettingsPage() {
                       handleMarkCompleted();
                     }}
                     className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    Yes, mark as completed
+                    >
+                    {t("settings.completeConfirmButton")}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

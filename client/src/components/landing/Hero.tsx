@@ -2,8 +2,10 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Users, DollarSign, BarChart3, Star } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export default function Hero() {
+  const { t } = useLanguage();
   const stats = [
     { icon: Users, value: "500+", label: "Active Contractors" },
     { icon: DollarSign, value: "50M+", label: "UGX Tracked" },
@@ -23,11 +25,9 @@ export default function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, ease: "easeOut" }}
-            className="text-4xl sm:text-5xl lg:text-6xl font-bold dark:text-white text-slate-800 mb-5 leading-tight"
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold dark:text-white text-slate-800 mb-5 leading-tight whitespace-pre-line"
           >
-            Message Anywhere.
-            <br />
-            Monitor Everywhere.
+            {t("landing.hero.title")}
           </motion.h1>
           
           <motion.p
@@ -36,7 +36,7 @@ export default function Hero() {
             transition={{ duration: 0.7, delay: 0.1, ease: "easeOut" }}
             className="text-base sm:text-lg dark:text-zinc-400 text-slate-600 mb-8 max-w-xl mx-auto"
           >
-            Use your favorite chat app to manage your construction project.
+            {t("landing.hero.subtitle")}
           </motion.p>
           
           <motion.div
@@ -49,14 +49,14 @@ export default function Hero() {
               <Button 
                 className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white px-8 py-5 text-sm font-semibold rounded-lg shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:shadow-[0_0_30px_rgba(34,197,94,0.5)] transition-all duration-300 border-0"
               >
-                Start Tracking
+                {t("landing.hero.cta")}
               </Button>
             </Link>
             <Button 
               variant="outline" 
               className="dark:border-zinc-700 dark:text-white dark:bg-transparent dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 bg-white hover:bg-slate-100 px-8 py-5 text-sm font-semibold rounded-lg transition-all duration-300"
             >
-              Learn More
+              {t("landing.hero.demo")}
             </Button>
           </motion.div>
 

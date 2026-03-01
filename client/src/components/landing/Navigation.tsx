@@ -3,12 +3,7 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Menu, X, ChevronDown, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
 
 export default function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -71,25 +66,7 @@ export default function Navigation() {
 
           {/* Right Side Actions */}
           <div className="hidden md:flex items-center gap-2">
-            {/* Language Selector */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button 
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors rounded-lg"
-                  aria-label="Select Language"
-                >
-                  <span className="text-base">🇺🇬</span>
-                  <span>EN</span>
-                  <ChevronDown className="w-4 h-4 opacity-50" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="dark:bg-zinc-900 dark:border-zinc-800 bg-white border-slate-200">
-                <DropdownMenuItem className="dark:text-zinc-200 dark:focus:bg-zinc-800 dark:focus:text-white text-slate-800 focus:bg-slate-100">
-                  English
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
+            <LanguageSwitcher variant="compact" />
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -161,12 +138,9 @@ export default function Navigation() {
           ))}
           
           <div className="pt-4 mt-4 border-t dark:border-zinc-800/50 border-slate-200 space-y-3">
-            {/* Mobile Language Selector */}
-            <button className="w-full flex items-center justify-center gap-2 px-4 py-3 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
-              <span className="text-lg">🇺🇬</span>
-              <span>English</span>
-            </button>
-            
+            <div className="flex justify-center">
+              <LanguageSwitcher variant="compact" />
+            </div>
             <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
               <Button 
                 className="w-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white py-3 rounded-lg font-semibold"
