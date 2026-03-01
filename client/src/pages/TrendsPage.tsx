@@ -7,6 +7,7 @@ import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectTrends } from "@/hooks/useDashboard";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,29 +59,30 @@ function EmptyState({ message, hint }: { message: string; hint?: string }) {
   );
 }
 
-function TrendBadge({ trend }: { trend: "increasing" | "decreasing" | "stable" }) {
+function TrendBadge({ trend, t }: { trend: "increasing" | "decreasing" | "stable"; t: (k: string) => string }) {
   if (trend === "increasing") {
     return (
       <span className="inline-flex items-center gap-1 text-sm text-[#22c55e]">
-        <TrendingUp className="w-4 h-4" /> Increasing
+        <TrendingUp className="w-4 h-4" /> {t("trends.increasing")}
       </span>
     );
   }
   if (trend === "decreasing") {
     return (
       <span className="inline-flex items-center gap-1 text-sm text-amber-500">
-        <TrendingDown className="w-4 h-4" /> Decreasing
+        <TrendingDown className="w-4 h-4" /> {t("trends.decreasing")}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 text-sm dark:text-zinc-300 text-slate-700">
-      <Minus className="w-4 h-4" /> Stable
+      <Minus className="w-4 h-4" /> {t("trends.stable")}
     </span>
   );
 }
 
 export default function TrendsPage() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { isDark } = useTheme();
   const { currentProject } = useProject();
@@ -96,18 +98,16 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Trends & Insights</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("trends.title")}</h1>
           <p className="dark:text-zinc-400 text-slate-500 mb-4">
-            {hasProjects
-              ? "No project selected. Select a project from the sidebar or dashboard."
-              : "Create your first project to view trends and insights."}
+            {hasProjects ? t("trends.noProjectSelect") : t("trends.noProjectCreate")}
           </p>
           <Button
             onClick={() => setLocation("/projects")}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            {hasProjects ? "Back to Projects" : "Create your first project"}
+            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
         </div>
       </AppLayout>
@@ -118,7 +118,7 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Trends & Insights</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("trends.title")}</h1>
           <TrendsSkeleton />
         </div>
       </AppLayout>
@@ -129,14 +129,14 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Trends & Insights</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("trends.title")}</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : t("common.error")}</p>
           <Button
             onClick={() => refetch()}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Try again
+            {t("common.retry")}
           </Button>
         </div>
       </AppLayout>
@@ -151,11 +151,11 @@ export default function TrendsPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Trends & Insights</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("trends.title")}</h1>
           <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardContent className="pt-6">
               <EmptyState
-                message="Trends will appear after a few days of WhatsApp updates."
+                message={t("trends.empty")}
                 hint="Send expenses, worker counts, and material updates to see trends."
               />
             </CardContent>
@@ -168,12 +168,12 @@ export default function TrendsPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-900 mb-6">Trends & Insights</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-900 mb-6">{t("trends.title")}</h1>
 
         {/* Alerts */}
         <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Alerts & Anomalies</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.alertsAnomalies")}</CardTitle>
           </CardHeader>
           <CardContent>
             {alerts.length > 0 ? (
@@ -203,7 +203,7 @@ export default function TrendsPage() {
                 ))}
               </div>
             ) : (
-              <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">No issues detected</p>
+              <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">{t("trends.noissues")}</p>
             )}
           </CardContent>
         </Card>
@@ -211,22 +211,22 @@ export default function TrendsPage() {
         {/* Predictions */}
         <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Predictions</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.predictions")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Weekly Burn Rate</p>
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.burnrate")}</p>
                 <p className="text-lg font-bold dark:text-white text-slate-900">{formatUgx(predictions.weeklyBurnRate)}</p>
               </div>
               <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Budget Runout Estimate</p>
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.runout")}</p>
                 <p className="text-lg font-medium dark:text-white text-slate-900">
                   {predictions.budgetRunout ? formatDate(predictions.budgetRunout) : "—"}
                 </p>
               </div>
               <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">Project Completion</p>
+                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.completion")}</p>
                 <p className="text-lg font-medium dark:text-white text-slate-900">
                   {predictions.estimatedCompletion || "—"}
                 </p>
@@ -239,8 +239,8 @@ export default function TrendsPage() {
           {/* Spending trend */}
           <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="dark:text-white text-slate-800 font-bold">Spending Trend</CardTitle>
-              <TrendBadge trend={spending.trend} />
+              <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.spending")}</CardTitle>
+              <TrendBadge trend={spending.trend} t={t} />
             </CardHeader>
             <CardContent>
               {spending.byMonth.length > 0 ? (
@@ -267,11 +267,11 @@ export default function TrendsPage() {
                       }}
                       labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
                     />
-                    <Line type="monotone" dataKey="amount" stroke="#22c55e" strokeWidth={2} name="Spent" />
+                    <Line type="monotone" dataKey="amount" stroke="#22c55e" strokeWidth={2} name={t("budget.spent")} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState message="No spending data yet." />
+                <EmptyState message={t("trends.noSpendingData")} />
               )}
             </CardContent>
           </Card>
@@ -279,8 +279,8 @@ export default function TrendsPage() {
           {/* Worker activity */}
           <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="dark:text-white text-slate-800 font-bold">Worker Activity</CardTitle>
-              <TrendBadge trend={workers.trend} />
+              <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.workers")}</CardTitle>
+              <TrendBadge trend={workers.trend} t={t} />
             </CardHeader>
             <CardContent>
               {workers.byDay.length > 0 ? (
@@ -306,16 +306,16 @@ export default function TrendsPage() {
                       }}
                       labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
                     />
-                    <ReferenceLine y={workers.average} stroke="#14b8a6" strokeDasharray="3 3" name="Avg" />
-                    <Bar dataKey="count" fill="#14b8a6" name="Workers" />
+                    <ReferenceLine y={workers.average} stroke="#14b8a6" strokeDasharray="3 3" name={t("trends.avg")} />
+                    <Bar dataKey="count" fill="#14b8a6" name={t("daily.workers")} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState message="No worker data yet." />
+                <EmptyState message={t("trends.noWorkerData")} />
               )}
               <div className="flex gap-4 mt-2 text-sm dark:text-zinc-400 text-slate-600">
-                <span>Avg: {workers.average}</span>
-                <span>Peak: {workers.peak}</span>
+                <span>{t("trends.avg")}: {workers.average}</span>
+                <span>{t("trends.peak")}: {workers.peak}</span>
               </div>
             </CardContent>
           </Card>
@@ -324,7 +324,7 @@ export default function TrendsPage() {
         {/* Materials usage */}
         <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Materials Usage</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.materials")}</CardTitle>
           </CardHeader>
           <CardContent>
             {materials.mostUsed.length > 0 ? (
@@ -361,7 +361,7 @@ export default function TrendsPage() {
                 </ResponsiveContainer>
                 {materials.topVendors.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium dark:text-zinc-400 text-slate-600 mb-2">Top Vendors</h4>
+                    <h4 className="text-sm font-medium dark:text-zinc-400 text-slate-600 mb-2">{t("trends.topVendors")}</h4>
                     <ul className="space-y-2">
                       {materials.topVendors.map((v) => (
                         <li key={v.name} className="flex justify-between text-sm">
@@ -374,7 +374,7 @@ export default function TrendsPage() {
                 )}
               </div>
             ) : (
-              <EmptyState message="No materials data yet." />
+              <EmptyState message={t("trends.noMaterialsData")} />
             )}
           </CardContent>
         </Card>

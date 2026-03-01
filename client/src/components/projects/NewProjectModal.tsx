@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 export interface NewProjectFormData {
   name: string;
@@ -53,6 +54,7 @@ export function NewProjectModal({
   isLoading = false,
   errorMessage = null,
 }: NewProjectModalProps) {
+  const { t } = useLanguage();
   const [form, setForm] = useState<NewProjectFormData>(DEFAULT_FORM);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,11 +72,11 @@ export function NewProjectModal({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="bg-zinc-900 border-zinc-700 text-white max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white">New Project</DialogTitle>
+          <DialogTitle className="text-white">{t("projects.modalTitle")}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="name" className="text-zinc-300">Project name</Label>
+            <Label htmlFor="name" className="text-zinc-300">{t("projects.projectName")}</Label>
             <Input
               id="name"
               value={form.name}
@@ -85,7 +87,7 @@ export function NewProjectModal({
             />
           </div>
           <div>
-            <Label htmlFor="type" className="text-zinc-300">Project type</Label>
+            <Label htmlFor="type" className="text-zinc-300">{t("projects.projectType")}</Label>
             <Select
               value={form.type}
               onValueChange={(v: NewProjectFormData["type"]) => setForm((p) => ({ ...p, type: v }))}
@@ -94,24 +96,24 @@ export function NewProjectModal({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-zinc-800 border-zinc-600">
-                <SelectItem value="residential">Residential</SelectItem>
-                <SelectItem value="commercial">Commercial</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
+                <SelectItem value="residential">{t("projects.residential")}</SelectItem>
+                <SelectItem value="commercial">{t("projects.commercial")}</SelectItem>
+                <SelectItem value="other">{t("projects.other")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <Label htmlFor="location" className="text-zinc-300">Location</Label>
+            <Label htmlFor="location" className="text-zinc-300">{t("settings.location")}</Label>
             <Input
               id="location"
               value={form.location}
               onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-              placeholder="City or address"
+              placeholder={t("projects.locationPlaceholder")}
               className="mt-1 bg-zinc-800 border-zinc-600 text-white placeholder:text-zinc-500"
             />
           </div>
           <div>
-            <Label htmlFor="startDate" className="text-zinc-300">Start date</Label>
+            <Label htmlFor="startDate" className="text-zinc-300">{t("projects.startDate")}</Label>
             <Input
               id="startDate"
               type="date"
@@ -121,7 +123,7 @@ export function NewProjectModal({
             />
           </div>
           <div>
-            <Label htmlFor="totalBudget" className="text-zinc-300">Total budget (UGX)</Label>
+            <Label htmlFor="totalBudget" className="text-zinc-300">{t("projects.totalBudgetUgx")}</Label>
             <Input
               id="totalBudget"
               type="number"
@@ -133,7 +135,7 @@ export function NewProjectModal({
             />
           </div>
           <div>
-            <Label htmlFor="whatsapp" className="text-zinc-300">WhatsApp number to link</Label>
+            <Label htmlFor="whatsapp" className="text-zinc-300">{t("projects.whatsappLink")}</Label>
             <Input
               id="whatsapp"
               value={form.whatsappNumber}
@@ -152,14 +154,14 @@ export function NewProjectModal({
               onClick={() => handleOpenChange(false)}
               className="border-zinc-600 text-zinc-300 hover:bg-zinc-800"
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
               disabled={isLoading}
               className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90"
             >
-              {isLoading ? "Creating…" : "Create Project"}
+              {isLoading ? t("projects.creating") : t("projects.createProject")}
             </Button>
           </DialogFooter>
         </form>

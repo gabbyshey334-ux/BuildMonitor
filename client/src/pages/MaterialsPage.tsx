@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectMaterials } from "@/hooks/useDashboard";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ function EmptyState({ message, hint }: { message: string; hint?: string }) {
 }
 
 export default function MaterialsPage() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
@@ -55,18 +57,16 @@ export default function MaterialsPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Materials & Inventory</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("materials.title")}</h1>
           <p className="dark:text-zinc-400 text-slate-500 mb-4">
-            {hasProjects
-              ? "No project selected. Select a project from the sidebar or dashboard."
-              : "Create your first project to track materials and inventory."}
+            {hasProjects ? t("materials.noProjectSelect") : t("materials.noProjectCreate")}
           </p>
           <Button
             onClick={() => setLocation("/projects")}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            {hasProjects ? "Back to Projects" : "Create your first project"}
+            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
         </div>
       </AppLayout>
@@ -77,7 +77,7 @@ export default function MaterialsPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Materials & Inventory</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("materials.title")}</h1>
           <MaterialsSkeleton />
         </div>
       </AppLayout>
@@ -88,14 +88,14 @@ export default function MaterialsPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Materials & Inventory</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("materials.title")}</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : t("common.error")}</p>
           <Button
             onClick={() => refetch()}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Try again
+            {t("common.retry")}
           </Button>
         </div>
       </AppLayout>
@@ -108,14 +108,14 @@ export default function MaterialsPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Materials & Inventory</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("materials.title")}</h1>
 
         {inventory.length === 0 ? (
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-6">
               <EmptyState
-                message="No materials tracked yet."
-                hint="Send 'Received 50 bags cement' or 'Used 5 bags for foundation' via WhatsApp to start tracking."
+                message={t("materials.empty")}
+                hint={t("materials.emptyHint")}
               />
             </CardContent>
           </Card>
@@ -125,13 +125,13 @@ export default function MaterialsPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">Total Materials</p>
+                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">{t("materials.totalMaterials")}</p>
                   <p className="text-2xl font-bold dark:text-white text-slate-800">{summary.totalItems}</p>
                 </CardContent>
               </Card>
               <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">Low Stock Items</p>
+                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">{t("materials.lowStockItems")}</p>
                   <p className={`text-2xl font-bold ${summary.lowStockCount > 0 ? "text-red-500" : "dark:text-white text-slate-800"}`}>
                     {summary.lowStockCount}
                   </p>
@@ -139,7 +139,7 @@ export default function MaterialsPage() {
               </Card>
               <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
                 <CardContent className="pt-4 pb-4">
-                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">Last Updated</p>
+                  <p className="text-sm dark:text-zinc-500 text-slate-500 mb-1">{t("materials.lastUpdated")}</p>
                   <p className="text-lg font-medium dark:text-white text-slate-800">{formatDate(summary.lastUpdated)}</p>
                 </CardContent>
               </Card>
@@ -148,7 +148,7 @@ export default function MaterialsPage() {
             {/* Low stock alerts */}
             <Card className="border-border bg-card mb-6">
               <CardHeader>
-                <CardTitle className="dark:text-white text-slate-800 font-bold">Low Stock Alerts</CardTitle>
+                <CardTitle className="dark:text-white text-slate-800 font-bold">{t("materials.lowstock")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {lowStock.length > 0 ? (
@@ -164,10 +164,10 @@ export default function MaterialsPage() {
                         </span>
                       </div>
                     ))}
-                    <p className="dark:text-zinc-400 text-slate-500 text-sm">Consider restocking these materials.</p>
+                    <p className="dark:text-zinc-400 text-slate-500 text-sm">{t("materials.restockHint")}</p>
                   </div>
                 ) : (
-                  <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">All materials well stocked</p>
+                  <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">{t("materials.allWellStocked")}</p>
                 )}
               </CardContent>
             </Card>
@@ -175,7 +175,7 @@ export default function MaterialsPage() {
             {/* Inventory list */}
             <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
               <CardHeader>
-                <CardTitle className="dark:text-white text-slate-800 font-bold">Inventory</CardTitle>
+                <CardTitle className="dark:text-white text-slate-800 font-bold">{t("materials.inventory")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -184,11 +184,11 @@ export default function MaterialsPage() {
                     const pct = Math.min(100, (qty / maxQty) * 100);
                     const badge =
                       qty <= 5 ? (
-                        <span className="text-xs font-semibold text-red-500">Low</span>
+                        <span className="text-xs font-semibold text-red-500">{t("materials.low")}</span>
                       ) : qty > 20 ? (
-                        <span className="text-xs font-semibold text-[#22c55e]">Good</span>
+                        <span className="text-xs font-semibold text-[#22c55e]">{t("materials.good")}</span>
                       ) : (
-                        <span className="text-xs font-semibold text-yellow-500">Medium</span>
+                        <span className="text-xs font-semibold text-yellow-500">{t("materials.medium")}</span>
                       );
                     return (
                       <div
@@ -205,7 +205,7 @@ export default function MaterialsPage() {
                           </div>
                         </div>
                         <Progress value={pct} className="h-2" />
-                        <p className="text-xs dark:text-zinc-500 text-slate-500">Last updated: {formatDate(m.last_updated)}</p>
+                        <p className="text-xs dark:text-zinc-500 text-slate-500">{t("materials.lastUpdatedLabel")}: {formatDate(m.last_updated)}</p>
                       </div>
                     );
                   })}

@@ -4,29 +4,31 @@ import React from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MessageCircle, ListOrdered, HelpCircle } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
 
 const COMMANDS = [
-  { say: "Bought 50 bags cement for 1,900,000", happens: "Logs expense" },
-  { say: "Used 5 bags cement", happens: "Updates inventory" },
-  { say: "6 workers on site today", happens: "Logs daily activity" },
-  { say: "Foundation 80% complete", happens: "Updates progress" },
-  { say: "How much have we spent?", happens: "Budget summary" },
-  { say: "How much cement do we have?", happens: "Inventory check" },
-  { say: "Heavy rain, no work today", happens: "Logs delay" },
-  { say: "Switch project", happens: "Change active project" },
-  { say: "Send receipt photo", happens: "OCR scan" },
-  { say: "Send voice note", happens: "Transcribe & log" },
+  { say: "Bought 50 bags cement for 1,900,000", happensKey: "help.cmdExpense" },
+  { say: "Used 5 bags cement", happensKey: "help.cmdInventory" },
+  { say: "6 workers on site today", happensKey: "help.cmdDaily" },
+  { say: "Foundation 80% complete", happensKey: "help.cmdProgress" },
+  { say: "How much have we spent?", happensKey: "help.cmdBudget" },
+  { say: "How much cement do we have?", happensKey: "help.cmdInventoryCheck" },
+  { say: "Heavy rain, no work today", happensKey: "help.cmdDelay" },
+  { say: "Switch project", happensKey: "help.cmdSwitch" },
+  { say: "Send receipt photo", happensKey: "help.cmdOCR" },
+  { say: "Send voice note", happensKey: "help.cmdVoice" },
 ];
 
 export default function HelpPage() {
+  const { t } = useLanguage();
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto">
         <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-8">
-          Help & How To Use
+          {t("help.howToUseTitle")}
         </h1>
 
         {/* How To Use */}
@@ -34,13 +36,13 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="dark:text-white text-slate-800 flex items-center gap-2">
               <MessageCircle className="h-5 w-5 text-[#22c55e]" />
-              How To Use JengaTrack
+              {t("help.howToUseJenga")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 dark:text-zinc-300 text-slate-600">
             <ol className="list-decimal list-inside space-y-3 text-sm">
               <li>
-                Save our WhatsApp number:{" "}
+                {t("help.saveNumber")}{" "}
                 <a
                   href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
                   target="_blank"
@@ -51,15 +53,15 @@ export default function HelpPage() {
                 </a>
               </li>
               <li>
-                Send &quot;{JOIN_CODE}&quot; to join the sandbox and get started
+                {t("help.sendJoin").replace("{code}", JOIN_CODE)}
               </li>
-              <li>Text expenses, materials, and daily updates in plain language</li>
-              <li>Send receipt photos for automatic OCR scanning</li>
-              <li>Send voice notes for transcription and logging</li>
-              <li>Use commands like &quot;How much have we spent?&quot; for budget summaries</li>
+              <li>{t("help.textUpdates")}</li>
+              <li>{t("help.receiptPhotos")}</li>
+              <li>{t("help.voiceNotes")}</li>
+              <li>{t("help.commandsLike")}</li>
             </ol>
             <div className="pt-2 dark:text-zinc-400 text-slate-500 text-sm">
-              <strong className="dark:text-zinc-300 text-slate-700">WhatsApp number to message:</strong>{" "}
+              <strong className="dark:text-zinc-300 text-slate-700">{t("help.whatsappLabel")}</strong>{" "}
               <a
                 href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
                 target="_blank"
@@ -69,7 +71,7 @@ export default function HelpPage() {
                 {WHATSAPP_JOIN}
               </a>
               <br />
-              <strong className="dark:text-zinc-300 text-slate-700">Join code for sandbox:</strong>{" "}
+              <strong className="dark:text-zinc-300 text-slate-700">{t("help.joinCodeLabel")}</strong>{" "}
               <code className="dark:bg-zinc-800 bg-slate-100 px-1.5 py-0.5 rounded text-[#14b8a6]">
                 {JOIN_CODE}
               </code>
@@ -82,7 +84,7 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="dark:text-white text-slate-800 flex items-center gap-2">
               <ListOrdered className="h-5 w-5 text-[#14b8a6]" />
-              WhatsApp Commands Reference
+              {t("help.commandsRefTitle")}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -91,10 +93,10 @@ export default function HelpPage() {
                 <thead>
                   <tr className="border-b dark:border-zinc-700/50 dark:bg-zinc-800/50 border-slate-200 bg-slate-50">
                     <th className="text-left px-4 py-3 dark:text-zinc-300 text-slate-700 font-medium">
-                      What to say
+                      {t("help.whatToSay")}
                     </th>
                     <th className="text-left px-4 py-3 dark:text-zinc-300 text-slate-700 font-medium">
-                      What happens
+                      {t("help.whatHappens")}
                     </th>
                   </tr>
                 </thead>
@@ -105,7 +107,7 @@ export default function HelpPage() {
                       className="border-b dark:border-zinc-800/50 border-slate-100 last:border-0 dark:hover:bg-zinc-800/30 hover:bg-slate-50"
                     >
                       <td className="px-4 py-3 dark:text-zinc-200 text-slate-800">&quot;{row.say}&quot;</td>
-                      <td className="px-4 py-3">{row.happens}</td>
+                      <td className="px-4 py-3">{t(row.happensKey)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -119,43 +121,40 @@ export default function HelpPage() {
           <CardHeader>
             <CardTitle className="dark:text-white text-slate-800 flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-[#22c55e]" />
-              FAQ
+              {t("help.faq")}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <div>
               <p className="dark:text-zinc-300 text-slate-700 font-medium mb-1">
-                How do I add my manager to track updates?
+                {t("help.faqAddManager")}
               </p>
               <p className="dark:text-zinc-400 text-slate-600 text-sm">
-                Share the WhatsApp number with your manager. They just start
-                texting and the bot handles the rest.
+                {t("help.faqAddManagerAns")}
               </p>
             </div>
             <div>
               <p className="dark:text-zinc-300 text-slate-700 font-medium mb-1">
-                How often does the dashboard update?
+                {t("help.faqDashboard")}
               </p>
               <p className="dark:text-zinc-400 text-slate-600 text-sm">
-                Every 30 seconds automatically.
+                {t("help.faqDashboardAns")}
               </p>
             </div>
             <div>
               <p className="dark:text-zinc-300 text-slate-700 font-medium mb-1">
-                Can I use voice notes?
+                {t("help.faqVoice")}
               </p>
               <p className="dark:text-zinc-400 text-slate-600 text-sm">
-                Yes! Send any voice note and the bot will transcribe and process
-                it.
+                {t("help.faqVoiceAns")}
               </p>
             </div>
             <div>
               <p className="dark:text-zinc-300 text-slate-700 font-medium mb-1">
-                What currencies are supported?
+                {t("help.faqCurrencies")}
               </p>
               <p className="dark:text-zinc-400 text-slate-600 text-sm">
-                UGX (Uganda), KES (Kenya), NGN (Nigeria). Receipt photos
-                auto-convert to UGX.
+                {t("help.faqCurrenciesAns")}
               </p>
             </div>
           </CardContent>

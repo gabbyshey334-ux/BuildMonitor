@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectDaily } from "@/hooks/useDashboard";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, ArrowLeft, CloudRain, Camera } from "lucide-react";
@@ -44,6 +45,7 @@ function EmptyState({ message, hint }: { message: string; hint?: string }) {
 }
 
 export default function DailyPage() {
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
@@ -59,18 +61,16 @@ export default function DailyPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Daily Accountability</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("daily.title")}</h1>
           <p className="dark:text-zinc-400 text-slate-500 mb-4">
-            {hasProjects
-              ? "No project selected. Select a project from the sidebar or dashboard."
-              : "Create your first project to log daily updates."}
+            {hasProjects ? t("daily.noProjectSelect") : t("daily.noProjectCreate")}
           </p>
           <Button
             onClick={() => setLocation("/projects")}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
-            {hasProjects ? "Back to Projects" : "Create your first project"}
+            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
         </div>
       </AppLayout>
@@ -81,7 +81,7 @@ export default function DailyPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Daily Accountability</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("daily.title")}</h1>
           <DailySkeleton />
         </div>
       </AppLayout>
@@ -92,14 +92,14 @@ export default function DailyPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Daily Accountability</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("daily.title")}</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : t("common.error")}</p>
           <Button
             onClick={() => refetch()}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Try again
+            {t("common.retry")}
           </Button>
         </div>
       </AppLayout>
@@ -114,12 +114,12 @@ export default function DailyPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Daily Accountability</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("daily.title")}</h1>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-6">
               <EmptyState
-                message="No daily updates yet."
-                hint="Send '6 workers on site today' or 'Foundation 80% complete' via WhatsApp to start your activity log."
+                message={t("daily.empty")}
+                hint={t("daily.emptyHint")}
               />
             </CardContent>
           </Card>
@@ -131,20 +131,20 @@ export default function DailyPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Daily Accountability</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("daily.title")}</h1>
 
         {/* Today's status */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Today&apos;s Status</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("daily.today")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
               <span className={`text-2xl ${today.active ? "text-[#22c55e]" : "dark:text-zinc-500 text-slate-500"}`}>
-                {today.active ? "Active today" : "No updates yet"}
+                {today.active ? t("daily.activeToday") : t("daily.noUpdatesYet")}
               </span>
               {today.active && today.workerCount > 0 && (
-                <span className="dark:text-zinc-400 text-slate-500 text-sm">{today.workerCount} workers logged</span>
+                <span className="dark:text-zinc-400 text-slate-500 text-sm">{today.workerCount} {t("daily.workersLogged")}</span>
               )}
             </div>
             {today.active && today.notes && (
@@ -169,31 +169,31 @@ export default function DailyPage() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">Active Days</p>
+              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">{t("daily.totaldays")}</p>
               <p className="text-xl font-bold dark:text-white text-slate-800">{stats.totalActiveDays}</p>
             </CardContent>
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">Current Streak</p>
+              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">{t("daily.streak")}</p>
               <p className="text-xl font-bold text-[#22c55e]">{stats.currentStreak}</p>
             </CardContent>
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">Avg Workers</p>
+              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">{t("daily.avgworkers")}</p>
               <p className="text-xl font-bold dark:text-white text-slate-800">{stats.avgWorkerCount}</p>
             </CardContent>
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">This Week</p>
+              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">{t("daily.thisWeek")}</p>
               <p className="text-xl font-bold dark:text-white text-slate-800">{stats.thisWeekActive}/7 days</p>
             </CardContent>
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">Photos</p>
+              <p className="text-xs dark:text-zinc-500 text-slate-500 mb-1">{t("daily.photos")}</p>
               <p className="text-xl font-bold dark:text-white text-slate-800">{stats.totalPhotos}</p>
             </CardContent>
           </Card>
@@ -202,7 +202,7 @@ export default function DailyPage() {
         {/* Calendar heatmap */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Activity (Last 60 Days)</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("daily.activity60")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-10 sm:grid-cols-12 gap-1">
@@ -211,7 +211,7 @@ export default function DailyPage() {
                   key={h.date}
                   type="button"
                   onClick={() => setSelectedDate(selectedDate === h.date ? null : h.date)}
-                  title={`${h.date} ${h.active ? `- ${h.workerCount} workers` : ""}`}
+                  title={`${h.date} ${h.active ? `- ${h.workerCount} ${t("daily.workersCount")}` : ""}`}
                   className={`w-4 h-4 sm:w-5 sm:h-5 rounded-sm transition-colors ${
                     h.active ? "bg-[#22c55e]" : "dark:bg-zinc-700 bg-slate-200"
                   } ${selectedDate === h.date ? "ring-2 ring-[#14b8a6]" : ""}`}
@@ -222,7 +222,7 @@ export default function DailyPage() {
               <div className="mt-4 p-4 rounded-lg border dark:border-zinc-800 dark:bg-zinc-900/50 border-slate-200 bg-slate-50">
                 <p className="dark:text-white text-slate-800 font-medium">{formatDate(selectedDate)}</p>
                 {selectedLog.worker_count != null && (
-                  <p className="dark:text-zinc-400 text-slate-500 text-sm">{selectedLog.worker_count} workers</p>
+                  <p className="dark:text-zinc-400 text-slate-500 text-sm">{selectedLog.worker_count} {t("daily.workersCount")}</p>
                 )}
                 {selectedLog.notes && <p className="dark:text-zinc-400 text-slate-500 text-sm mt-1">{selectedLog.notes}</p>}
                 {selectedLog.weather_condition && (
@@ -238,7 +238,7 @@ export default function DailyPage() {
         {/* Recent activity */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Recent Activity</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("daily.recentActivity")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -250,7 +250,7 @@ export default function DailyPage() {
                   <div className="flex-1">
                     <p className="font-medium dark:text-white text-slate-800">{formatDate(log.log_date || "")}</p>
                     {log.worker_count != null && (
-                      <p className="dark:text-zinc-400 text-slate-500 text-sm">{log.worker_count} workers</p>
+                      <p className="dark:text-zinc-400 text-slate-500 text-sm">{log.worker_count} {t("daily.workersCount")}</p>
                     )}
                     {log.notes && (
                       <p className="dark:text-zinc-400 text-slate-500 text-sm mt-1 line-clamp-2">{log.notes}</p>
@@ -277,7 +277,7 @@ export default function DailyPage() {
         {/* Photo gallery */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Site Photos</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("daily.sitePhotos")}</CardTitle>
           </CardHeader>
           <CardContent>
             {allPhotos.length > 0 ? (
@@ -292,7 +292,7 @@ export default function DailyPage() {
                 ))}
               </div>
             ) : (
-              <EmptyState message="No photos yet." hint="Send site photos via WhatsApp to see them here." />
+              <EmptyState message={t("daily.noPhotosYet")} hint={t("daily.noPhotosHint")} />
             )}
           </CardContent>
         </Card>

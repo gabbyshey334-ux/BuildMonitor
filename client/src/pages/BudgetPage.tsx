@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectExpenses } from "@/hooks/useDashboard";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ function EmptyState({ message, hint }: { message: string; hint?: string }) {
 }
 
 export default function BudgetPage() {
+  const { t } = useLanguage();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];
@@ -73,14 +75,12 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Budgets & Costs</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("budget.title")}</h1>
           <p className="dark:text-zinc-400 text-slate-500 max-w-md mx-auto mb-6">
-            {hasProjects
-              ? "Select a project from the sidebar or dashboard to view budget and expenses."
-              : "Create your first project to track budget and expenses."}
+            {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
           </p>
           <Button asChild variant="outline" className="dark:border-zinc-600 dark:text-zinc-300 border-slate-300 text-slate-700">
-            <Link href="/projects">{hasProjects ? "Back to Projects" : "Create your first project"}</Link>
+            <Link href="/projects">{hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}</Link>
           </Button>
         </div>
       </AppLayout>
@@ -91,7 +91,7 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Budgets & Costs</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("budget.title")}</h1>
           <BudgetSkeleton />
         </div>
       </AppLayout>
@@ -102,14 +102,14 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">Budgets & Costs</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : "Something went wrong."}</p>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("budget.title")}</h1>
+          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : t("common.error")}</p>
           <Button
             onClick={() => refetch()}
             className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            Try again
+            {t("common.retry")}
           </Button>
         </div>
       </AppLayout>
@@ -129,19 +129,19 @@ export default function BudgetPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">Budgets & Costs</h1>
+        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("budget.title")}</h1>
 
         {/* Summary cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Total Budget</p>
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">{t("budget.total")}</p>
               <p className="text-2xl font-bold dark:text-white text-slate-800">{formatUgx(summary.total)}</p>
             </CardContent>
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Spent</p>
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">{t("budget.spent")}</p>
               <p className="text-2xl font-bold dark:text-white text-slate-800">
                 {formatUgx(summary.spent)}
                 <span className="text-sm font-normal dark:text-[#94A3B8] text-slate-500 ml-2">({summary.percentage}%)</span>
@@ -150,7 +150,7 @@ export default function BudgetPage() {
           </Card>
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
             <CardContent className="pt-4 pb-4">
-              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">Remaining</p>
+              <p className="text-sm dark:text-[#CBD5E1] text-slate-600 mb-1">{t("budget.remaining")}</p>
               <p className="text-2xl font-bold text-[#14b8a6]">{formatUgx(summary.remaining)}</p>
             </CardContent>
           </Card>
@@ -158,7 +158,7 @@ export default function BudgetPage() {
 
         <div className="mb-6">
           <div className="flex justify-between text-sm dark:text-[#CBD5E1] text-slate-600 mb-2">
-            <span>Budget used</span>
+            <span>{t("budget.budgetUsed")}</span>
             <span>{summary.percentage}%</span>
           </div>
           <Progress
@@ -167,10 +167,10 @@ export default function BudgetPage() {
           />
           <div className="flex gap-6 mt-2 text-xs dark:text-zinc-500 text-slate-500">
             {summary.weeklyBurnRate != null && summary.weeklyBurnRate > 0 && (
-              <span>Weekly burn: {formatUgx(summary.weeklyBurnRate)}</span>
+              <span>{t("budget.weeklyBurn")}: {formatUgx(summary.weeklyBurnRate)}</span>
             )}
             {summary.weeksRemaining != null && (
-              <span>Weeks remaining: ~{summary.weeksRemaining}</span>
+              <span>{t("budget.weeksRemaining")}: ~{summary.weeksRemaining}</span>
             )}
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function BudgetPage() {
         {/* Budget breakdown */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Budget Breakdown</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("budget.breakdown")}</CardTitle>
           </CardHeader>
           <CardContent>
             {byCategory.length > 0 ? (
@@ -220,8 +220,8 @@ export default function BudgetPage() {
               </>
             ) : (
               <EmptyState
-                message="No expenses logged yet."
-                hint="Send 'Bought cement for 200,000' via WhatsApp to start tracking."
+                message={t("budget.noexpenses")}
+                hint={t("budget.noExpensesHint")}
               />
             )}
           </CardContent>
@@ -230,7 +230,7 @@ export default function BudgetPage() {
         {/* Budget vs actual (by month) */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Spending by Month</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("budget.monthly")}</CardTitle>
           </CardHeader>
           <CardContent>
             {byMonth.length > 0 ? (
@@ -240,11 +240,11 @@ export default function BudgetPage() {
                   <XAxis dataKey="month" stroke="#94A3B8" />
                   <YAxis stroke="#94A3B8" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip formatter={(v: number) => formatUgx(v)} />
-                  <Bar dataKey="amount" fill="#22c55e" name="Amount" />
+                  <Bar dataKey="amount" fill="#22c55e" name={t("budget.amount")} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <EmptyState message="No spending history yet." hint="Log expenses via WhatsApp to see monthly trends." />
+              <EmptyState message={t("budget.noSpendingYet")} hint={t("budget.noSpendingHint")} />
             )}
           </CardContent>
         </Card>
@@ -252,7 +252,7 @@ export default function BudgetPage() {
         {/* Cumulative costs */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Cumulative Costs Over Time</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("budget.cumulativeCosts")}</CardTitle>
           </CardHeader>
           <CardContent>
             {cumulativeData.length > 0 ? (
@@ -267,8 +267,8 @@ export default function BudgetPage() {
               </ResponsiveContainer>
             ) : (
               <EmptyState
-                message="Spending trend will appear here after first expense."
-                hint="Send an expense via WhatsApp to see your cumulative spend."
+                message={t("budget.noSpendingYet")}
+                hint={t("budget.noCumulativeHint")}
               />
             )}
           </CardContent>
@@ -277,7 +277,7 @@ export default function BudgetPage() {
         {/* Recent transactions */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Recent Transactions</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("budget.recent")}</CardTitle>
           </CardHeader>
           <CardContent>
             {recent.length > 0 ? (
@@ -285,11 +285,11 @@ export default function BudgetPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left dark:text-[#94A3B8] text-slate-500">
-                      <th className="py-2 pr-4">Date</th>
-                      <th className="py-2 pr-4">Description</th>
-                      <th className="py-2 pr-4 text-right">Amount</th>
-                      <th className="py-2 pr-4">Category</th>
-                      <th className="py-2 pr-4">Source</th>
+                      <th className="py-2 pr-4">{t("budget.date")}</th>
+                      <th className="py-2 pr-4">{t("budget.desc")}</th>
+                      <th className="py-2 pr-4 text-right">{t("budget.amount")}</th>
+                      <th className="py-2 pr-4">{t("budget.category")}</th>
+                      <th className="py-2 pr-4">{t("budget.source")}</th>
                       <th className="py-2 w-8" />
                     </tr>
                   </thead>
@@ -308,7 +308,7 @@ export default function BudgetPage() {
                               <MessageCircle className="w-4 h-4 inline" />
                             </span>
                           ) : (
-                            <span className="dark:text-zinc-500 text-slate-500">Manual</span>
+                            <span className="dark:text-zinc-500 text-slate-500">{t("budget.manual")}</span>
                           )}
                         </td>
                         <td className="py-2">
@@ -325,8 +325,8 @@ export default function BudgetPage() {
               </div>
             ) : (
               <EmptyState
-                message="No transactions yet."
-                hint="Log an expense via WhatsApp or the dashboard to see it here."
+                message={t("budget.noTransactions")}
+                hint={t("budget.noTransactionsHint")}
               />
             )}
           </CardContent>
@@ -335,7 +335,7 @@ export default function BudgetPage() {
         {/* Vendor breakdown */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
           <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">Vendor Breakdown</CardTitle>
+            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("budget.vendors")}</CardTitle>
           </CardHeader>
           <CardContent>
             {vendors.length > 0 ? (
@@ -351,7 +351,7 @@ export default function BudgetPage() {
                 ))}
               </ul>
             ) : (
-              <EmptyState message="No vendor data yet." hint="Expenses logged with a vendor name will appear here." />
+              <EmptyState message={t("budget.noVendorYet")} hint={t("budget.noVendorHint")} />
             )}
           </CardContent>
         </Card>

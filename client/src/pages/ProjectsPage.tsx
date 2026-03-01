@@ -81,12 +81,12 @@ export default function ProjectsPage() {
       setCurrentProject(newProject);
       await invalidateProjects();
       toast({
-        title: "Project created",
-        description: `${form.name} has been created successfully.`,
+        title: t("projects.toastCreated"),
+        description: `${form.name} ${t("projects.toastCreatedDesc")}`,
       });
       setModalOpen(false);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create project";
+      const message = err instanceof Error ? err.message : t("projects.createFailed");
       setCreateError(message);
     } finally {
       setCreating(false);
@@ -112,10 +112,10 @@ export default function ProjectsPage() {
         ) : isError ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <p className="dark:text-red-400 text-red-600 mb-4">
-              {error instanceof Error ? error.message : "Failed to load projects"}
+              {error instanceof Error ? error.message : t("projects.loadError")}
             </p>
             <Button variant="outline" onClick={() => refetch()} className="dark:border-zinc-600 dark:text-zinc-300 border-slate-300 text-slate-700">
-              Try again
+              {t("projects.tryAgain")}
             </Button>
           </div>
         ) : hasProjects ? (
@@ -130,20 +130,20 @@ export default function ProjectsPage() {
               <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
             </div>
             <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
-              No projects yet
+              {t("projects.empty.title")}
             </h2>
             <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
-              Create your first project or connect via WhatsApp to set up automatically.
+              {t("projects.emptySubtitleLong")}
             </p>
             <Button
               onClick={() => setModalOpen(true)}
               className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 mb-4"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Create New Project
+              {t("projects.createNew")}
             </Button>
             <p className="text-sm dark:text-zinc-500 text-slate-500">
-              Or WhatsApp us at{" "}
+              {t("projects.orWhatsApp")}{" "}
               <a
                 href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
                 target="_blank"
@@ -152,7 +152,7 @@ export default function ProjectsPage() {
               >
                 {WHATSAPP_JOIN}
               </a>{" "}
-              with &quot;{JOIN_CODE}&quot; to get started.
+              with &quot;{JOIN_CODE}&quot; {t("projects.toGetStarted")}
             </p>
           </div>
         )}
