@@ -19,9 +19,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import twilio from 'twilio';
 import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
+
+const gemini = process.env.GEMINI_API_KEY
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+  : null;
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -35,6 +40,24 @@ const twilioClient = twilio(
 
 const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://build-monitor-lac.vercel.app';
+
+// ─── Rate limiting (max 10 AI calls per phone per hour) ───────────────────────
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(phoneNumber: string): boolean {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000; // 1 hour
+  const maxCalls = 10;
+  const key = phoneNumber;
+  const record = rateLimitMap.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > record.resetAt) {
+    record.count = 0;
+    record.resetAt = now + windowMs;
+  }
+  record.count++;
+  rateLimitMap.set(key, record);
+  return record.count <= maxCalls;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -388,8 +411,47 @@ async function processReceiptPhoto(
 ): Promise<void> {
   await sendMessage(from, '📸 Receipt received! Scanning it now...');
 
+  const receiptPrompt = `This is a construction receipt. Extract all details and return ONLY valid JSON:
+{
+  "vendor": "shop or supplier name",
+  "date": "date on receipt or null",
+  "items": [{"name": "item name", "quantity": number_or_null, "unit": "unit_or_null", "amount": number_in_UGX}],
+  "total": total_amount_in_UGX,
+  "notes": "any other relevant info"
+}
+If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES ≈ 28 UGX).`;
+
+  async function applyOcrResult(content: string): Promise<boolean> {
+    try {
+      let jsonStr = content.trim();
+      const codeMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeMatch) jsonStr = codeMatch[1].trim();
+      const ocrData = JSON.parse(jsonStr);
+      const total = ocrData.total || 0;
+      const vendor = ocrData.vendor || 'Unknown vendor';
+      const itemsList = (ocrData.items || [])
+        .map((i: any) => `  • ${i.name}${i.quantity ? ` x${i.quantity}` : ''}: ${fmt(i.amount || 0)} UGX`)
+        .join('\n');
+      const summary = `📋 Receipt scanned!\n\n` +
+        `🏪 Vendor: ${vendor}\n` +
+        `📅 Date: ${ocrData.date || 'Not visible'}\n` +
+        `Items:\n${itemsList || '  • (unable to read items)'}\n` +
+        `💰 Total: ${fmt(total)} UGX\n\n` +
+        `Save this to your records?`;
+      await updateExpenseState(userId, 'awaiting_confirmation', {
+        amount: total,
+        description: `Receipt: ${vendor}${ocrData.items?.length ? ` (${ocrData.items.map((i: any) => i.name).join(', ')})` : ''}`,
+        vendor,
+        project_id: projectId,
+      });
+      await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   try {
-    // Download image and convert to base64 for OpenAI Vision
     const response = await fetch(mediaUrl, {
       headers: {
         Authorization: `Basic ${Buffer.from(
@@ -401,63 +463,59 @@ async function processReceiptPhoto(
     const base64Image = buffer.toString('base64');
     const contentType = response.headers.get('content-type') || 'image/jpeg';
 
-    const ocrResult = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'user',
-          content: [
+    // Try OpenAI Vision first
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const ocrResult = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
             {
-              type: 'image_url',
-              image_url: { url: `data:${contentType};base64,${base64Image}` },
-            },
-            {
-              type: 'text',
-              text: `This is a construction receipt. Extract all details and return ONLY valid JSON:
-{
-  "vendor": "shop or supplier name",
-  "date": "date on receipt or null",
-  "items": [{"name": "item name", "quantity": number_or_null, "unit": "unit_or_null", "amount": number_in_UGX}],
-  "total": total_amount_in_UGX,
-  "notes": "any other relevant info"
-}
-If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES ≈ 28 UGX).`,
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: { url: `data:${contentType};base64,${base64Image}` },
+                },
+                { type: 'text', text: receiptPrompt },
+              ],
             },
           ],
-        },
-      ],
-      max_tokens: 500,
-    });
+          max_tokens: 500,
+        });
+        const content = ocrResult.choices[0]?.message?.content?.trim() || '';
+        if (content && (await applyOcrResult(content))) {
+          console.log('[OCR] OpenAI success');
+          return;
+        }
+      } catch (err: any) {
+        console.error('[OCR] OpenAI failed:', err?.message);
+      }
+    }
 
-    const content = ocrResult.choices[0]?.message?.content?.trim() || '';
-    let jsonStr = content;
-    const codeMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeMatch) jsonStr = codeMatch[1].trim();
+    // Gemini vision fallback
+    if (gemini && process.env.GEMINI_API_KEY) {
+      try {
+        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const imagePart = {
+          inlineData: {
+            data: base64Image,
+            mimeType: contentType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+          },
+        };
+        const result = await model.generateContent([receiptPrompt, imagePart]);
+        const content = result.response.text().trim();
+        if (content && (await applyOcrResult(content))) {
+          console.log('[OCR] Gemini success');
+          return;
+        }
+      } catch (err: any) {
+        console.error('[OCR] Gemini failed:', err?.message);
+      }
+    }
 
-    const ocrData = JSON.parse(jsonStr);
-    const total = ocrData.total || 0;
-    const vendor = ocrData.vendor || 'Unknown vendor';
-    const itemsList = (ocrData.items || [])
-      .map((i: any) => `  • ${i.name}${i.quantity ? ` x${i.quantity}` : ''}: ${fmt(i.amount || 0)} UGX`)
-      .join('\n');
-
-    // Build confirmation
-    const summary = `📋 Receipt scanned!\n\n` +
-      `🏪 Vendor: ${vendor}\n` +
-      `📅 Date: ${ocrData.date || 'Not visible'}\n` +
-      `Items:\n${itemsList || '  • (unable to read items)'}\n` +
-      `💰 Total: ${fmt(total)} UGX\n\n` +
-      `Save this to your records?`;
-
-    // Store pending OCR data so user can confirm
-    await updateExpenseState(userId, 'awaiting_confirmation', {
-      amount: total,
-      description: `Receipt: ${vendor}${ocrData.items?.length ? ` (${ocrData.items.map((i: any) => i.name).join(', ')})` : ''}`,
-      vendor,
-      project_id: projectId,
-    });
-
-    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
+    await sendMessage(from,
+      `Couldn't read that receipt clearly. Try:\n• Better lighting\n• Lay receipt flat\n• Photo straight from above\n\nOr type the details manually: "Bought [item] for [amount] from [vendor]"`
+    );
   } catch (err: any) {
     console.error('[OCR Error]', err);
     await sendMessage(from,
@@ -479,19 +537,52 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
     });
     const buffer = await response.buffer();
 
-    // Whisper expects a file-like object — use a Blob approach
-    const blob = new Blob([buffer], { type: 'audio/ogg' });
-    const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
+    // Try OpenAI Whisper first
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const blob = new Blob([buffer], { type: 'audio/ogg' });
+        const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
+        const transcription = await openai.audio.transcriptions.create({
+          model: 'whisper-1',
+          file,
+          language: 'en',
+        });
+        if (transcription.text) {
+          console.log('[Voice] OpenAI Whisper success');
+          return transcription.text;
+        }
+      } catch (err: any) {
+        console.error('[Voice] OpenAI Whisper failed:', err?.message);
+      }
+    }
 
-    const transcription = await openai.audio.transcriptions.create({
-      model: 'whisper-1',
-      file,
-      language: 'en',
-    });
+    // Gemini audio fallback
+    if (gemini && process.env.GEMINI_API_KEY) {
+      try {
+        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const audioPart = {
+          inlineData: {
+            data: buffer.toString('base64'),
+            mimeType: 'audio/ogg',
+          },
+        };
+        const result = await model.generateContent([
+          'Transcribe this voice note exactly. Return only the transcribed text, nothing else.',
+          audioPart,
+        ]);
+        const text = result.response.text()?.trim();
+        if (text) {
+          console.log('[Voice] Gemini success');
+          return text;
+        }
+      } catch (err: any) {
+        console.error('[Voice] Gemini failed:', err?.message);
+      }
+    }
 
-    return transcription.text || null;
+    return null;
   } catch (err: any) {
-    console.error('[Whisper Error]', err);
+    console.error('[Voice Error]', err);
     return null;
   }
 }
@@ -579,14 +670,15 @@ function preClassifyIntent(message: string): IntentResult | null {
   return null;
 }
 
-async function classifyIntent(message: string): Promise<IntentResult> {
+async function classifyIntent(message: string, phoneNumber: string): Promise<IntentResult> {
   const preClassified = preClassifyIntent(message);
   if (preClassified) {
-    console.log('[Intent] Pre-classified:', preClassified.intent);
+    console.log('[Intent] Regex match:', preClassified.intent);
     return preClassified;
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  if (!checkRateLimit(phoneNumber)) {
+    console.log('[Rate Limit] Hit for:', phoneNumber);
     return { intent: 'GREETING', extracted: {} };
   }
 
@@ -652,31 +744,64 @@ Return ONLY valid JSON:
   }
 }`;
 
-  try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
-      ],
-      temperature: 0.1,
-      max_tokens: 300,
-    });
+  const validIntents: IntentType[] = [
+    'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
+    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'GREETING',
+  ];
 
-    const content = completion.choices[0]?.message?.content?.trim() || '';
-    let jsonStr = content;
-    const codeMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeMatch) jsonStr = codeMatch[1].trim();
-
-    const parsed = JSON.parse(jsonStr) as IntentResult;
-    const validIntents: IntentType[] = [
-      'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
-      'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'GREETING',
-    ];
-    if (validIntents.includes(parsed.intent)) return parsed;
-  } catch (err) {
-    console.error('[Intent] Classification failed:', err);
+  function parseIntentResponse(content: string): IntentResult | null {
+    try {
+      const jsonStr = content.replace(/```(?:json)?\s*([\s\S]*?)```/, '$1').trim();
+      const parsed = JSON.parse(jsonStr) as IntentResult;
+      return validIntents.includes(parsed.intent) ? parsed : null;
+    } catch {
+      return null;
+    }
   }
+
+  // Try OpenAI first
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      console.log('[Intent] Trying OpenAI...');
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message },
+        ],
+        temperature: 0.1,
+        max_tokens: 300,
+      });
+      const content = completion.choices[0]?.message?.content?.trim() || '';
+      const parsed = parseIntentResponse(content);
+      if (parsed) {
+        console.log('[Intent] OpenAI success:', parsed.intent);
+        return parsed;
+      }
+    } catch (err: any) {
+      console.error('[Intent] OpenAI failed:', err?.message);
+    }
+  }
+
+  // Try Gemini as fallback
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      console.log('[Intent] Trying Gemini...');
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const prompt = `${systemPrompt}\n\nMessage to classify: "${message}"\n\nReturn ONLY the JSON object, no other text.`;
+      const result = await model.generateContent(prompt);
+      const content = result.response.text().trim();
+      const parsed = parseIntentResponse(content);
+      if (parsed) {
+        console.log('[Intent] Gemini success:', parsed.intent);
+        return parsed;
+      }
+    } catch (err: any) {
+      console.error('[Intent] Gemini failed:', err?.message);
+    }
+  }
+
+  console.log('[Intent] All AI failed, defaulting to GREETING');
   return { intent: 'GREETING', extracted: {} };
 }
 
@@ -814,25 +939,56 @@ async function handleBudgetQuery(from: string, projectId: string): Promise<void>
   await sendMessage(from, reply);
 }
 
-async function handleGreeting(from: string, currentProject?: any): Promise<void> {
-  const projectLine = currentProject
-    ? `\n📌 *Active project:* ${currentProject.name}\n(Say "switch project" to change)\n`
-    : '';
+async function handleGreeting(
+  from: string,
+  profile: any,
+  currentProject?: any,
+  allProjects?: any[]
+): Promise<void> {
+  const firstName =
+    profile?.full_name && profile.full_name !== 'WhatsApp User'
+      ? profile.full_name.split(' ')[0]
+      : null;
+  const hi = firstName ? `👋 Hey ${firstName}!` : `👋 Hey!`;
+
+  if (currentProject) {
+    await sendMessage(
+      from,
+      `${hi} Welcome back to *JengaTrack* 🏗️\n\n` +
+        `📌 *Active project:* ${currentProject.name}\n\n` +
+        `What would you like to log?\n\n` +
+        `💰 *Expense:* "Bought cement for 400,000"\n` +
+        `📦 *Materials:* "Received 50 bags cement"\n` +
+        `👷 *Workers:* "8 workers on site today"\n` +
+        `📊 *Budget:* "How much have we spent?"\n` +
+        `📸 Send a receipt photo or voice note\n\n` +
+        `Say *"switch project"* to change projects\n` +
+        `Say *"menu"* to see all commands`
+    );
+    return;
+  }
+
+  if (allProjects && allProjects.length > 1) {
+    const list = allProjects.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
+    await sendMessage(
+      from,
+      `${hi} Welcome back to *JengaTrack* 🏗️\n\n` +
+        `You have *${allProjects.length} projects*.\n` +
+        `Which one are you updating today?\n\n` +
+        `${list}\n\n` +
+        `Reply with the number (e.g. "1")`
+    );
+    return;
+  }
 
   await sendMessage(
     from,
-    `👋 *JengaTrack Bot*${projectLine}\n\n` +
-      `Here's what you can say:\n\n` +
-      `💰 "Bought 50 bags cement for 1,900,000"\n` +
-      `📦 "Used 5 bags cement for foundation"\n` +
-      `👷 "8 workers on site today"\n` +
-      `🏗️ "Foundation 80% complete"\n` +
-      `📊 "How much have we spent?"\n` +
-      `📦 "How much cement do we have?"\n` +
-      `🌧️ "Heavy rain, no work today"\n` +
-      `🔄 "Switch project" to change projects\n\n` +
-      `📸 Send a receipt photo to scan it\n` +
-      `🎙️ Send a voice note to log hands-free`
+    `${hi} Welcome to *JengaTrack* 🏗️\n\n` +
+      `I help you track your construction project via WhatsApp — expenses, materials, workers, progress — all in one place.\n\n` +
+      `Ready to set up your project?\n\n` +
+      `1. 🏗️ Create a new project\n` +
+      `2. ℹ️ Learn more\n\n` +
+      `Reply *"1"* to get started!`
   );
 }
 
@@ -1136,6 +1292,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const onboardingState = profile.onboarding_state as OnboardingState;
     const needsOnboarding = !profile.onboarding_completed_at;
 
+    // "Start over" — reset onboarding cleanly without creating duplicate profile
+    if (/start\s*over|startover/i.test(rawMessage.trim())) {
+      await supabase.from('profiles').update({
+        onboarding_state: null,
+        onboarding_data: {},
+        onboarding_completed_at: null,
+        expense_state: null,
+        expense_pending_data: {},
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId);
+      await sendWelcomeMessage(From, profile.full_name);
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
+
     // ── STEP 2: Onboarding flow ───────────────────────────────────────────────
     if (needsOnboarding) {
       switch (onboardingState) {
@@ -1287,11 +1458,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const transcribed = await processVoiceNote(MediaUrl0);
         if (transcribed) {
           await sendMessage(From, `📝 I heard: "${transcribed}"\n\nProcessing this now...`);
-          const { intent, extracted } = await classifyIntent(transcribed);
+          const { intent, extracted } = await classifyIntent(transcribed, phoneNumber);
           if (!project) {
             await sendMessage(From, 'You need a project first. Type "hey jenga" to create one.');
           } else {
-            await routeIntent(intent, extracted, transcribed, From, userId, project);
+            await routeIntent(intent, extracted, transcribed, From, userId, project, profile, projects || []);
           }
         } else {
           await sendMessage(From, `Couldn't transcribe that voice note. Try speaking clearly or type your update instead.`);
@@ -1423,10 +1594,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // ── STEP 9: GPT-4o intent classification + routing ────────────────────────
-    const { intent, extracted } = await classifyIntent(rawMessage);
+    // ── STEP 9: GPT-4o-mini intent classification + routing ───────────────────
+    const { intent, extracted } = await classifyIntent(rawMessage, phoneNumber);
     console.log('[Intent]', intent, JSON.stringify(extracted));
-    await routeIntent(intent, extracted, rawMessage, From, userId, project);
+    await routeIntent(intent, extracted, rawMessage, From, userId, project, profile, projects || []);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
@@ -1447,7 +1618,9 @@ async function routeIntent(
   rawMessage: string,
   from: string,
   userId: string,
-  project: any
+  project: any,
+  profile: any,
+  projects: any[]
 ): Promise<void> {
   switch (intent) {
     case 'BUDGET_QUERY':
@@ -1473,6 +1646,6 @@ async function routeIntent(
       break;
     case 'GREETING':
     default:
-      await handleGreeting(from, project);
+      await handleGreeting(from, profile, project, projects);
   }
 }

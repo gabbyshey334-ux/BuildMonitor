@@ -1,10 +1,14 @@
 # Dependencies
 node_modules/
-package-lock.json
+.pnp
+.pnp.js
 
-# Environment variables
+# Environment variables - NEVER commit these
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.production
 
 # Build outputs
@@ -18,6 +22,16 @@ api/daily-heartbeat.js
 # Don't ignore api folder (needed for Vercel)
 !api/
 
+# Logs
+logs/
+*.log
+npm-debug.log*
+server.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
 # IDE
 .vscode/
 .idea/
@@ -25,15 +39,8 @@ api/daily-heartbeat.js
 *.swo
 *~
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-server.log
+# Vercel
+.vercel
 
 # Temporary files
 .tmp/
