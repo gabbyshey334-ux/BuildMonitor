@@ -2,7 +2,7 @@
 
 import React from "react";
 import { Link } from "wouter";
-import { MapPin } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import type { Project } from "@/contexts/ProjectContext";
 import { useProject } from "@/contexts/ProjectContext";
 import { formatBudget } from "@/lib/budgetUtils";
@@ -12,36 +12,62 @@ interface ProjectCardProps {
   project: Project;
 }
 
-/** Format number with commas and UGX (e.g. 1,900,000 UGX) — for exact amounts */
-function formatUgxWithCommas(n: number): string {
-  const whole = Math.floor(n);
-  const withCommas = whole.toLocaleString("en-US");
-  return `${withCommas} UGX`;
+/** Format budget as short form with M/B (e.g. 350M, 1.2B) */
+function formatShortBudget(n: number): string {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(0)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return n.toString();
 }
 
-function lastActivityLabel(lastActivityAt?: string): string {
-  if (!lastActivityAt) return "No updates yet";
+/** Format relative time as "Updated Xh ago" or "Updated Xd ago" */
+function formatRelativeTime(lastActivityAt?: string): string {
+  if (!lastActivityAt) return "Updated just now";
   try {
     const d = new Date(lastActivityAt);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
+    const diffMins = Math.floor(diffMs / (60 * 1000));
+    const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
     const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-    if (diffDays === 0) return "Last update: Today";
-    if (diffDays === 1) return "Last update: 1 day ago";
-    if (diffDays < 30) return `Last update: ${diffDays} days ago`;
-    return `Last update: ${d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+
+    if (diffMins < 5) return "Updated just now";
+    if (diffMins < 60) return `Updated ${diffMins}m ago`;
+    if (diffHours < 24) return `Updated ${diffHours}h ago`;
+    if (diffDays === 1) return "Updated 1d ago";
+    return `Updated ${diffDays}d ago`;
   } catch {
-    return "No updates yet";
+    return "Updated just now";
   }
+}
+
+/** Calculate project health status based on budget vs progress */
+function calculateHealthStatus(
+  progress: number,
+  budgetSpentPercent: number
+): { status: "On Track" | "At Risk" | "Critical"; color: string; dotColor: string } {
+  // If spending way ahead of progress, it's at risk
+  const variance = budgetSpentPercent - progress;
+
+  if (variance > 25 || budgetSpentPercent > 90) {
+    return { status: "Critical", color: "text-red-400", dotColor: "bg-red-500" };
+  }
+  if (variance > 10 || budgetSpentPercent > 75) {
+    return { status: "At Risk", color: "text-amber-400", dotColor: "bg-amber-500" };
+  }
+  return { status: "On Track", color: "text-emerald-400", dotColor: "bg-emerald-500" };
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const { setCurrentProject } = useProject();
   const total = project.totalBudget ?? 0;
   const spent = project.spentAmount ?? 0;
-  const pct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
+  const budgetSpentPct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
+  const progress = project.progress ?? Math.round(budgetSpentPct * 0.85); // Estimate if not set
   const isActive = project.status !== "completed";
   const hasBudget = total > 0;
+
+  const health = calculateHealthStatus(progress, budgetSpentPct);
 
   const handleClick = () => {
     setCurrentProject(project);
@@ -58,49 +84,73 @@ export function ProjectCard({ project }: ProjectCardProps) {
     <Link href={`/dashboard?project=${project.id}`}>
       <a
         onClick={handleClick}
-        className="block rounded-xl border dark:border-zinc-800/50 border-slate-200 dark:bg-zinc-900/80 bg-white shadow-sm p-5 hover:border-zinc-700 hover:bg-zinc-800/80 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/80 hover:border-slate-300 hover:bg-slate-50 transition-all duration-200"
+        className="block rounded-xl border dark:border-zinc-700/50 border-slate-200 dark:bg-zinc-800/90 bg-white shadow-sm p-5 hover:border-zinc-600 dark:hover:bg-zinc-800 hover:border-slate-300 hover:bg-slate-50 transition-all duration-200 group"
       >
-        <h3 className="font-heading font-semibold dark:text-white text-slate-800 text-lg truncate">
-          {project.name}
-        </h3>
-        {project.location && (
-          <p className="flex items-center gap-1.5 mt-1 text-sm dark:text-zinc-400 text-slate-500">
-            <MapPin className="h-4 w-4 shrink-0" />
-            <span className="truncate">{project.location}</span>
-          </p>
-        )}
-        <div className="mt-4">
+        {/* Header: Project name and menu */}
+        <div className="flex items-start justify-between mb-2">
+          <h3 className="font-heading font-semibold dark:text-white text-slate-800 text-lg truncate pr-2">
+            {project.name}
+          </h3>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="p-1 rounded-full hover:dark:bg-zinc-700 hover:bg-slate-200 transition-colors opacity-0 group-hover:opacity-100"
+          >
+            <MoreHorizontal className="h-5 w-5 dark:text-zinc-400 text-slate-500" />
+          </button>
+        </div>
+
+        {/* Completion Percentage */}
+        <div className="mb-4">
+          <span className="font-heading text-2xl font-bold dark:text-white text-slate-800">
+            {progress}%
+          </span>
+          <span className="text-sm dark:text-zinc-400 text-slate-500 ml-1">Complete</span>
+        </div>
+
+        {/* Dual Progress Bars */}
+        <div className="space-y-1.5 mb-4">
+          {/* Progress bar (green) */}
+          <div className="h-1.5 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          {/* Expenditure bar (blue/cyan) */}
+          {hasBudget && (
+            <div className="h-1.5 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
+                style={{ width: `${budgetSpentPct}%` }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Budget display */}
+        <div className="mb-3">
           {hasBudget ? (
-            <>
-              <div className="h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] transition-all duration-300"
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-              <p className="mt-2 text-sm dark:text-zinc-400 text-slate-500">
-                <span className="dark:text-zinc-300 text-slate-700 font-medium">{formatUgxWithCommas(spent)}</span>
-                {" of "}
-                <span>{formatBudget(total)} UGX</span>
-              </p>
-            </>
+            <p className="text-sm dark:text-zinc-300 text-slate-700 font-medium">
+              UGX {formatShortBudget(spent)} / {formatShortBudget(total)}
+            </p>
           ) : (
             <p className="text-sm dark:text-zinc-500 text-slate-500">No budget set</p>
           )}
         </div>
-        <p className="mt-2 text-xs dark:text-zinc-500 text-slate-500">
-          {lastActivityLabel(project.lastActivityAt)}
-        </p>
-        <span
-          className={cn(
-            "inline-block mt-3 px-2.5 py-0.5 rounded-full text-xs font-medium",
-            isActive
-              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-              : "dark:bg-zinc-600/30 dark:text-zinc-400 dark:border-zinc-600/50 bg-slate-100 text-slate-600 border border-slate-200"
-          )}
-        >
-          {isActive ? "Active" : "Completed"}
-        </span>
+
+        {/* Footer: Status badge and time */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className={cn("h-2 w-2 rounded-full", health.dotColor)} />
+            <span className={cn("text-xs font-medium", health.color)}>{health.status}</span>
+          </div>
+          <span className="text-xs dark:text-zinc-500 text-slate-500">
+            {formatRelativeTime(project.lastActivityAt)}
+          </span>
+        </div>
       </a>
     </Link>
   );

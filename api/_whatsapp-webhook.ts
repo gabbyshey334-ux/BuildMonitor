@@ -329,10 +329,14 @@ async function handleStartDateInput(userId: string, to: string, body: string) {
 async function handleBudgetInput(userId: string, to: string, body: string) {
   let budget: number | undefined;
   if (!/skip/i.test(body)) {
-    // Handle "150M" or "150,000,000"
-    const mMatch = body.match(/(\d+(?:\.\d+)?)\s*[Mm]/);
+    // Handle "150M", "150 million", "150,000,000", "185 million"
+    const mMatch = body.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
+    const bMatch = body.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
+    const wordMillion = body.match(/(\d+(?:\.\d+)?)\s*million/i);
+    const wordBillion = body.match(/(\d+(?:\.\d+)?)\s*billion/i);
     const numMatch = body.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-    if (mMatch) budget = parseFloat(mMatch[1]) * 1_000_000;
+    if (mMatch || wordMillion) budget = parseFloat((mMatch || wordMillion)![1]) * 1_000_000;
+    else if (bMatch || wordBillion) budget = parseFloat((bMatch || wordBillion)![1]) * 1_000_000_000;
     else if (numMatch) budget = parseFloat(numMatch[1].replace(/,/g, ''));
   }
   await updateOnboardingState(userId, 'confirmation', { budget });
@@ -637,9 +641,10 @@ function preClassifyIntent(message: string): IntentResult | null {
     };
   }
 
-  // LABOR patterns
-  if (/(\d+)\s*(workers?|casuals?|labou?rers?|men|people|staff)/i.test(m)) {
-    const match = message.match(/(\d+)\s*(workers?|casuals?|labou?rers?|men|people|staff)/i);
+  // LABOR patterns (workers, men, guys, casuals, etc.)
+  if (/(\d+)\s*(workers?|casuals?|labou?rers?|men|guys?|people|staff|on\s+site)/i.test(m) || /(we\s+have\s+)?(about\s+)?(\d+)\s*(guys?|workers?|men)/i.test(m)) {
+    const match = message.match(/(\d+)\s*(workers?|casuals?|labou?rers?|men|guys?|people|staff|on\s+site)/i)
+      || message.match(/(?:we\s+have\s+)?(?:about\s+)?(\d+)\s*(?:guys?|workers?|men)/i);
     return {
       intent: 'LABOR_LOG',
       extracted: { worker_count: match ? parseInt(match[1], 10) : 0 },
@@ -1421,6 +1426,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('id', userId);
         await sendProjectSelectionMenu(From, userId, projects);
       }
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
+
+    // Help / menu — full list of commands (no AI needed)
+    if (/^(help|menu|commands)$/i.test(rawMessage.trim())) {
+      const helpText =
+        `📋 *JengaTrack – All commands*\n\n` +
+        `💰 *Expenses:* "Bought 50 bags cement for 1,900,000" or "Paid plumber 150k"\n` +
+        `📦 *Materials in:* "Received 50 bags cement from Hima"\n` +
+        `📦 *Materials used:* "Used 5 bags cement today"\n` +
+        `👷 *Workers:* "8 workers on site today"\n` +
+        `📊 *Progress:* "Foundation 80% complete" or "Finished ring beam"\n` +
+        `🌧️ *Weather delay:* "Heavy rain, no work today"\n` +
+        `📊 *Budget:* "How much have we spent?" or "What's left in budget?"\n` +
+        `📦 *Stock:* "How much cement do we have?"\n` +
+        `📸 *Receipt:* Send a photo → I'll extract vendor & amount\n` +
+        `🎙️ *Voice:* Send a voice note → I'll transcribe and process\n\n` +
+        `*Other:* "Switch project" to change project • "Start over" to reset onboarding`;
+      await sendMessage(From, helpText);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }

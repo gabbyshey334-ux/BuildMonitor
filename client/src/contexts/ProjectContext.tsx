@@ -8,6 +8,7 @@ export interface Project {
   startDate?: string;
   totalBudget?: number;
   spentAmount?: number;
+  progress?: number; // Completion percentage (0-100)
   lastActivityAt?: string;
   status?: "active" | "completed";
   whatsappNumber?: string;
