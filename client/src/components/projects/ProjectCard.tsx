@@ -111,21 +111,23 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
 
         {/* Dual Progress Bars */}
-        <div className="space-y-1.5 mb-4">
+        <div className="space-y-2 mb-4">
           {/* Progress bar (green) */}
-          <div className="h-1.5 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden">
+          <div className="relative h-6 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden flex items-center">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
+              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
+            <span className="relative z-10 pl-2 text-xs font-medium text-white drop-shadow-sm">Progress</span>
           </div>
           {/* Expenditure bar (blue/cyan) */}
           {hasBudget && (
-            <div className="h-1.5 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden">
+            <div className="relative h-6 rounded-full dark:bg-zinc-700 bg-slate-200 overflow-hidden flex items-center">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
+                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
                 style={{ width: `${budgetSpentPct}%` }}
               />
+              <span className="relative z-10 pl-2 text-xs font-medium text-white drop-shadow-sm">Expenditure</span>
             </div>
           )}
         </div>
