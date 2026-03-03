@@ -20,6 +20,7 @@ import NotFound from "@/pages/not-found";
 import Privacy from "@/pages/privacy";
 import Terms from "@/pages/terms";
 import ProjectsPage from "@/pages/ProjectsPage";
+import { AppLayout } from "@/components/layout/AppLayout";
 import FullDashboard from "@/components/dashboard-new/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
 import MaterialsPage from "@/pages/MaterialsPage";
@@ -38,7 +39,11 @@ function Redirect({ to }: { to: string }) {
 
 function DashboardRoute() {
   const projectId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") || undefined : undefined;
-  return <FullDashboard projectId={projectId} />;
+  return (
+    <AppLayout>
+      <FullDashboard projectId={projectId} />
+    </AppLayout>
+  );
 }
 
 function Router() {

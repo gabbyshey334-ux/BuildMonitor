@@ -111,6 +111,7 @@ type IntentType =
   | 'BUDGET_QUERY'
   | 'MATERIAL_QUERY'
   | 'WEATHER_DELAY'
+  | 'SMART_QUERY'
   | 'GREETING';
 
 interface IntentResult {
@@ -718,10 +719,19 @@ PROGRESS_UPDATE examples:
 - "Finished ring beam today"
 - "Roofing complete"
 
-BUDGET_QUERY examples:
+BUDGET_QUERY examples (simple totals only):
 - "How much spent?"
 - "What's left in budget?"
 - "Show me expenses"
+
+SMART_QUERY — use for free-form analytical questions about historical data:
+- "How much did I spend on cement last month?"
+- "What was my biggest expense in January?"
+- "Compare spending this month vs last month"
+- "Which vendor have I paid the most?"
+- "How many workers on site last week?"
+- "Break down my spending by category"
+Use BUDGET_QUERY only for simple "how much spent / what's left" questions. Use SMART_QUERY when the user asks about specific items, time ranges, comparisons, or vendors.
 
 WEATHER_DELAY examples:
 - "Heavy rain today"
@@ -751,7 +761,7 @@ Return ONLY valid JSON:
 
   const validIntents: IntentType[] = [
     'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
-    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'GREETING',
+    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'SMART_QUERY', 'GREETING',
   ];
 
   function parseIntentResponse(content: string): IntentResult | null {
@@ -1196,6 +1206,113 @@ async function handleMaterialQuery(from: string, projectId: string): Promise<voi
   await sendMessage(from, `📦 *Current Inventory:*\n\n${lines}\n\nView full details on your dashboard.`);
 }
 
+// ─── SMART_QUERY: free-form questions over historical data ─────────────────────
+
+async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
+  await sendMessage(from, '🔍 Looking up your data…');
+
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const fromDate = twoYearsAgo.toISOString().split('T')[0];
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('name, budget')
+    .eq('id', projectId)
+    .single();
+
+  const { data: expenses } = await supabase
+    .from('expenses')
+    .select('description, amount, expense_date, created_at')
+    .eq('project_id', projectId)
+    .gte('expense_date', fromDate)
+    .order('expense_date', { ascending: false })
+    .limit(500);
+
+  const { data: dailyLogs } = await supabase
+    .from('daily_logs')
+    .select('log_date, worker_count, notes')
+    .eq('project_id', projectId)
+    .gte('log_date', fromDate)
+    .order('log_date', { ascending: false })
+    .limit(500);
+
+  let vendors: { name: string; total_spent: number }[] = [];
+  try {
+    const { data: vendorsData } = await supabase
+      .from('vendors')
+      .select('name, total_spent')
+      .eq('project_id', projectId)
+      .order('total_spent', { ascending: false })
+      .limit(100);
+    vendors = (vendorsData || []).map((v: any) => ({
+      name: v.name,
+      total_spent: parseFloat(String(v.total_spent || 0)),
+    }));
+  } catch {
+    // vendors table may not exist in some deployments
+  }
+
+  const dataContext = {
+    project: project ? { name: project.name, budget: project.budget } : null,
+    expenses: (expenses || []).map((e: any) => ({
+      description: e.description,
+      amount: parseFloat(String(e.amount || 0)),
+      date: e.expense_date,
+    })),
+    dailyLogs: (dailyLogs || []).map((l: any) => ({
+      date: l.log_date,
+      worker_count: l.worker_count,
+      notes: l.notes,
+    })),
+    vendors,
+  };
+
+  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using ONLY the provided project data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). If the data does not contain enough information to answer, say so clearly. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
+
+  const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
+
+  let answer: string | null = null;
+
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage },
+        ],
+        temperature: 0.3,
+        max_tokens: 500,
+      });
+      answer = completion.choices[0]?.message?.content?.trim() || null;
+      if (answer) console.log('[SmartQuery] OpenAI success');
+    } catch (err: any) {
+      console.error('[SmartQuery] OpenAI failed:', err?.message);
+    }
+  }
+
+  if (!answer && gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent([systemPrompt, userMessage]);
+      answer = result.response.text()?.trim() || null;
+      if (answer) console.log('[SmartQuery] Gemini success');
+    } catch (err: any) {
+      console.error('[SmartQuery] Gemini failed:', err?.message);
+    }
+  }
+
+  if (answer) {
+    await sendMessage(from, answer);
+  } else {
+    await sendMessage(
+      from,
+      "I couldn't generate an answer right now. Try asking something like:\n• \"How much did I spend on cement last month?\"\n• \"What was my biggest expense in January?\"\n• \"Compare spending this month vs last month\""
+    );
+  }
+}
+
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
 // Export this so it can be called from a separate serverless cron endpoint
 
@@ -1441,6 +1558,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `📊 *Progress:* "Foundation 80% complete" or "Finished ring beam"\n` +
         `🌧️ *Weather delay:* "Heavy rain, no work today"\n` +
         `📊 *Budget:* "How much have we spent?" or "What's left in budget?"\n` +
+        `🔍 *Ask anything:* "How much did I spend on cement last month?" or "Compare spending this month vs last month"\n` +
         `📦 *Stock:* "How much cement do we have?"\n` +
         `📸 *Receipt:* Send a photo → I'll extract vendor & amount\n` +
         `🎙️ *Voice:* Send a voice note → I'll transcribe and process\n\n` +
@@ -1668,6 +1786,9 @@ async function routeIntent(
       break;
     case 'MATERIAL_QUERY':
       await handleMaterialQuery(from, project.id);
+      break;
+    case 'SMART_QUERY':
+      await handleSmartQuery(from, project.id, rawMessage);
       break;
     case 'GREETING':
     default:

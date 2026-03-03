@@ -1404,6 +1404,74 @@ app.post('/api/auth/logout', (req, res) => {
   });
 });
 
+// POST /api/auth/change-password - Change password (Supabase Auth)
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Both passwords required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be 8+ characters' });
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    // Get user email from profiles
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile?.email) {
+      return res.status(400).json({ error: 'Could not find user profile' });
+    }
+
+    // Verify current password via Supabase Auth sign-in
+    const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+    const { error: signInError } = await authClient.auth.signInWithPassword({
+      email: profile.email,
+      password: currentPassword,
+    });
+
+    if (signInError) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    // Update password in Supabase Auth
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+
+    if (updateError) {
+      console.error('[Change Password] Update error:', updateError);
+      return res.status(500).json({ error: 'Failed to change password' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('[Change Password]', err);
+    return res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 // POST /api/waitlist - Join waitlist (landing page)
 app.post('/api/waitlist', async (req, res) => {
   try {

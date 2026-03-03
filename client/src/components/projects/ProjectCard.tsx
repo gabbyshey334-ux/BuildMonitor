@@ -118,7 +118,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
               className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
-            <span className="relative z-10 pl-2 text-xs font-medium text-white drop-shadow-sm">Progress</span>
+            <span className="relative z-10 pl-2 text-xs font-medium text-slate-800 dark:text-white drop-shadow-sm">Progress</span>
           </div>
           {/* Expenditure bar (blue/cyan) */}
           {hasBudget && (
@@ -127,7 +127,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
                 className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-400 transition-all duration-300"
                 style={{ width: `${budgetSpentPct}%` }}
               />
-              <span className="relative z-10 pl-2 text-xs font-medium text-white drop-shadow-sm">Expenditure</span>
+              <span className="relative z-10 pl-2 text-xs font-medium text-slate-800 dark:text-white drop-shadow-sm">Expenditure</span>
             </div>
           )}
         </div>

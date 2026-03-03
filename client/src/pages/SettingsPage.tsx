@@ -8,6 +8,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { getToken } from "@/lib/authToken";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,6 +81,62 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [confirmCompletedOpen, setConfirmCompletedOpen] = useState(false);
+
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+
+  const handlePasswordChange = async () => {
+    setPasswordError("");
+    setPasswordSuccess(false);
+
+    if (!passwordForm.currentPassword) {
+      setPasswordError("Current password is required");
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError("New passwords do not match");
+      return;
+    }
+
+    setChangingPassword(true);
+    try {
+      const token = typeof window !== "undefined" ? getToken() : null;
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.message);
+
+      setPasswordSuccess(true);
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+    } catch (err) {
+      setPasswordError(err instanceof Error ? err.message : "Failed to change password");
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   useEffect(() => {
     if (!projectId) {
@@ -362,6 +419,76 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="dark:bg-zinc-800/50 bg-white dark:border-zinc-700 border-slate-200 border rounded-xl p-6">
+            <h3 className="dark:text-white text-slate-900 font-semibold text-lg mb-4">
+              🔒 Change Password
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) =>
+                    setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
+                  placeholder="Enter current password"
+                />
+              </div>
+
+              <div>
+                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) =>
+                    setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
+                  placeholder="Min 8 characters"
+                />
+              </div>
+
+              <div>
+                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) =>
+                    setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
+                  placeholder="Repeat new password"
+                />
+              </div>
+
+              {passwordError && (
+                <p className="text-red-500 text-sm">{passwordError}</p>
+              )}
+
+              {passwordSuccess && (
+                <p className="text-green-500 text-sm">✅ Password changed successfully!</p>
+              )}
+
+              <button
+                type="button"
+                onClick={handlePasswordChange}
+                disabled={changingPassword}
+                className="w-full py-2 px-4 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium text-sm disabled:opacity-50 transition-colors"
+              >
+                {changingPassword ? "Changing…" : "Change Password"}
+              </button>
+            </div>
+          </div>
 
           <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
             <CardHeader>
