@@ -387,11 +387,25 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 
       const budgetTotal = parseFloat(String(projectRow.budget || 0));
 
-      const { data: expenseRows, error: expError } = await supabase
+      let expenseRows;
+      let expError;
+      let expenseQuery = supabase
         .from('expenses')
-        .select('id, description, amount, expense_date, source, created_at, disputed')
+        .select('id, description, amount, expense_date, source, created_at, disputed, category')
         .eq('project_id', projectId)
         .order('created_at', { ascending: false });
+      const result = await expenseQuery;
+      expError = result.error;
+      expenseRows = result.data;
+      if (expError && (expError.message || '').toLowerCase().includes('category')) {
+        const fallback = await supabase
+          .from('expenses')
+          .select('id, description, amount, expense_date, source, created_at, disputed')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false });
+        expError = fallback.error;
+        expenseRows = (fallback.data || []).map((e) => ({ ...e, category: null }));
+      }
 
       if (expError) {
         console.error('[Expenses]', expError);
@@ -422,7 +436,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 
       const byCategoryMap = {};
       for (const e of expenses) {
-        const cat = 'General';
+        const cat = (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General';
         if (!byCategoryMap[cat]) byCategoryMap[cat] = { total: 0, count: 0 };
         byCategoryMap[cat].total += parseFloat(String(e.amount || 0));
         byCategoryMap[cat].count += 1;
@@ -433,6 +447,30 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         count: v.count,
         percentage: spent > 0 ? Math.round((v.total / spent) * 1000) / 10 : 0,
       })).sort((a, b) => b.total - a.total);
+
+      // This week / last week totals for spending spike alert
+      const now = new Date();
+      const getWeekBounds = (date) => {
+        const d = new Date(date);
+        d.setHours(0, 0, 0, 0);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+        const sunday = new Date(monday);
+        sunday.setDate(sunday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        return { start: monday.getTime(), end: sunday.getTime() };
+      };
+      const thisWeek = getWeekBounds(now);
+      const lastWeekStart = thisWeek.start - 7 * 24 * 60 * 60 * 1000;
+      const lastWeekEnd = thisWeek.end - 7 * 24 * 60 * 60 * 1000;
+      let thisWeekTotal = 0;
+      let lastWeekTotal = 0;
+      for (const e of expenses) {
+        const t = new Date(e.expense_date || e.created_at).getTime();
+        if (t >= thisWeek.start && t <= thisWeek.end) thisWeekTotal += parseFloat(String(e.amount || 0));
+        if (t >= lastWeekStart && t <= lastWeekEnd) lastWeekTotal += parseFloat(String(e.amount || 0));
+      }
 
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -452,7 +490,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         id: e.id,
         description: e.description || '',
         amount: parseFloat(String(e.amount || 0)),
-        category: 'General',
+        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
         expense_date: e.expense_date,
         vendor: null,
         source: e.source || null,
@@ -482,6 +520,8 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         byMonth,
         recent,
         vendors,
+        thisWeekTotal: Math.round(thisWeekTotal * 100) / 100,
+        lastWeekTotal: Math.round(lastWeekTotal * 100) / 100,
       });
     } catch (err) {
       console.error('[Expenses API Error]', err.message, err.stack);

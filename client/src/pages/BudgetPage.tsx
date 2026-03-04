@@ -37,13 +37,21 @@ const COLORS = {
   textSecondary: "#9ca3af",
 };
 
-// Category colors for pills
+// Category colors for pills and bars (real categories from DB)
 const CATEGORY_COLORS: Record<string, string> = {
   Materials: "#00d4aa",
   Labor: "#3b82f6",
   Equipment: "#a855f7",
+  General: "#6b7280",
   Other: "#6b7280",
 };
+const CATEGORY_COLOR_FALLBACKS = ["#f97316", "#ef4444", "#22c55e", "#a855f7"]; // orange, red, green, purple for unknown categories
+
+function getCategoryColor(category: string, index: number): string {
+  const key = category in CATEGORY_COLORS ? category : "Other";
+  if (key !== "Other") return CATEGORY_COLORS[key];
+  return CATEGORY_COLOR_FALLBACKS[index % CATEGORY_COLOR_FALLBACKS.length];
+}
 
 function formatUgx(n: number): string {
   const num = Number(n) || 0;
@@ -117,81 +125,96 @@ function StatCard({
   );
 }
 
-// Horizontal stacked bar chart for Budget Comparison
+// Horizontal stacked bar chart for Budget Comparison — 100% real data
 function BudgetComparisonBars({
-  progressPercent,
+  categorySegments,
   budgetPercent,
+  caption,
+  empty,
 }: {
-  progressPercent: number;
+  categorySegments: Array<{ name: string; color: string; width: number }>;
   budgetPercent: number;
+  caption: string;
+  empty: boolean;
 }) {
-  const segments = [
-    { name: "Hilltop Apts.", color: COLORS.teal, width: 25 },
-    { name: "LakeView", color: COLORS.blue, width: 20 },
-    { name: "GreenField", color: COLORS.green, width: 20 },
-    { name: "Serene Apts.", color: COLORS.orange, width: 20 },
-    { name: "Others", color: COLORS.red, width: 15 },
-  ];
+  // Budget Used bar color by percentage
+  const budgetBarColor =
+    budgetPercent <= 50
+      ? COLORS.teal
+      : budgetPercent <= 75
+        ? COLORS.amber
+        : budgetPercent <= 90
+          ? COLORS.orange
+          : COLORS.red;
+
+  if (empty) {
+    return (
+      <div className="py-8 text-center">
+        <p className="text-sm" style={{ color: COLORS.textSecondary }}>
+          No spending data yet. Log expenses via WhatsApp to see budget breakdown.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
-      {/* Project Progress Bar */}
+      {/* Spending by Category (stacked bar) */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm" style={{ color: COLORS.textPrimary }}>
-            Project Progress
+            Spending by Category
           </span>
           <span className="text-sm font-bold" style={{ color: COLORS.textPrimary }}>
-            {progressPercent}%
+            {categorySegments.reduce((s, seg) => s + seg.width, 0).toFixed(0)}%
           </span>
         </div>
         <div className="h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: "#2a2d3e" }}>
-          {segments.map((seg) => (
+          {categorySegments.map((seg) => (
             <div
               key={seg.name}
-              style={{ width: `${seg.width}%`, backgroundColor: seg.color }}
+              style={{ width: `${seg.width}%`, backgroundColor: seg.color, minWidth: seg.width > 0 ? "4px" : 0 }}
               className="h-full"
             />
           ))}
         </div>
       </div>
 
-      {/* Budget Used Bar */}
+      {/* Budget Used bar — single bar, width = % of budget spent */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm" style={{ color: COLORS.textPrimary }}>
             Budget Used
           </span>
           <span className="text-sm font-bold" style={{ color: COLORS.textPrimary }}>
-            {budgetPercent}%
+            {Math.round(budgetPercent)}%
           </span>
         </div>
         <div className="h-3 rounded-full overflow-hidden flex" style={{ backgroundColor: "#2a2d3e" }}>
-          {segments.map((seg) => (
-            <div
-              key={seg.name}
-              style={{ width: `${seg.width}%`, backgroundColor: seg.color }}
-              className="h-full"
-            />
-          ))}
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${Math.min(100, budgetPercent)}%`, backgroundColor: budgetBarColor }}
+          />
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 mt-4">
-        {segments.map((seg) => (
-          <div key={seg.name} className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: seg.color }} />
-            <span className="text-xs" style={{ color: COLORS.textSecondary }}>
-              {seg.name}
-            </span>
-          </div>
-        ))}
-      </div>
+      {/* Legend — real category names from DB */}
+      {categorySegments.length > 0 && (
+        <div className="flex flex-wrap gap-4 mt-4">
+          {categorySegments.map((seg) => (
+            <div key={seg.name} className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded" style={{ backgroundColor: seg.color }} />
+              <span className="text-xs" style={{ color: COLORS.textSecondary }}>
+                {seg.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
-      {/* Caption */}
+      {/* Dynamic caption */}
       <p className="text-xs italic mt-2" style={{ color: COLORS.textSecondary }}>
-        Budget ahead of progress by 15%
+        {caption}
       </p>
     </div>
   );
@@ -259,6 +282,7 @@ function AlertItem({
   subtitle: string;
   time: string;
   dotColor: string;
+  tag?: string;
 }) {
   return (
     <div className="flex items-start gap-3 py-3 border-b" style={{ borderColor: COLORS.cardBorder }}>
@@ -326,6 +350,28 @@ export default function BudgetPage() {
 
   const recent = useMemo(() => (Array.isArray(data?.recent) ? data.recent : []), [data?.recent]);
 
+  // Category segments for Budget Comparison bar (from real byCategory)
+  const categorySegments = useMemo(() => {
+    const byCat = Array.isArray(data?.byCategory) ? data.byCategory : [];
+    const spent = summary.spent;
+    if (spent <= 0 || byCat.length === 0) return [];
+    return byCat.map((c, i) => ({
+      name: c.category || "General",
+      color: getCategoryColor(c.category || "General", i),
+      width: Math.round((Number(c.total) / spent) * 1000) / 10,
+    })).filter((s) => s.width > 0);
+  }, [data?.byCategory, summary.spent]);
+
+  // Dynamic caption: budget vs progress (use project progress if available, else spending % as proxy)
+  const budgetCaption = useMemo(() => {
+    const percentageBudgetUsed = summary.percentage;
+    const percentageProgress = currentProject?.progress ?? percentageBudgetUsed;
+    const diff = percentageBudgetUsed - percentageProgress;
+    if (diff > 0) return `Budget spending is ahead of progress by ${Math.abs(diff).toFixed(0)}%`;
+    if (diff < 0) return `Progress is ahead of spending by ${Math.abs(diff).toFixed(0)}%`;
+    return "Budget and progress are aligned";
+  }, [summary.percentage, currentProject?.progress]);
+
   // Generate cost trend data — always return a valid array for charts
   const costTrendData = useMemo(() => {
     const byMonth = data?.byMonth;
@@ -343,7 +389,7 @@ export default function BudgetPage() {
     }));
   }, [data?.byMonth]);
 
-  // Alerts — must be called unconditionally (Rules of Hooks); uses safe summary/materialsData
+  // Alerts — must be called unconditionally (Rules of Hooks); 100% real data, no hardcoded fallbacks
   const alerts = useMemo(() => {
     const items: Array<{
       icon: React.ElementType;
@@ -352,81 +398,81 @@ export default function BudgetPage() {
       subtitle: string;
       time: string;
       dotColor: string;
+      tag: string;
     }> = [];
 
     const total = summary.total;
     const spent = summary.spent;
     const pct = summary.percentage;
 
-    // Over budget alert
+    // Over budget
     if (total > 0 && spent > total) {
       items.push({
         icon: AlertTriangle,
-        iconColor: COLORS.amber,
-        title: `Total spending is ${formatUgxFull(spent - total)} over budget`,
-        subtitle: "Budget Overrun",
+        iconColor: COLORS.red,
+        title: "Project is over budget",
+        subtitle: `Spent ${formatUgxFull(spent)} of ${formatUgxFull(total)} budget`,
         time: "",
-        dotColor: COLORS.amber,
+        dotColor: COLORS.red,
+        tag: "Budget Overrun",
       });
     }
 
-    // High percentage spent alert
-    if (pct > 90) {
+    // Budget warning (80%+ and < 100%)
+    if (total > 0 && pct >= 80 && pct < 100) {
       items.push({
-        icon: AlertTriangle,
+        icon: Zap,
         iconColor: COLORS.amber,
-        title: `You've spent ${pct}% of your budget`,
-        subtitle: "Approaching budget limit",
+        title: `${Math.round(pct)}% of budget used`,
+        subtitle: `UGX ${formatUgxFull(summary.remaining)} remaining`,
         time: "",
-        dotColor: COLORS.amber,
+        dotColor: COLORS.orange,
+        tag: "Budget Warning",
       });
     }
 
-    // Low materials alerts
+    // Weekly spending spike
+    const thisWeek = Number(data?.thisWeekTotal) ?? 0;
+    const lastWeek = Number(data?.lastWeekTotal) ?? 0;
+    if (lastWeek > 0 && thisWeek > lastWeek * 1.2) {
+      const pctIncrease = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+      items.push({
+        icon: Zap,
+        iconColor: COLORS.amber,
+        title: `Spending up ${pctIncrease}% this week`,
+        subtitle: `${formatUgxFull(thisWeek)} vs ${formatUgxFull(lastWeek)} last week`,
+        time: "",
+        dotColor: COLORS.orange,
+        tag: "Price Spike",
+      });
+    }
+
+    // Low materials (from materialsData.lowStock)
     const lowStock = Array.isArray(materialsData?.lowStock) ? materialsData.lowStock : [];
-    lowStock.slice(0, 2).forEach((item) => {
+    lowStock.forEach((item) => {
       const name = item?.material_name ?? "Material";
       const qty = Number(item?.quantity) ?? 0;
       const unit = (item?.unit ?? "units") as string;
       items.push({
         icon: AlertTriangle,
         iconColor: COLORS.red,
-        title: `${name} inventory is running low at ${qty} ${unit} remaining`,
-        subtitle: "Detected Yesterday",
+        title: `${name} running low`,
+        subtitle: `Only ${qty} ${unit} remaining`,
         time: "",
         dotColor: COLORS.red,
+        tag: "Low Stock",
       });
     });
 
-    if (items.length > 0) return items;
-
-    return [
-      {
-        icon: AlertTriangle,
-        iconColor: COLORS.amber,
-        title: "Tiles are UGX 400,000 over their allocated budget.",
-        subtitle: "Budget Overrun",
-        time: "",
-        dotColor: COLORS.amber,
-      },
-      {
-        icon: Zap,
-        iconColor: COLORS.amber,
-        title: "Fuel costs increased by 15% This week.",
-        subtitle: "Price Spike: 2h ago",
-        time: "",
-        dotColor: COLORS.amber,
-      },
-      {
-        icon: AlertTriangle,
-        iconColor: COLORS.red,
-        title: "Steel inventory is running low at 3 tons remaining",
-        subtitle: "Detected Yesterday",
-        time: "",
-        dotColor: COLORS.red,
-      },
-    ];
-  }, [summary.total, summary.spent, summary.percentage, materialsData?.lowStock]);
+    return items;
+  }, [
+    summary.total,
+    summary.spent,
+    summary.percentage,
+    summary.remaining,
+    materialsData?.lowStock,
+    data,
+  ]);
 
   if (!projectId) {
     return (
@@ -553,7 +599,12 @@ export default function BudgetPage() {
                   </div>
                 </div>
 
-                <BudgetComparisonBars progressPercent={75} budgetPercent={summary.percentage} />
+                <BudgetComparisonBars
+                  categorySegments={categorySegments}
+                  budgetPercent={summary.percentage}
+                  caption={budgetCaption}
+                  empty={categorySegments.length === 0 && summary.spent === 0}
+                />
               </div>
             </div>
 
@@ -582,7 +633,7 @@ export default function BudgetPage() {
               <p className="text-xs mt-4" style={{ color: COLORS.textSecondary }}>
                 {summary.weeklyBurnRate && summary.weeklyBurnRate > 0
                   ? `UGX ${(summary.weeklyBurnRate / 1_000_000).toFixed(0)}M spent last week`
-                  : "UGX 29M spent last week"}
+                  : "No spending last week"}
               </p>
             </div>
           </div>
@@ -606,7 +657,7 @@ export default function BudgetPage() {
 
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm" style={{ color: COLORS.textSecondary }}>
-                Over Budget Items: {alerts.filter((a) => a.subtitle.includes("Budget")).length || 3}
+                Over Budget Items: {alerts.filter((a) => a.tag === "Budget Overrun").length}
               </span>
               <button style={{ color: COLORS.textSecondary }}>
                 <MoreHorizontal className="w-4 h-4" />
@@ -614,9 +665,14 @@ export default function BudgetPage() {
             </div>
 
             <div className="divide-y" style={{ borderColor: COLORS.cardBorder }}>
-              {alerts.map((alert, i) => (
-                <AlertItem key={i} {...alert} />
-              ))}
+              {alerts.length === 0 ? (
+                <div className="flex items-center gap-2 py-4" style={{ color: COLORS.green }}>
+                  <span>✅</span>
+                  <span>All budgets on track</span>
+                </div>
+              ) : (
+                alerts.map((alert, i) => <AlertItem key={i} {...alert} />)
+              )}
             </div>
           </div>
         </div>

@@ -130,6 +130,8 @@ export interface ProjectExpensesResponse {
     percentage: number;
   }>;
   byMonth: Array<{ month: string; amount: number }>;
+  thisWeekTotal?: number;
+  lastWeekTotal?: number;
   recent: Array<{
     id: string;
     description: string;
