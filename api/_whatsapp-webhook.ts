@@ -597,6 +597,11 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
 function preClassifyIntent(message: string): IntentResult | null {
   const m = message.toLowerCase().trim();
 
+  // SWITCH_PROJECT — must be before greeting check so it's always caught
+  if (/switch|change project|other project|different project|wanna switch|want to switch/i.test(m)) {
+    return { intent: 'SWITCH_PROJECT', extracted: {} };
+  }
+
   // EXPENSE patterns
   if (/bought|paid|spent|purchased|cost|price|buying|pay|expense/i.test(m) && /\d/.test(m)) {
     const amountMatch = message.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/g);
@@ -954,11 +959,14 @@ async function handleBudgetQuery(from: string, projectId: string): Promise<void>
   await sendMessage(from, reply);
 }
 
+const PURE_GREETING_RE = /^(hi|hey|hello|hola|good\s*(morning|afternoon|evening|day)|howdy|sup|yo|greetings|jambo|habari|sasa?|niaje|oya|eyo|ola|whaddup|what'?s\s+up)[\s!?.]*$/i;
+
 async function handleGreeting(
   from: string,
   profile: any,
   currentProject?: any,
-  allProjects?: any[]
+  allProjects?: any[],
+  rawMessage?: string
 ): Promise<void> {
   const firstName =
     profile?.full_name && profile.full_name !== 'WhatsApp User'
@@ -966,6 +974,60 @@ async function handleGreeting(
       : null;
   const hi = firstName ? `👋 Hey ${firstName}!` : `👋 Hey!`;
 
+  // If message is longer/more complex than a simple greeting, use AI to reply conversationally
+  const msg = (rawMessage || '').trim();
+  const isPureGreeting = !msg || PURE_GREETING_RE.test(msg);
+
+  if (!isPureGreeting && msg && currentProject) {
+    // Use AI for any non-trivial free-form message
+    const projectContext = `Project: ${currentProject.name}. Budget: UGX ${Number(currentProject.budget || 0).toLocaleString()}.`;
+    const systemPrompt = `You are JengaTrack, a friendly WhatsApp assistant for construction site management in Uganda. 
+You help track expenses, materials, workers, and project progress.
+Current project context: ${projectContext}
+
+Respond helpfully and concisely to the user's message (2-3 short sentences max). 
+If they seem to want to log something (expense, material, labor), guide them on the correct format.
+If they're asking a general question, answer it clearly.
+Always stay on-topic with construction project management.
+Write in plain text (no markdown), be warm and practical.`;
+
+    try {
+      if (process.env.OPENAI_API_KEY) {
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: msg },
+          ],
+          temperature: 0.7,
+          max_tokens: 200,
+        });
+        const reply = completion.choices[0]?.message?.content?.trim();
+        if (reply) {
+          await sendMessage(from, reply);
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.error('[Chat] OpenAI failed:', err?.message);
+    }
+
+    try {
+      if (gemini && process.env.GEMINI_API_KEY) {
+        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const result = await model.generateContent(`${systemPrompt}\n\nUser: ${msg}`);
+        const reply = result.response.text().trim();
+        if (reply) {
+          await sendMessage(from, reply);
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.error('[Chat] Gemini failed:', err?.message);
+    }
+  }
+
+  // Pure greeting or AI unavailable → show scripted menu
   if (currentProject) {
     await sendMessage(
       from,
@@ -1792,6 +1854,6 @@ async function routeIntent(
       break;
     case 'GREETING':
     default:
-      await handleGreeting(from, profile, project, projects);
+      await handleGreeting(from, profile, project, projects, rawMessage);
   }
 }
