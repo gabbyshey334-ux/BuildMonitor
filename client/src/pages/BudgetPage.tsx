@@ -343,74 +343,7 @@ export default function BudgetPage() {
     }));
   }, [data?.byMonth]);
 
-  if (!projectId) {
-    return (
-      <AppLayout>
-        <div
-          className="flex flex-col items-center justify-center py-16 px-4 text-center"
-          style={{ backgroundColor: COLORS.pageBg, minHeight: "100vh" }}
-        >
-          <h1 className="text-2xl font-bold mb-2" style={{ color: COLORS.textPrimary }}>
-            {t("budget.title")}
-          </h1>
-          <p className="max-w-md mx-auto mb-6" style={{ color: COLORS.textSecondary }}>
-            {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
-          </p>
-          <Button asChild variant="outline">
-            <Link href="/projects">{hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}</Link>
-          </Button>
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (showLoading) {
-    return (
-      <AppLayout>
-        <div className="min-h-screen p-6" style={{ backgroundColor: COLORS.pageBg }}>
-          <h1 className="text-2xl font-bold mb-6" style={{ color: COLORS.textPrimary }}>
-            Budgets & Costs
-          </h1>
-          <BudgetSkeleton />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (isError) {
-    return (
-      <AppLayout>
-        <div
-          className="py-16 px-4 text-center min-h-screen"
-          style={{ backgroundColor: COLORS.pageBg }}
-        >
-          <h1 className="text-2xl font-bold mb-2" style={{ color: COLORS.textPrimary }}>
-            {t("budget.title")}
-          </h1>
-          <p className="mb-4" style={{ color: COLORS.textSecondary }}>
-            {error instanceof Error ? error.message : t("common.error")}
-          </p>
-          <Button onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            {t("common.retry")}
-          </Button>
-        </div>
-      </AppLayout>
-    );
-  }
-
-  // Safety: if we still have no data, show loading (e.g. after project switch before refetch)
-  if (!data) {
-    return (
-      <AppLayout>
-        <div className="min-h-screen p-6 flex items-center justify-center" style={{ backgroundColor: COLORS.pageBg }}>
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  // Calculate alerts from real data (summary and recent are already safe above)
+  // Alerts — must be called unconditionally (Rules of Hooks); uses safe summary/materialsData
   const alerts = useMemo(() => {
     const items: Array<{
       icon: React.ElementType;
@@ -494,6 +427,73 @@ export default function BudgetPage() {
       },
     ];
   }, [summary.total, summary.spent, summary.percentage, materialsData?.lowStock]);
+
+  if (!projectId) {
+    return (
+      <AppLayout>
+        <div
+          className="flex flex-col items-center justify-center py-16 px-4 text-center"
+          style={{ backgroundColor: COLORS.pageBg, minHeight: "100vh" }}
+        >
+          <h1 className="text-2xl font-bold mb-2" style={{ color: COLORS.textPrimary }}>
+            {t("budget.title")}
+          </h1>
+          <p className="max-w-md mx-auto mb-6" style={{ color: COLORS.textSecondary }}>
+            {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
+          </p>
+          <Button asChild variant="outline">
+            <Link href="/projects">{hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}</Link>
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (showLoading) {
+    return (
+      <AppLayout>
+        <div className="min-h-screen p-6" style={{ backgroundColor: COLORS.pageBg }}>
+          <h1 className="text-2xl font-bold mb-6" style={{ color: COLORS.textPrimary }}>
+            Budgets & Costs
+          </h1>
+          <BudgetSkeleton />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AppLayout>
+        <div
+          className="py-16 px-4 text-center min-h-screen"
+          style={{ backgroundColor: COLORS.pageBg }}
+        >
+          <h1 className="text-2xl font-bold mb-2" style={{ color: COLORS.textPrimary }}>
+            {t("budget.title")}
+          </h1>
+          <p className="mb-4" style={{ color: COLORS.textSecondary }}>
+            {error instanceof Error ? error.message : t("common.error")}
+          </p>
+          <Button onClick={() => refetch()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {t("common.retry")}
+          </Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // Safety: if we still have no data, show loading (e.g. after project switch before refetch)
+  if (!data) {
+    return (
+      <AppLayout>
+        <div className="min-h-screen p-6 flex items-center justify-center" style={{ backgroundColor: COLORS.pageBg }}>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
