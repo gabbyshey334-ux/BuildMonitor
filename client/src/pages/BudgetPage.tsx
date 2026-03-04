@@ -46,13 +46,16 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 function formatUgx(n: number): string {
-  if (n >= 1_000_000_000) return `UGX ${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `UGX ${(n / 1_000_000).toFixed(0)}M`;
-  if (n >= 1_000) return `UGX ${(n / 1_000).toFixed(0)}K`;
-  return `UGX ${n.toLocaleString()}`;
+  const num = Number(n) || 0;
+  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(1)}B`;
+  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(0)}M`;
+  if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
+  return `UGX ${num.toLocaleString()}`;
 }
 
-function formatUgxFull(n: number): string {
+function formatUgxFull(amount: unknown): string {
+  const n = Number(amount) ?? 0;
+  if (!Number.isFinite(n)) return "UGX 0";
   return `UGX ${Math.round(n).toLocaleString()}`;
 }
 
@@ -194,12 +197,18 @@ function BudgetComparisonBars({
   );
 }
 
-// Cost Trend Chart
+// Cost Trend Chart — always receives a valid array
 function CostTrendChart({ data }: { data: Array<{ week: string; amount: number }> }) {
+  const safeData = Array.isArray(data) && data.length > 0 ? data : [
+    { week: "Week 1", amount: 0 },
+    { week: "Week 2", amount: 0 },
+    { week: "Week 3", amount: 0 },
+    { week: "Week 4", amount: 0 },
+  ];
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <LineChart data={safeData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <YAxis
             axisLine={false}
             tickLine={false}
@@ -284,19 +293,53 @@ export default function BudgetPage() {
   const { data, isLoading, isError, error, refetch } = useProjectExpenses(projectId);
   const { data: materialsData } = useProjectMaterials(projectId);
 
-  // Generate cost trend data from expenses
+  // When projectId changes, treat as loading until we have data for this project (avoid stale data crash)
+  const isProjectSwitch = projectId != null && data === undefined && !isError;
+  const showLoading = isLoading || isProjectSwitch;
+
+  // Safe summary and recent — never undefined
+  const summary = useMemo(() => {
+    if (!data?.summary) {
+      return {
+        total: 0,
+        spent: 0,
+        remaining: 0,
+        percentage: 0,
+        weeklyBurnRate: 0,
+        weeksRemaining: null as number | null,
+      };
+    }
+    const s = data.summary;
+    const total = Number(s.total) ?? 0;
+    const spent = Number(s.spent) ?? 0;
+    const remaining = total > 0 ? Math.max(0, total - spent) : 0;
+    const percentage = total > 0 ? Math.min(100, Math.round((spent / total) * 100)) : 0;
+    return {
+      total,
+      spent,
+      remaining,
+      percentage,
+      weeklyBurnRate: Number(s.weeklyBurnRate) ?? 0,
+      weeksRemaining: s.weeksRemaining ?? null,
+    };
+  }, [data?.summary]);
+
+  const recent = useMemo(() => (Array.isArray(data?.recent) ? data.recent : []), [data?.recent]);
+
+  // Generate cost trend data — always return a valid array for charts
   const costTrendData = useMemo(() => {
-    if (!data?.byMonth || data.byMonth.length === 0) {
+    const byMonth = data?.byMonth;
+    if (!Array.isArray(byMonth) || byMonth.length === 0) {
       return [
-        { week: "Week 1", amount: 60000000 },
-        { week: "Week 2", amount: 120000000 },
-        { week: "Week 3", amount: 112000000 },
-        { week: "Week 4", amount: 240000000 },
+        { week: "Week 1", amount: 0 },
+        { week: "Week 2", amount: 0 },
+        { week: "Week 3", amount: 0 },
+        { week: "Week 4", amount: 0 },
       ];
     }
-    return data.byMonth.slice(0, 4).map((m, i) => ({
+    return byMonth.slice(0, 4).map((m, i) => ({
       week: `Week ${i + 1}`,
-      amount: m.amount,
+      amount: Number(m?.amount) ?? 0,
     }));
   }, [data?.byMonth]);
 
@@ -321,7 +364,7 @@ export default function BudgetPage() {
     );
   }
 
-  if (isLoading) {
+  if (showLoading) {
     return (
       <AppLayout>
         <div className="min-h-screen p-6" style={{ backgroundColor: COLORS.pageBg }}>
@@ -356,10 +399,18 @@ export default function BudgetPage() {
     );
   }
 
-  const payload = data!;
-  const { summary, recent } = payload;
+  // Safety: if we still have no data, show loading (e.g. after project switch before refetch)
+  if (!data) {
+    return (
+      <AppLayout>
+        <div className="min-h-screen p-6 flex items-center justify-center" style={{ backgroundColor: COLORS.pageBg }}>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500" />
+        </div>
+      </AppLayout>
+    );
+  }
 
-  // Calculate alerts from real data
+  // Calculate alerts from real data (summary and recent are already safe above)
   const alerts = useMemo(() => {
     const items: Array<{
       icon: React.ElementType;
@@ -370,12 +421,16 @@ export default function BudgetPage() {
       dotColor: string;
     }> = [];
 
+    const total = summary.total;
+    const spent = summary.spent;
+    const pct = summary.percentage;
+
     // Over budget alert
-    if (summary.spent > summary.total) {
+    if (total > 0 && spent > total) {
       items.push({
         icon: AlertTriangle,
         iconColor: COLORS.amber,
-        title: `Total spending is ${formatUgxFull(summary.spent - summary.total)} over budget`,
+        title: `Total spending is ${formatUgxFull(spent - total)} over budget`,
         subtitle: "Budget Overrun",
         time: "",
         dotColor: COLORS.amber,
@@ -383,11 +438,11 @@ export default function BudgetPage() {
     }
 
     // High percentage spent alert
-    if (summary.percentage > 90) {
+    if (pct > 90) {
       items.push({
         icon: AlertTriangle,
         iconColor: COLORS.amber,
-        title: `You've spent ${summary.percentage}% of your budget`,
+        title: `You've spent ${pct}% of your budget`,
         subtitle: "Approaching budget limit",
         time: "",
         dotColor: COLORS.amber,
@@ -395,47 +450,50 @@ export default function BudgetPage() {
     }
 
     // Low materials alerts
-    const lowStock = materialsData?.lowStock || [];
+    const lowStock = Array.isArray(materialsData?.lowStock) ? materialsData.lowStock : [];
     lowStock.slice(0, 2).forEach((item) => {
+      const name = item?.material_name ?? "Material";
+      const qty = Number(item?.quantity) ?? 0;
+      const unit = (item?.unit ?? "units") as string;
       items.push({
         icon: AlertTriangle,
         iconColor: COLORS.red,
-        title: `${item.material_name} inventory is running low at ${item.quantity} ${item.unit} remaining`,
+        title: `${name} inventory is running low at ${qty} ${unit} remaining`,
         subtitle: "Detected Yesterday",
         time: "",
         dotColor: COLORS.red,
       });
     });
 
-    return items.length > 0
-      ? items
-      : [
-          {
-            icon: AlertTriangle,
-            iconColor: COLORS.amber,
-            title: "Tiles are UGX 400,000 over their allocated budget.",
-            subtitle: "Budget Overrun",
-            time: "",
-            dotColor: COLORS.amber,
-          },
-          {
-            icon: Zap,
-            iconColor: COLORS.amber,
-            title: "Fuel costs increased by 15% This week.",
-            subtitle: "Price Spike: 2h ago",
-            time: "",
-            dotColor: COLORS.amber,
-          },
-          {
-            icon: AlertTriangle,
-            iconColor: COLORS.red,
-            title: "Steel inventory is running low at 3 tons remaining",
-            subtitle: "Detected Yesterday",
-            time: "",
-            dotColor: COLORS.red,
-          },
-        ];
-  }, [summary, materialsData?.lowStock]);
+    if (items.length > 0) return items;
+
+    return [
+      {
+        icon: AlertTriangle,
+        iconColor: COLORS.amber,
+        title: "Tiles are UGX 400,000 over their allocated budget.",
+        subtitle: "Budget Overrun",
+        time: "",
+        dotColor: COLORS.amber,
+      },
+      {
+        icon: Zap,
+        iconColor: COLORS.amber,
+        title: "Fuel costs increased by 15% This week.",
+        subtitle: "Price Spike: 2h ago",
+        time: "",
+        dotColor: COLORS.amber,
+      },
+      {
+        icon: AlertTriangle,
+        iconColor: COLORS.red,
+        title: "Steel inventory is running low at 3 tons remaining",
+        subtitle: "Detected Yesterday",
+        time: "",
+        dotColor: COLORS.red,
+      },
+    ];
+  }, [summary.total, summary.spent, summary.percentage, materialsData?.lowStock]);
 
   return (
     <AppLayout>
@@ -595,12 +653,15 @@ export default function BudgetPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y" style={{ borderColor: COLORS.cardBorder }}>
-                  {recent.slice(0, 10).map((r) => {
-                    const categoryColor = CATEGORY_COLORS[r.category] || COLORS.textSecondary;
+                  {recent.slice(0, 10).map((r, index) => {
+                    const id = r?.id ?? `row-${index}`;
+                    const categoryColor = CATEGORY_COLORS[String(r?.category ?? "Other")] || COLORS.textSecondary;
+                    const amount = Number(r?.amount) ?? 0;
+                    const disputed = Boolean(r?.disputed);
                     return (
-                      <tr key={r.id}>
+                      <tr key={id}>
                         <td className="py-3 pr-4" style={{ color: COLORS.textSecondary }}>
-                          {r.expense_date
+                          {r?.expense_date
                             ? new Date(r.expense_date).toLocaleDateString("en-US", {
                                 month: "short",
                                 day: "2-digit",
@@ -609,28 +670,28 @@ export default function BudgetPage() {
                             : "—"}
                         </td>
                         <td className="py-3 pr-4" style={{ color: COLORS.textPrimary }}>
-                          {r.description}
+                          {String(r?.description ?? "—")}
                         </td>
                         <td className="py-3 pr-4">
                           <span
                             className="px-2 py-1 rounded-full text-xs"
                             style={{ backgroundColor: `${categoryColor}30`, color: categoryColor }}
                           >
-                            {r.category}
+                            {String(r?.category ?? "Other")}
                           </span>
                         </td>
                         <td className="py-3 pr-4 text-right font-medium" style={{ color: COLORS.textPrimary }}>
-                          {formatUgxFull(r.amount)}
+                          {formatUgxFull(amount)}
                         </td>
                         <td className="py-3 pr-4">
                           <span
                             className="px-2 py-1 rounded-full text-xs"
                             style={{
-                              backgroundColor: r.disputed ? `${COLORS.red}30` : `${COLORS.green}30`,
-                              color: r.disputed ? COLORS.red : COLORS.green,
+                              backgroundColor: disputed ? `${COLORS.red}30` : `${COLORS.green}30`,
+                              color: disputed ? COLORS.red : COLORS.green,
                             }}
                           >
-                            {r.disputed ? "Disputed" : "Confirmed"}
+                            {disputed ? "Disputed" : "Confirmed"}
                           </span>
                         </td>
                       </tr>
