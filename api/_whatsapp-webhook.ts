@@ -112,6 +112,7 @@ type IntentType =
   | 'MATERIAL_QUERY'
   | 'WEATHER_DELAY'
   | 'SMART_QUERY'
+  | 'SWITCH_PROJECT'
   | 'GREETING';
 
 interface IntentResult {
@@ -500,7 +501,7 @@ If amounts are in another currency, convert to UGX (1 USD â‰ˆ 3700 UGX, 1 KES â‰
     // Gemini vision fallback
     if (gemini && process.env.GEMINI_API_KEY) {
       try {
-        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const imagePart = {
           inlineData: {
             data: base64Image,
@@ -564,7 +565,7 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
     // Gemini audio fallback
     if (gemini && process.env.GEMINI_API_KEY) {
       try {
-        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const audioPart = {
           inlineData: {
             data: buffer.toString('base64'),
@@ -807,7 +808,7 @@ Return ONLY valid JSON:
   if (gemini && process.env.GEMINI_API_KEY) {
     try {
       console.log('[Intent] Trying Gemini...');
-      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const prompt = `${systemPrompt}\n\nMessage to classify: "${message}"\n\nReturn ONLY the JSON object, no other text.`;
       const result = await model.generateContent(prompt);
       const content = result.response.text().trim();
@@ -1014,7 +1015,7 @@ Write in plain text (no markdown), be warm and practical.`;
 
     try {
       if (gemini && process.env.GEMINI_API_KEY) {
-        const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const result = await model.generateContent(`${systemPrompt}\n\nUser: ${msg}`);
         const reply = result.response.text().trim();
         if (reply) {
@@ -1356,7 +1357,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
 
   if (!answer && gemini && process.env.GEMINI_API_KEY) {
     try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const result = await model.generateContent([systemPrompt, userMessage]);
       answer = result.response.text()?.trim() || null;
       if (answer) console.log('[SmartQuery] Gemini success');
