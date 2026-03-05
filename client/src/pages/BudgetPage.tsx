@@ -69,7 +69,9 @@ function formatUgxFull(amount: unknown): string {
 
 function pct(numerator: number, denominator: number): number {
   if (!denominator || denominator <= 0) return 0;
-  return Math.min(100, Math.round((numerator / denominator) * 100));
+  const raw = (numerator / denominator) * 100;
+  if (raw < 1 && raw > 0) return parseFloat(raw.toFixed(2));
+  return Math.min(100, parseFloat(raw.toFixed(1)));
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -100,19 +102,21 @@ function StatCard({
   sub,
   accent,
   showViewAll,
+  valueClassName,
 }: {
   label: string;
   value: string;
   sub?: string;
   accent?: string;
   showViewAll?: boolean;
+  valueClassName?: string;
 }) {
   return (
     <div className="rounded-xl p-4 bg-[#1a1a1a] border border-zinc-800 flex flex-col justify-between min-h-[88px]">
       <p className="text-sm text-zinc-400">{label}</p>
       <div className="flex items-end justify-between mt-2 gap-2">
         <div>
-          <p className="text-lg font-bold text-white leading-tight">{value}</p>
+          <p className={`text-lg font-bold leading-tight ${valueClassName ?? "text-white"}`}>{value}</p>
           {sub && <p className="text-xs text-zinc-500 mt-0.5">{sub}</p>}
         </div>
         {showViewAll && (
@@ -343,8 +347,8 @@ export default function BudgetPage() {
   );
 
   const budget = useMemo(() => {
-    const fromProject = currentProject?.totalBudget ?? (currentProject as any)?.budget;
-    if (fromProject != null && Number(fromProject) > 0) return parseFloat(String(fromProject));
+    const fromProject = parseFloat(String(currentProject?.totalBudget ?? (currentProject as any)?.budget ?? 0)) || 0;
+    if (fromProject > 0) return fromProject;
     const fromApi = (data as any)?.summary?.total;
     return fromApi != null ? parseFloat(String(fromApi)) : 0;
   }, [currentProject, data]);
@@ -355,9 +359,9 @@ export default function BudgetPage() {
     return expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
   }, [data, expenses]);
 
-  const balance = Math.max(0, budget - totalSpent);
+  const balance = budget - totalSpent;
   const percentSpent = pct(totalSpent, budget);
-  const overBudget = totalSpent > budget && budget > 0;
+  const overBudget = budget > 0 && totalSpent > budget;
 
   // Last 30 days spend
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -372,7 +376,7 @@ export default function BudgetPage() {
   // Weekly burn for "weeks remaining" estimate
   const weeklyBurn = recentSpend / 4.3;
   const weeksRemaining =
-    weeklyBurn > 0 ? Math.max(0, Math.round(balance / weeklyBurn)) : null;
+    weeklyBurn > 0 ? Math.min(999, Math.max(0, Math.round(balance / weeklyBurn))) : null;
 
   // ── Category breakdown (group by description keywords) ────────────────────
   const CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -619,9 +623,10 @@ export default function BudgetPage() {
           />
           <StatCard
             label="Balance"
-            value={formatUgx(balance)}
-            sub={overBudget ? "⚠️ Over budget!" : undefined}
-            accent={`${percentSpent}%`}
+            value={balance < 0 ? `-${formatUgx(Math.abs(balance))}` : formatUgx(balance)}
+            sub={balance < 0 ? `⚠️ Over budget by ${formatUgx(Math.abs(balance))}` : undefined}
+            accent={balance >= 0 ? `${Math.min(100, percentSpent)}%` : undefined}
+            valueClassName={balance < 0 ? "text-red-400" : undefined}
           />
           <StatCard
             label="This Month"
@@ -632,7 +637,7 @@ export default function BudgetPage() {
             label="Budget Used"
             value={`${percentSpent}%`}
             sub={
-              weeksRemaining !== null
+              weeksRemaining !== null && weeksRemaining < 200
                 ? `~${weeksRemaining} wk${weeksRemaining === 1 ? "" : "s"} remaining`
                 : undefined
             }
@@ -652,8 +657,8 @@ export default function BudgetPage() {
                 <h3 className="text-lg font-semibold text-white">Spending by Category</h3>
                 <span className="text-xs text-zinc-500">
                   {expenses.length} expense{expenses.length !== 1 ? "s" : ""} total
-                </span>
-              </div>
+                      </span>
+                    </div>
 
               <CategoryBreakdown categories={categoryTotals} totalSpent={totalSpent} />
 
@@ -695,7 +700,7 @@ export default function BudgetPage() {
               <span className="text-sm text-zinc-400">
                 {alerts.filter((a) => a.dotColor !== COLORS.green).length} active alert
                 {alerts.filter((a) => a.dotColor !== COLORS.green).length !== 1 ? "s" : ""}
-              </span>
+                    </span>
               <button className="text-zinc-500 hover:text-white">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
