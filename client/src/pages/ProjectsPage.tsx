@@ -187,19 +187,26 @@ export default function ProjectsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-2">
+              <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
+                  title="Previous page"
+                  aria-label="Previous page"
                   className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
 
+                <span className="min-w-[6rem] text-center text-sm font-medium dark:text-zinc-300 text-slate-700">
+                  Page {page} of {totalPages}
+                </span>
+
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                   <button
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
+                    aria-label={`Page ${pageNum}`}
                     className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                       page === pageNum
                         ? "dark:bg-zinc-700 dark:text-white bg-emerald-600 text-white"
@@ -213,6 +220,8 @@ export default function ProjectsPage() {
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
+                  title="Next page"
+                  aria-label="Next page"
                   className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
