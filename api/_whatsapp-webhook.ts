@@ -1745,8 +1745,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
+    // ── STEP 5.5: Re-check onboarding before any expense confirmation ─────────
+    // When user sends "1", they might be confirming PROJECT creation (onboarding)
+    // not expense. Use fresh profile so we never wrongly run expense insert.
+    const { data: freshProfile } = await supabase
+      .from('profiles')
+      .select('onboarding_state, onboarding_completed_at')
+      .eq('id', userId)
+      .single();
+
+    const isConfirmingProject =
+      freshProfile?.onboarding_state === 'confirmation' &&
+      !freshProfile?.onboarding_completed_at &&
+      (message.includes('1') || /yes|create|confirm/i.test(message));
+
+    if (isConfirmingProject) {
+      try {
+        const projectId = await createProjectFromOnboarding(userId);
+        await sendPostCreationMessage(From, projectId);
+      } catch (err: any) {
+        console.error('[Onboarding] Project creation failed (from re-check):', err);
+        await sendMessage(From, `⚠️ Couldn't create the project.\n\nError: ${err.message}\n\nType "start over" to try again.`);
+      }
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
+
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
+      // Guard: do NOT treat as expense if user is still in onboarding (e.g. stale profile)
+      if (!freshProfile?.onboarding_completed_at) {
+        console.log('[Expense Insert] Skipped: user still in onboarding', {
+          onboarding_state: freshProfile?.onboarding_state,
+          onboarding_completed_at: freshProfile?.onboarding_completed_at,
+        });
+        await sendMessage(
+          From,
+          `Please confirm your project first (reply 1 to create project), or type "start over" to begin again.`
+        );
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+
       if (message.includes('1') || /yes|ok|✅|log it|confirm/i.test(message)) {
         console.log('[Expense Insert] Attempting:', {
           user_id: userId,
