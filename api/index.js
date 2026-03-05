@@ -1537,30 +1537,41 @@ app.post('/api/auth/link-whatsapp', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    const { data, error } = await supabase
+    // Verify there is actually a WhatsApp profile for this number
+    const { data: waProfile } = await supabase
       .from('profiles')
-      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
+      .select('id')
       .eq('whatsapp_number', withPlus)
-      .select('id');
+      .maybeSingle();
 
-    if (error) {
-      if ((error.message || '').toLowerCase().includes('auth_user_id')) {
-        return res.status(500).json({
-          success: false,
-          error: 'Linking not available: add column auth_user_id (UUID) to profiles table.',
-        });
-      }
-      console.error('[Link WhatsApp]', error);
-      return res.status(500).json({ success: false, error: error.message || 'Update failed' });
-    }
-
-    if (!data || data.length === 0) {
+    if (!waProfile) {
       return res.status(404).json({
         success: false,
-        error: 'No WhatsApp profile found for this number. Use this exact number in WhatsApp (e.g. +2349165631240).',
+        error: `No WhatsApp profile found for ${withPlus}. Make sure you have messaged the bot at least once with this number.`,
       });
     }
 
+    // Strategy A: save whatsapp_number to the web user's profile (works without any migration)
+    const { error: updateSelfErr } = await supabase
+      .from('profiles')
+      .update({ whatsapp_number: withPlus, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    if (updateSelfErr) {
+      console.error('[Link WhatsApp] Could not update own profile:', updateSelfErr);
+      return res.status(500).json({ success: false, error: updateSelfErr.message || 'Update failed' });
+    }
+
+    // Strategy B: also try to set auth_user_id on the WhatsApp profile (requires migration, ignore if column missing)
+    const { error: linkErr } = await supabase
+      .from('profiles')
+      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
+      .eq('whatsapp_number', withPlus);
+    if (linkErr) {
+      console.warn('[Link WhatsApp] auth_user_id update skipped (migration not run yet):', linkErr.message);
+    }
+
+    console.log(`[Link WhatsApp] User ${userId} linked to WhatsApp ${withPlus}`);
     return res.status(200).json({ success: true, message: 'WhatsApp number linked. Your WhatsApp projects will now appear on the web.' });
   } catch (err) {
     console.error('[Link WhatsApp]', err);
@@ -1630,16 +1641,84 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       },
     });
 
-    // Include projects from linked WhatsApp profiles (profiles.auth_user_id = this user)
+    // Collect all user_ids whose projects should be visible:
+    // 1. The auth user themselves
+    // 2. Any profiles linked via auth_user_id (if migration has been run)
+    // 3. Any profiles sharing the same whatsapp_number as this user's profile
+    //    (covers WhatsApp-created projects before migration / without explicit linking)
     let userIdsToFetch = [userId];
-    const { data: linkedProfiles, error: linkedError } = await supabase
+
+    // Attempt to get this user's own profile (to find their whatsapp_number)
+    const { data: selfProfile } = await supabase
+      .from('profiles')
+      .select('id, whatsapp_number, email')
+      .eq('id', userId)
+      .maybeSingle();
+
+    // Path 1: auth_user_id column link (requires migration)
+    const { data: linkedByAuthId } = await supabase
       .from('profiles')
       .select('id')
       .eq('auth_user_id', userId);
-    if (!linkedError && linkedProfiles && Array.isArray(linkedProfiles)) {
-      const ids = linkedProfiles.map((p) => p.id).filter(Boolean);
-      userIdsToFetch = [...new Set([userId, ...ids])];
+    if (linkedByAuthId && Array.isArray(linkedByAuthId)) {
+      userIdsToFetch.push(...linkedByAuthId.map((p) => p.id).filter(Boolean));
     }
+
+    // Path 2: match by whatsapp_number saved in this user's web profile
+    if (selfProfile?.whatsapp_number) {
+      const { data: samePhone } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('whatsapp_number', selfProfile.whatsapp_number);
+      if (samePhone && Array.isArray(samePhone)) {
+        userIdsToFetch.push(...samePhone.map((p) => p.id).filter(Boolean));
+      }
+    }
+
+    // Path 3: match by email (web register uses email; WhatsApp creates email as <phone>@whatsapp.local)
+    if (selfProfile?.email) {
+      const { data: sameEmail } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', selfProfile.email);
+      if (sameEmail && Array.isArray(sameEmail)) {
+        userIdsToFetch.push(...sameEmail.map((p) => p.id).filter(Boolean));
+      }
+    }
+
+    // Path 4: the user's Supabase Auth email might match a profile email
+    if (req.userEmail) {
+      const { data: byAuthEmail } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', req.userEmail);
+      if (byAuthEmail && Array.isArray(byAuthEmail)) {
+        userIdsToFetch.push(...byAuthEmail.map((p) => p.id).filter(Boolean));
+      }
+    }
+
+    // Path 5: look up the Supabase Auth user's phone number and match WhatsApp profiles
+    // This is the automatic path for users who registered with their phone via Supabase Auth
+    try {
+      const { data: authUserData } = await supabase.auth.admin.getUserById(userId);
+      const authPhone = authUserData?.user?.phone;
+      if (authPhone) {
+        // Normalize: ensure it starts with +
+        const normalizedPhone = authPhone.startsWith('+') ? authPhone : `+${authPhone}`;
+        const { data: phoneProfiles } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('whatsapp_number', normalizedPhone);
+        if (phoneProfiles && Array.isArray(phoneProfiles)) {
+          userIdsToFetch.push(...phoneProfiles.map((p) => p.id).filter(Boolean));
+        }
+      }
+    } catch (_authLookupErr) {
+      // auth.admin.getUserById may not be available in all configs — silently skip
+    }
+
+    userIdsToFetch = [...new Set(userIdsToFetch.filter(Boolean))];
+    console.log('[Get Projects] Fetching for user_ids:', userIdsToFetch);
 
     // Fetch projects from database using Supabase client
     const { data: projects, error } = await supabase
