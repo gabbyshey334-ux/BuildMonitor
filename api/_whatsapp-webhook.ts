@@ -343,6 +343,16 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
   }
   await updateOnboardingState(userId, 'confirmation', { budget });
 
+  // Clear any expense state so "1" / "Yes" is only treated as project confirmation, not expense
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: null,
+      expense_pending_data: {},
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
   const { data: profile } = await supabase.from('profiles').select('onboarding_data').eq('id', userId).single();
   const d = (profile?.onboarding_data as OnboardingData) || {};
   const typeLabel = d.project_type === 'btn_residential' ? 'Residential home'
@@ -361,58 +371,79 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
   console.log('[CreateProject] Starting...');
   console.log('[CreateProject] userId:', userId);
 
-  // Verify profile exists before inserting (projects.user_id references profiles.id)
-  const { data: profileExists } = await supabase
+  const { data: profile } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, onboarding_data')
     .eq('id', userId)
     .single();
 
-  if (!profileExists) {
+  if (!profile) {
     console.error('[CreateProject] Profile not found:', userId);
     throw new Error('User profile not found. Please try again.');
   }
 
-  const { data: profile } = await supabase.from('profiles').select('onboarding_data').eq('id', userId).single();
-  const d = (profile?.onboarding_data as OnboardingData) || {};
-  const typeLabel = d.project_type === 'btn_residential' ? 'Residential home'
-    : d.project_type === 'btn_commercial' ? 'Commercial building' : 'Construction Project';
-  const projectName = d.location ? `${typeLabel} - ${d.location}` : typeLabel;
+  const onboardingData = (profile.onboarding_data as OnboardingData) || {};
+  console.log('[CreateProject] onboardingData:', JSON.stringify(onboardingData));
 
-  const projectData = {
-    user_id: userId,
-    name: projectName,
-    description: `Started: ${d.start_date || 'TBD'}. Created via WhatsApp.`,
-    budget: d.budget ? d.budget.toString() : '0',
-    status: 'active',
-    channel_type: 'direct',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  console.log('[CreateProject] data:', JSON.stringify(projectData, null, 2));
+  const typeLabel =
+    onboardingData.project_type === 'btn_residential'
+      ? 'Residential home'
+      : onboardingData.project_type === 'btn_commercial'
+        ? 'Commercial building'
+        : 'Construction Project';
+  const projectName =
+    onboardingData.location
+      ? `${typeLabel} - ${onboardingData.location}`
+      : onboardingData.location || typeLabel;
+  const budgetNum = parseFloat(String(onboardingData.budget || 0));
+  const startDate =
+    onboardingData.start_date ||
+    new Date().toISOString().split('T')[0];
 
-  const { data: project, error } = await supabase
+  const { data: newProject, error } = await supabase
     .from('projects')
-    .insert(projectData)
+    .insert({
+      name: projectName,
+      description: onboardingData.location
+        ? `Started: ${startDate}. Created via WhatsApp.`
+        : 'Created via WhatsApp.',
+      budget: budgetNum,
+      user_id: userId,
+      status: 'active',
+      currency: 'UGX',
+      channel_type: 'direct',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
     .select()
     .single();
 
-  console.log('[CreateProject] Result:', project ? { id: project.id, name: project.name } : null);
-  console.log('[CreateProject] Error:', error ? { message: error.message, code: error.code, details: error.details } : null);
-
   if (error) {
-    console.error('[CreateProject] FAILED:', error.message, error.code, error.details);
+    console.error('[CreateProject] FAILED:', error);
     throw error;
   }
 
-  if (!project || !project.id) {
+  if (!newProject || !newProject.id) {
     console.error('[CreateProject] No data returned from insert');
     throw new Error('Project was not saved. No data returned.');
   }
 
-  await updateOnboardingState(userId, 'completed');
-  console.log('[CreateProject] ✅ Saved project id:', project.id);
-  return project.id;
+  console.log('[CreateProject] SUCCESS:', newProject.id, newProject.name);
+
+  await supabase
+    .from('profiles')
+    .update({
+      active_project_id: newProject.id,
+      onboarding_completed_at: new Date().toISOString(),
+      onboarding_state: 'completed',
+      onboarding_data: {},
+      expense_state: null,
+      expense_pending_data: {},
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  return newProject.id;
 }
 
 async function sendPostCreationMessage(to: string, projectId: string) {
