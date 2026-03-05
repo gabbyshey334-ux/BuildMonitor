@@ -143,6 +143,18 @@ export interface ProjectExpensesResponse {
     created_at: string;
     disputed: boolean;
   }>;
+  /** Full list of expenses (for Budget page category/trend); falls back to recent if omitted */
+  expenses?: Array<{
+    id: string;
+    description: string;
+    amount: number;
+    category: string;
+    expense_date: string;
+    vendor: string | null;
+    source: string | null;
+    created_at: string;
+    disputed: boolean;
+  }>;
   vendors: Array<{ name: string; total: number; count: number }>;
 }
 

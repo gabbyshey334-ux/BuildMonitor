@@ -332,22 +332,28 @@ export default function BudgetPage() {
   const isProjectSwitch = projectId != null && data === undefined && !isError;
   const showLoading = isLoading || isProjectSwitch;
 
-  // ── Derive all real numbers from expenses ──────────────────────────────────
-  const expenses: any[] = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  // ── Derive all real numbers from API + expenses ─────────────────────────────
+  const expenses: any[] = useMemo(
+    () => (Array.isArray((data as any)?.expenses) ? (data as any).expenses : Array.isArray((data as any)?.recent) ? (data as any).recent : []),
+    [data]
+  );
   const materials: any[] = useMemo(
-    () => (Array.isArray(materialsData) ? materialsData : []),
+    () => (Array.isArray((materialsData as any)?.inventory) ? (materialsData as any).inventory : []),
     [materialsData]
   );
 
-  const budget = useMemo(
-    () => parseFloat(String(currentProject?.budget || 0)),
-    [currentProject]
-  );
+  const budget = useMemo(() => {
+    const fromProject = currentProject?.totalBudget ?? (currentProject as any)?.budget;
+    if (fromProject != null && Number(fromProject) > 0) return parseFloat(String(fromProject));
+    const fromApi = (data as any)?.summary?.total;
+    return fromApi != null ? parseFloat(String(fromApi)) : 0;
+  }, [currentProject, data]);
 
-  const totalSpent = useMemo(
-    () => expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0),
-    [expenses]
-  );
+  const totalSpent = useMemo(() => {
+    const fromApi = (data as any)?.summary?.spent;
+    if (typeof fromApi === "number" && Number.isFinite(fromApi)) return fromApi;
+    return expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
+  }, [data, expenses]);
 
   const balance = Math.max(0, budget - totalSpent);
   const percentSpent = pct(totalSpent, budget);
@@ -397,30 +403,28 @@ export default function BudgetPage() {
       .sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // ── Weekly cost trend (last 8 weeks) ──────────────────────────────────────
+  // ── Weekly cost trend (last 8 weeks, oldest to newest) ───────────────────────
   const costTrendData = useMemo(() => {
-    const weeks: Record<string, number> = {};
     const now = new Date();
-    // Initialise last 8 weeks with 0
+    const result: Array<{ week: string; amount: number }> = [];
     for (let i = 7; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i * 7);
-      const label = `W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString("default", { month: "short" })}`;
-      weeks[label] = 0;
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i + 1) * 7);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      const weekNum = Math.ceil(weekStart.getDate() / 7);
+      const monthShort = weekStart.toLocaleString("default", { month: "short" });
+      const label = `W${weekNum} ${monthShort}`;
+      let amount = 0;
+      expenses.forEach((e) => {
+        const d = new Date(e.expense_date || e.created_at);
+        if (d >= weekStart && d <= weekEnd) amount += parseFloat(String(e.amount || 0));
+      });
+      result.push({ week: label, amount });
     }
-    expenses.forEach((e) => {
-      const date = new Date(e.expense_date || e.created_at);
-      const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-      if (diffDays > 56) return; // only last 8 weeks
-      const weekIndex = Math.floor(diffDays / 7);
-      const d = new Date(now);
-      d.setDate(d.getDate() - weekIndex * 7);
-      const label = `W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString("default", { month: "short" })}`;
-      if (weeks[label] !== undefined) {
-        weeks[label] += parseFloat(String(e.amount || 0));
-      }
-    });
-    return Object.entries(weeks).map(([week, amount]) => ({ week, amount }));
+    return result;
   }, [expenses]);
 
   // ── Real-time alerts ───────────────────────────────────────────────────────
@@ -516,7 +520,7 @@ export default function BudgetPage() {
       .slice(0, 10)
       .map((e) => {
         const date = new Date(e.expense_date || e.created_at);
-        const dateStr = date.toLocaleDateString("en-UG", { month: "short", day: "numeric" });
+        const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
         const desc = String(e.description || "Expense");
         // Determine category
         let category = "Other";

@@ -498,6 +498,18 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         disputed: !!e.disputed,
       }));
 
+      const expensesForClient = expenses.map((e) => ({
+        id: e.id,
+        description: e.description || '',
+        amount: parseFloat(String(e.amount || 0)),
+        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
+        expense_date: e.expense_date,
+        vendor: null,
+        source: e.source || null,
+        created_at: e.created_at,
+        disputed: !!e.disputed,
+      }));
+
       let vendors = [];
       try {
         const { data: vendorRows } = await supabase
@@ -519,6 +531,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         byCategory,
         byMonth,
         recent,
+        expenses: expensesForClient,
         vendors,
         thisWeekTotal: Math.round(thisWeekTotal * 100) / 100,
         lastWeekTotal: Math.round(lastWeekTotal * 100) / 100,
