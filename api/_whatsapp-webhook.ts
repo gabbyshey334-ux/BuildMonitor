@@ -358,6 +358,9 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
 }
 
 async function createProjectFromOnboarding(userId: string): Promise<string> {
+  console.log('[CreateProject] Starting...');
+  console.log('[CreateProject] userId:', userId);
+
   // Verify profile exists before inserting (projects.user_id references profiles.id)
   const { data: profileExists } = await supabase
     .from('profiles')
@@ -366,7 +369,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
     .single();
 
   if (!profileExists) {
-    console.error('[Create Project] Profile not found:', userId);
+    console.error('[CreateProject] Profile not found:', userId);
     throw new Error('User profile not found. Please try again.');
   }
 
@@ -376,7 +379,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
     : d.project_type === 'btn_commercial' ? 'Commercial building' : 'Construction Project';
   const projectName = d.location ? `${typeLabel} - ${d.location}` : typeLabel;
 
-  const { data: project, error } = await supabase.from('projects').insert({
+  const projectData = {
     user_id: userId,
     name: projectName,
     description: `Started: ${d.start_date || 'TBD'}. Created via WhatsApp.`,
@@ -385,11 +388,30 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
     channel_type: 'direct',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-  }).select().single();
+  };
+  console.log('[CreateProject] data:', JSON.stringify(projectData, null, 2));
 
-  if (error) { console.error('[Create Project Error]', error); throw error; }
+  const { data: project, error } = await supabase
+    .from('projects')
+    .insert(projectData)
+    .select()
+    .single();
+
+  console.log('[CreateProject] Result:', project ? { id: project.id, name: project.name } : null);
+  console.log('[CreateProject] Error:', error ? { message: error.message, code: error.code, details: error.details } : null);
+
+  if (error) {
+    console.error('[CreateProject] FAILED:', error.message, error.code, error.details);
+    throw error;
+  }
+
+  if (!project || !project.id) {
+    console.error('[CreateProject] No data returned from insert');
+    throw new Error('Project was not saved. No data returned.');
+  }
+
   await updateOnboardingState(userId, 'completed');
-  console.log('[Create Project] ✅', project.id);
+  console.log('[CreateProject] ✅ Saved project id:', project.id);
   return project.id;
 }
 
@@ -430,27 +452,27 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
   async function applyOcrResult(content: string): Promise<boolean> {
     try {
       let jsonStr = content.trim();
-      const codeMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeMatch) jsonStr = codeMatch[1].trim();
-      const ocrData = JSON.parse(jsonStr);
-      const total = ocrData.total || 0;
-      const vendor = ocrData.vendor || 'Unknown vendor';
-      const itemsList = (ocrData.items || [])
-        .map((i: any) => `  • ${i.name}${i.quantity ? ` x${i.quantity}` : ''}: ${fmt(i.amount || 0)} UGX`)
-        .join('\n');
-      const summary = `📋 Receipt scanned!\n\n` +
-        `🏪 Vendor: ${vendor}\n` +
-        `📅 Date: ${ocrData.date || 'Not visible'}\n` +
-        `Items:\n${itemsList || '  • (unable to read items)'}\n` +
-        `💰 Total: ${fmt(total)} UGX\n\n` +
-        `Save this to your records?`;
-      await updateExpenseState(userId, 'awaiting_confirmation', {
-        amount: total,
-        description: `Receipt: ${vendor}${ocrData.items?.length ? ` (${ocrData.items.map((i: any) => i.name).join(', ')})` : ''}`,
-        vendor,
-        project_id: projectId,
-      });
-      await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
+    const codeMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeMatch) jsonStr = codeMatch[1].trim();
+    const ocrData = JSON.parse(jsonStr);
+    const total = ocrData.total || 0;
+    const vendor = ocrData.vendor || 'Unknown vendor';
+    const itemsList = (ocrData.items || [])
+      .map((i: any) => `  • ${i.name}${i.quantity ? ` x${i.quantity}` : ''}: ${fmt(i.amount || 0)} UGX`)
+      .join('\n');
+    const summary = `📋 Receipt scanned!\n\n` +
+      `🏪 Vendor: ${vendor}\n` +
+      `📅 Date: ${ocrData.date || 'Not visible'}\n` +
+      `Items:\n${itemsList || '  • (unable to read items)'}\n` +
+      `💰 Total: ${fmt(total)} UGX\n\n` +
+      `Save this to your records?`;
+    await updateExpenseState(userId, 'awaiting_confirmation', {
+      amount: total,
+      description: `Receipt: ${vendor}${ocrData.items?.length ? ` (${ocrData.items.map((i: any) => i.name).join(', ')})` : ''}`,
+      vendor,
+      project_id: projectId,
+    });
+    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
       return true;
     } catch {
       return false;
@@ -570,13 +592,13 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
     // OpenAI Whisper fallback
     if (process.env.OPENAI_API_KEY) {
       try {
-        const blob = new Blob([buffer], { type: 'audio/ogg' });
-        const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
-        const transcription = await openai.audio.transcriptions.create({
-          model: 'whisper-1',
-          file,
-          language: 'en',
-        });
+    const blob = new Blob([buffer], { type: 'audio/ogg' });
+    const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
+    const transcription = await openai.audio.transcriptions.create({
+      model: 'whisper-1',
+      file,
+      language: 'en',
+    });
         if (transcription.text) {
           console.log('[Voice] OpenAI Whisper success');
           return transcription.text;
@@ -802,16 +824,16 @@ Return ONLY valid JSON:
   if (process.env.OPENAI_API_KEY) {
     try {
       console.log('[Intent] Trying OpenAI...');
-      const completion = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: message },
-        ],
-        temperature: 0.1,
-        max_tokens: 300,
-      });
-      const content = completion.choices[0]?.message?.content?.trim() || '';
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+      ],
+      temperature: 0.1,
+      max_tokens: 300,
+    });
+    const content = completion.choices[0]?.message?.content?.trim() || '';
       const parsed = parseIntentResponse(content);
       if (parsed) {
         console.log('[Intent] OpenAI success:', parsed.intent);
@@ -1030,8 +1052,8 @@ Write in plain text (no markdown), be warm and practical.`;
 
   // Pure greeting or AI unavailable → show scripted menu
   if (currentProject) {
-    await sendMessage(
-      from,
+  await sendMessage(
+    from,
       `${hi} Welcome back to *JengaTrack* 🏗️\n\n` +
         `📌 *Active project:* ${currentProject.name}\n\n` +
         `What would you like to log?\n\n` +
@@ -1703,7 +1725,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           supabaseUrl: process.env.SUPABASE_URL?.substring(0, 30),
         });
 
-        const { error: insertError } = await supabase
+        const { data: insertedExpense, error: insertError } = await supabase
           .from('expenses')
           .insert({
             user_id: userId,
@@ -1714,19 +1736,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             currency: 'UGX',
             expense_date: new Date().toISOString().split('T')[0],
             source: 'whatsapp',
-          });
+          })
+          .select()
+          .single();
+
+        console.log('[Expense Insert] Result:', insertedExpense ? { id: insertedExpense.id, amount: insertedExpense.amount } : null);
+        console.log('[Expense Insert] Error:', insertError ? { message: insertError.message, code: insertError.code, details: insertError.details } : null);
 
         if (insertError) {
-          console.error('[Expense Insert] FAILED:', {
-            error: insertError.message,
-            code: insertError.code,
-            details: insertError.details,
-            hint: insertError.hint,
-          });
+          console.error('[Expense Insert] FAILED:', insertError.message, insertError.code, insertError.details);
           await sendMessage(
             From,
             `⚠️ Could not save expense.\nError: ${insertError.message}\n\nPlease try again.`
           );
+          res.setHeader('Content-Type', 'text/xml');
+          return res.status(200).send(twimlOk);
+        }
+
+        if (!insertedExpense || !insertedExpense.id) {
+          console.error('[Expense Insert] No data returned from insert');
+          await sendMessage(From, `❌ Failed to save expense. Please try again.`);
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }

@@ -1229,50 +1229,34 @@ app.post('/api/auth/login', async (req, res) => {
       console.log('[Login] ✅ Profile created in profiles table');
     }
 
-    // Merge WhatsApp-only profiles: if this user's profile has whatsapp_number set,
-    // find any other profile with same number (orphan from WhatsApp) and move projects/expenses here
-    const dashboardId = authData.user.id;
-    const waNumber = (userProfile.whatsapp_number || '').trim();
-    if (waNumber && !waNumber.startsWith('pending-')) {
-      const { data: orphanProfiles } = await supabaseAdmin
+    // Merge WhatsApp-only orphan profiles: same whatsapp_number but different profile id (created by bot before dashboard signup)
+    const dashWhatsApp = (userProfile.whatsapp_number || '').trim();
+    const isPendingNumber = !dashWhatsApp || dashWhatsApp.startsWith('pending-') || /^pending-/i.test(dashWhatsApp);
+    if (dashWhatsApp && !isPendingNumber) {
+      const { data: orphanProfiles, error: orphanErr } = await supabaseAdmin
         .from('profiles')
         .select('id')
-        .eq('whatsapp_number', waNumber)
-        .neq('id', dashboardId);
-      if (orphanProfiles && orphanProfiles.length > 0) {
+        .eq('whatsapp_number', dashWhatsApp)
+        .neq('id', authData.user.id);
+
+      if (!orphanErr && orphanProfiles && orphanProfiles.length > 0) {
         for (const orphan of orphanProfiles) {
           const orphanId = orphan.id;
-          const { count: projectCount } = await supabaseAdmin
+          const { error: updateProjErr } = await supabaseAdmin
             .from('projects')
-            .select('*', { count: 'exact', head: true })
+            .update({ user_id: authData.user.id })
             .eq('user_id', orphanId);
-          if (projectCount > 0) {
-            const { error: updateProjErr } = await supabaseAdmin
-              .from('projects')
-              .update({ user_id: dashboardId })
-              .eq('user_id', orphanId);
-            if (updateProjErr) {
-              console.error('[Login] Merge projects error:', updateProjErr.message);
-            } else {
-              console.log('[Login] Merged', projectCount, 'projects from WhatsApp profile', orphanId, '→', dashboardId);
-            }
-          }
+          if (updateProjErr) console.error('[Login] Merge projects error:', updateProjErr.message);
+
           const { error: updateExpErr } = await supabaseAdmin
             .from('expenses')
-            .update({ user_id: dashboardId })
+            .update({ user_id: authData.user.id })
             .eq('user_id', orphanId);
-          if (updateExpErr) {
-            console.error('[Login] Merge expenses error:', updateExpErr.message);
-          }
-          const { error: delErr } = await supabaseAdmin
-            .from('profiles')
-            .delete()
-            .eq('id', orphanId);
-          if (delErr) {
-            console.error('[Login] Delete orphan profile error:', delErr.message);
-          } else {
-            console.log('[Login] Removed orphan WhatsApp profile', orphanId);
-          }
+          if (updateExpErr) console.error('[Login] Merge expenses error:', updateExpErr.message);
+
+          await supabaseAdmin.from('projects').update({ manager_id: null }).eq('manager_id', orphanId);
+          await supabaseAdmin.from('profiles').delete().eq('id', orphanId);
+          console.log('[Login] ✅ Merged WhatsApp profile', orphanId, '→', authData.user.id);
         }
       }
     }
@@ -1585,7 +1569,6 @@ app.post('/api/auth/link-whatsapp', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    // 1) Set auth_user_id on the WhatsApp profile so GET /api/projects includes its projects
     const { data, error } = await supabase
       .from('profiles')
       .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
@@ -1609,12 +1592,6 @@ app.post('/api/auth/link-whatsapp', requireAuth, async (req, res) => {
         error: 'No WhatsApp profile found for this number. Use this exact number in WhatsApp (e.g. +2349165631240).',
       });
     }
-
-    // 2) Set dashboard profile's whatsapp_number so login merge can consolidate later
-    await supabase
-      .from('profiles')
-      .update({ whatsapp_number: withPlus, updated_at: new Date().toISOString() })
-      .eq('id', userId);
 
     return res.status(200).json({ success: true, message: 'WhatsApp number linked. Your WhatsApp projects will now appear on the web.' });
   } catch (err) {
@@ -1696,13 +1673,12 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       userIdsToFetch = [...new Set([userId, ...ids])];
     }
 
-    // Fetch projects where user is owner (user_id in list) OR manager (manager_id = userId)
-    const { data: projectsByOwner, error: errOwner } = await supabase
+    // Fetch projects: owned by user (or linked profiles) OR managed by user
+    const { data: projectsOwned, error: errOwned } = await supabase
       .from('projects')
       .select(`
         id,
         user_id,
-        manager_id,
         name,
         description,
         budget,
@@ -1715,24 +1691,20 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       .in('user_id', userIdsToFetch)
       .order('created_at', { ascending: false });
 
-    let projects = projectsByOwner || [];
-    let error = errOwner;
-
-    if (error) {
-      console.error('[Get Projects] Database error:', error);
+    if (errOwned) {
+      console.error('[Get Projects] Database error:', errOwned);
       return res.status(500).json({
         success: false,
         error: 'Failed to fetch projects',
-        message: error.message
+        message: errOwned.message,
       });
     }
 
-    const { data: projectsByManager } = await supabase
+    const { data: projectsManaged, error: errManaged } = await supabase
       .from('projects')
       .select(`
         id,
         user_id,
-        manager_id,
         name,
         description,
         budget,
@@ -1745,16 +1717,19 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       .eq('manager_id', userId)
       .order('created_at', { ascending: false });
 
-    if (projectsByManager && projectsByManager.length > 0) {
-      const seen = new Set((projects || []).map((p) => p.id));
-      for (const p of projectsByManager) {
-        if (!seen.has(p.id)) {
-          seen.add(p.id);
-          projects = [...projects, p];
-        }
-      }
-      projects.sort((a, b) => new Date((b.updated_at || b.created_at) || 0) - new Date((a.updated_at || a.created_at) || 0));
+    if (errManaged) {
+      console.error('[Get Projects] Managed projects error:', errManaged);
     }
+
+    const seen = new Set((projectsOwned || []).map((p) => p.id));
+    const projects = [...(projectsOwned || [])];
+    for (const p of projectsManaged || []) {
+      if (!seen.has(p.id)) {
+        seen.add(p.id);
+        projects.push(p);
+      }
+    }
+    projects.sort((a, b) => new Date((b.updated_at || b.created_at) || 0) - new Date((a.updated_at || a.created_at) || 0));
 
     console.log('[Get Projects] Successfully fetched', projects?.length || 0, 'projects');
 

@@ -89,8 +89,8 @@ export function ProjectCard({ project }: ProjectCardProps) {
         {/* Header: Project name and menu */}
         <div className="flex items-start justify-between mb-2">
           <h3 className="font-heading font-semibold dark:text-white text-slate-800 text-lg truncate pr-2">
-            {project.name}
-          </h3>
+          {project.name}
+        </h3>
           <button
             onClick={(e) => {
               e.preventDefault();
@@ -151,7 +151,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </div>
           <span className="text-xs dark:text-zinc-500 text-slate-500">
             {formatRelativeTime(project.lastActivityAt)}
-          </span>
+        </span>
         </div>
       </a>
     </Link>
