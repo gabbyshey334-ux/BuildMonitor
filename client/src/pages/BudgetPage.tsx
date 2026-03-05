@@ -55,8 +55,8 @@ const PROJECT_COLORS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatUgx(n: number): string {
   const num = Number(n) || 0;
-  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(1)}B`;
-  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(2)}B`;
+  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
   return `UGX ${num.toLocaleString()}`;
 }
@@ -347,19 +347,30 @@ export default function BudgetPage() {
   );
 
   const budget = useMemo(() => {
-    const fromProject = parseFloat(String(currentProject?.totalBudget ?? (currentProject as any)?.budget ?? 0)) || 0;
-    if (fromProject > 0) return fromProject;
-    const fromApi = (data as any)?.summary?.total;
-    return fromApi != null ? parseFloat(String(fromApi)) : 0;
-  }, [currentProject, data]);
+    const raw = currentProject?.totalBudget ?? (currentProject as any)?.budget;
+    if (!raw) return 0;
+    const parsed = parseFloat(String(raw).replace(/,/g, ""));
+    return isNaN(parsed) ? 0 : parsed;
+  }, [currentProject]);
 
   const totalSpent = useMemo(() => {
-    const fromApi = (data as any)?.summary?.spent;
-    if (typeof fromApi === "number" && Number.isFinite(fromApi)) return fromApi;
-    return expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
-  }, [data, expenses]);
+    return expenses.reduce((sum, e) => {
+      const amt = parseFloat(String(e.amount ?? "0").replace(/,/g, ""));
+      return sum + (isNaN(amt) ? 0 : amt);
+    }, 0);
+  }, [expenses]);
 
   const balance = budget - totalSpent;
+
+  console.log("[Budget Debug]", {
+    budget,
+    totalSpent,
+    balance,
+    rawBudget: (currentProject as any)?.budget ?? currentProject?.totalBudget,
+    expenseCount: expenses.length,
+    firstExpense: expenses[0],
+  });
+
   const percentSpent = pct(totalSpent, budget);
   const overBudget = budget > 0 && totalSpent > budget;
 
@@ -623,9 +634,9 @@ export default function BudgetPage() {
           />
           <StatCard
             label="Balance"
-            value={balance < 0 ? `-${formatUgx(Math.abs(balance))}` : formatUgx(balance)}
-            sub={balance < 0 ? `⚠️ Over budget by ${formatUgx(Math.abs(balance))}` : undefined}
-            accent={balance >= 0 ? `${Math.min(100, percentSpent)}%` : undefined}
+            value={formatUgx(Math.abs(balance))}
+            sub={balance < 0 ? "⚠️ Over budget!" : balance === budget ? "No expenses yet" : undefined}
+            accent={balance >= 0 && balance !== budget ? `${Math.min(100, percentSpent)}%` : undefined}
             valueClassName={balance < 0 ? "text-red-400" : undefined}
           />
           <StatCard
