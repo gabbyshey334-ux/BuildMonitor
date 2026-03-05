@@ -55,8 +55,14 @@ const PROJECT_COLORS = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatUgx(n: number): string {
   const num = Number(n) || 0;
-  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(2)}B`;
-  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000_000_000) {
+    // Show millions as sub-unit for better precision
+    // e.g. 29,999,500,000 → "UGX 29,999.5M" instead of "UGX 30.00B"
+    return `UGX ${(num / 1_000_000).toLocaleString("en-UG", {
+      maximumFractionDigits: 1,
+    })}M`;
+  }
+  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
   return `UGX ${num.toLocaleString()}`;
 }
@@ -361,15 +367,6 @@ export default function BudgetPage() {
   }, [expenses]);
 
   const balance = budget - totalSpent;
-
-  console.log("[Budget Debug]", {
-    budget,
-    totalSpent,
-    balance,
-    rawBudget: (currentProject as any)?.budget ?? currentProject?.totalBudget,
-    expenseCount: expenses.length,
-    firstExpense: expenses[0],
-  });
 
   const percentSpent = pct(totalSpent, budget);
   const overBudget = budget > 0 && totalSpent > budget;
