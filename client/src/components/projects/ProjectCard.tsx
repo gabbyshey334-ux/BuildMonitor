@@ -106,33 +106,33 @@ export function ProjectCard({ project }: ProjectCardProps) {
           <span className="text-sm dark:text-zinc-400 text-slate-600 ml-1">Complete</span>
         </div>
 
-        {/* Dual Progress Bars: named Progress and Expenditure, theme-aware colors */}
+        {/* Dual Progress Bars: label inside each bar */}
         <div className="space-y-3 mb-4">
           {/* Progress bar */}
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="font-medium dark:text-zinc-400 text-slate-600">Progress</span>
-              <span className="dark:text-zinc-400 text-slate-600">{progress}%</span>
-            </div>
-            <div className="relative h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full dark:from-[#22c55e] dark:to-[#14b8a6] from-emerald-500 to-teal-600 bg-gradient-to-r"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+          <div className="relative h-6 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full dark:from-[#22c55e] dark:to-[#14b8a6] from-emerald-500 to-teal-600 bg-gradient-to-r"
+              style={{ width: `${progress}%` }}
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
+              Progress
+            </span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
+              {progress}%
+            </span>
           </div>
           {/* Expenditure bar */}
-          <div>
-            <div className="flex justify-between text-xs mb-1">
-              <span className="font-medium dark:text-zinc-400 text-slate-600">Expenditure</span>
-              <span className="dark:text-zinc-400 text-slate-600">{Math.round(budgetSpentPct)}%</span>
-            </div>
-            <div className="relative h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full dark:from-[#0f766e] dark:to-[#0d9488] from-teal-600 to-cyan-600 bg-gradient-to-r"
-                style={{ width: `${budgetSpentPct}%` }}
-              />
-            </div>
+          <div className="relative h-6 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
+            <div
+              className="absolute inset-y-0 left-0 rounded-full dark:from-[#0f766e] dark:to-[#0d9488] from-teal-600 to-cyan-600 bg-gradient-to-r"
+              style={{ width: `${budgetSpentPct}%` }}
+            />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
+              Expenditure
+            </span>
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
+              {Math.round(budgetSpentPct)}%
+            </span>
           </div>
         </div>
 
