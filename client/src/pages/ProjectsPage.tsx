@@ -18,20 +18,22 @@ const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
 const PROJECTS_PER_PAGE = 8;
 
+type SortOption = "date" | "name" | "progress" | "budget";
+
 function ProjectsLoadingSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div
           key={i}
-          className="rounded-2xl bg-[#1a1a1a] border border-zinc-800/50 p-5 animate-pulse"
+          className="rounded-2xl dark:bg-[#1a1a1a] bg-slate-100 border dark:border-zinc-800/50 border-slate-200 p-5 animate-pulse"
         >
-          <div className="h-6 bg-zinc-800 rounded w-3/4 mb-3" />
-          <div className="h-8 bg-zinc-800 rounded w-1/3 mb-4" />
-          <div className="h-2 bg-zinc-800 rounded w-full mb-2" />
-          <div className="h-2 bg-zinc-800 rounded w-full mb-4" />
-          <div className="h-4 bg-zinc-800 rounded w-2/3 mb-4" />
-          <div className="h-4 bg-zinc-800 rounded w-1/3" />
+          <div className="h-6 dark:bg-zinc-800 bg-slate-200 rounded w-3/4 mb-3" />
+          <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-1/3 mb-4" />
+          <div className="h-2 dark:bg-zinc-800 bg-slate-200 rounded w-full mb-2" />
+          <div className="h-2 dark:bg-zinc-800 bg-slate-200 rounded w-full mb-4" />
+          <div className="h-4 dark:bg-zinc-800 bg-slate-200 rounded w-2/3 mb-4" />
+          <div className="h-4 dark:bg-zinc-800 bg-slate-200 rounded w-1/3" />
         </div>
       ))}
     </div>
@@ -46,6 +48,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortOption>("date");
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjects();
 
@@ -58,11 +61,30 @@ export default function ProjectsPage() {
   const list = Array.isArray(fetched) ? fetched : projects;
   const hasProjects = list.length > 0;
 
-  const totalPages = Math.max(1, Math.ceil(list.length / PROJECTS_PER_PAGE));
+  const sortedList = useMemo(() => {
+    const arr = [...list];
+    switch (sortBy) {
+      case "name":
+        return arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      case "progress":
+        return arr.sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
+      case "budget":
+        return arr.sort((a, b) => (b.totalBudget ?? 0) - (a.totalBudget ?? 0));
+      case "date":
+      default:
+        return arr.sort((a, b) => {
+          const ta = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+          const tb = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+          return tb - ta;
+        });
+    }
+  }, [list, sortBy]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedList.length / PROJECTS_PER_PAGE));
   const paginatedList = useMemo(() => {
     const start = (page - 1) * PROJECTS_PER_PAGE;
-    return list.slice(start, start + PROJECTS_PER_PAGE);
-  }, [list, page]);
+    return sortedList.slice(start, start + PROJECTS_PER_PAGE);
+  }, [sortedList, page]);
 
   useEffect(() => {
     if (page > totalPages && totalPages >= 1) setPage(1);
@@ -110,23 +132,30 @@ export default function ProjectsPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header with Sort Dropdown */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="text-2xl font-bold text-white">{t("projects.title")}</h1>
-          
+          <h1 className="text-2xl font-bold dark:text-white text-slate-900">{t("projects.title")}</h1>
+
           <div className="flex items-center gap-4">
             <div className="relative">
-              <select className="appearance-none bg-transparent border border-zinc-700 text-zinc-300 text-sm rounded-lg px-4 py-2 pr-8 focus:outline-none focus:border-[#22c55e] cursor-pointer">
-                <option>Sort By: Date Updated</option>
-                <option>Sort By: Name</option>
-                <option>Sort By: Progress</option>
-                <option>Sort By: Budget</option>
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as SortOption);
+                  setPage(1);
+                }}
+                className="appearance-none dark:bg-transparent bg-white dark:border-zinc-700 border-slate-300 dark:text-zinc-300 text-slate-800 text-sm rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:border-[#22c55e] cursor-pointer"
+              >
+                <option value="date">Sort by: Date updated</option>
+                <option value="name">Sort by: Name</option>
+                <option value="progress">Sort by: Progress</option>
+                <option value="budget">Sort by: Budget</option>
               </select>
               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 dark:text-zinc-500 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </div>
             </div>
-            
+
             <Button
               onClick={() => setModalOpen(true)}
               className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 shrink-0 rounded-lg px-4 py-2"
@@ -141,10 +170,10 @@ export default function ProjectsPage() {
           <ProjectsLoadingSkeleton />
         ) : isError ? (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="text-red-400 mb-4">
+            <p className="dark:text-red-400 text-red-600 mb-4">
               {error instanceof Error ? error.message : t("projects.loadError")}
             </p>
-            <Button variant="outline" onClick={() => refetch()} className="border-zinc-600 text-zinc-300">
+            <Button variant="outline" onClick={() => refetch()} className="dark:border-zinc-600 dark:text-zinc-300 border-slate-400 text-slate-700">
               {t("projects.tryAgain")}
             </Button>
           </div>
@@ -162,29 +191,29 @@ export default function ProjectsPage() {
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
-                
+
                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                   <button
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
                     className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                       page === pageNum
-                        ? "bg-zinc-700 text-white"
-                        : "text-zinc-400 hover:bg-zinc-800"
+                        ? "dark:bg-zinc-700 dark:text-white bg-emerald-600 text-white"
+                        : "dark:text-zinc-400 dark:hover:bg-zinc-800 text-slate-600 hover:bg-slate-100"
                     }`}
                   >
                     {pageNum}
                   </button>
                 ))}
-                
+
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="p-2 rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
@@ -193,13 +222,13 @@ export default function ProjectsPage() {
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full bg-zinc-800 p-6 mb-4">
-              <FolderOpen className="h-12 w-12 text-zinc-500" />
+            <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
+              <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-2">
+            <h2 className="text-xl font-semibold dark:text-white text-slate-900 mb-2">
               {t("projects.empty.title")}
             </h2>
-            <p className="text-zinc-400 max-w-md mb-6">
+            <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
               {t("projects.emptySubtitleLong")}
             </p>
             <Button
@@ -209,7 +238,7 @@ export default function ProjectsPage() {
               <Plus className="h-4 w-4 mr-2" />
               {t("projects.createNew")}
             </Button>
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm dark:text-zinc-500 text-slate-500">
               {t("projects.orWhatsApp")}{" "}
               <a
                 href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}

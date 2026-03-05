@@ -80,11 +80,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
     <Link href={`/dashboard?project=${project.id}`}>
       <a
         onClick={handleClick}
-        className="block rounded-2xl bg-[#1a1a1a] border border-zinc-800/50 p-5 hover:border-zinc-700/50 transition-all duration-200 group cursor-pointer"
+        className="block rounded-2xl dark:bg-[#1a1a1a] bg-white border dark:border-zinc-800/50 border-slate-200 p-5 hover:border-slate-300 dark:hover:border-zinc-700/50 transition-all duration-200 group cursor-pointer shadow-sm dark:shadow-none"
       >
         {/* Header: Project name and menu */}
         <div className="flex items-start justify-between mb-3">
-          <h3 className="font-semibold text-white text-lg truncate pr-2">
+          <h3 className="font-semibold dark:text-white text-slate-900 text-lg truncate pr-2">
             {project.name}
           </h3>
           <button
@@ -92,41 +92,53 @@ export function ProjectCard({ project }: ProjectCardProps) {
               e.preventDefault();
               e.stopPropagation();
             }}
-            className="p-1 rounded-full hover:bg-zinc-800 transition-colors"
+            className="p-1 rounded-full dark:hover:bg-zinc-800 hover:bg-slate-100 transition-colors"
           >
-            <MoreHorizontal className="h-5 w-5 text-zinc-500" />
+            <MoreHorizontal className="h-5 w-5 dark:text-zinc-500 text-slate-500" />
           </button>
         </div>
 
         {/* Completion Percentage */}
         <div className="mb-4">
-          <span className="text-3xl font-bold text-white">
+          <span className="text-3xl font-bold dark:text-white text-slate-900">
             {progress}%
           </span>
-          <span className="text-sm text-zinc-400 ml-1">Complete</span>
+          <span className="text-sm dark:text-zinc-400 text-slate-600 ml-1">Complete</span>
         </div>
 
-        {/* Dual Progress Bars */}
-        <div className="space-y-2 mb-4">
-          {/* Progress bar (green) */}
-          <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6]"
-              style={{ width: `${progress}%` }}
-            />
+        {/* Dual Progress Bars: named Progress and Expenditure, theme-aware colors */}
+        <div className="space-y-3 mb-4">
+          {/* Progress bar */}
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="font-medium dark:text-zinc-400 text-slate-600">Progress</span>
+              <span className="dark:text-zinc-400 text-slate-600">{progress}%</span>
+            </div>
+            <div className="relative h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full dark:from-[#22c55e] dark:to-[#14b8a6] from-emerald-500 to-teal-600 bg-gradient-to-r"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
-          {/* Expenditure bar (teal/cyan) */}
-          <div className="relative h-2 rounded-full bg-zinc-800 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#0f766e] to-[#14b8a6]"
-              style={{ width: `${budgetSpentPct}%` }}
-            />
+          {/* Expenditure bar */}
+          <div>
+            <div className="flex justify-between text-xs mb-1">
+              <span className="font-medium dark:text-zinc-400 text-slate-600">Expenditure</span>
+              <span className="dark:text-zinc-400 text-slate-600">{Math.round(budgetSpentPct)}%</span>
+            </div>
+            <div className="relative h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 rounded-full dark:from-[#0f766e] dark:to-[#0d9488] from-teal-600 to-cyan-600 bg-gradient-to-r"
+                style={{ width: `${budgetSpentPct}%` }}
+              />
+            </div>
           </div>
         </div>
 
         {/* Budget display */}
         <div className="mb-4">
-          <p className="text-sm text-zinc-300 font-medium">
+          <p className="text-sm dark:text-zinc-300 text-slate-700 font-medium">
             UGX {formatShortBudget(spent)} / {formatShortBudget(total)}
           </p>
         </div>
@@ -137,7 +149,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <span className={cn("h-2.5 w-2.5 rounded-full", health.dotColor)} />
             <span className={cn("text-sm font-medium", health.color)}>{health.status}</span>
           </div>
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm dark:text-zinc-500 text-slate-500">
             {formatRelativeTime(project.lastActivityAt)}
           </span>
         </div>
