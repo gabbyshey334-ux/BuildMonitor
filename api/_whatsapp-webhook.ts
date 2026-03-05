@@ -460,6 +460,25 @@ async function sendPostCreationMessage(to: string, projectId: string) {
   );
 }
 
+/** Route message to onboarding flow (e.g. when "1" was meant to confirm project, not expense). */
+async function handleOnboardingMessage(from: string, profile: any, message: string): Promise<void> {
+  const state = profile.onboarding_state as OnboardingState;
+  if (state === 'confirmation' && (message.includes('1') || /yes|create|confirm/i.test(message))) {
+    try {
+      const projectId = await createProjectFromOnboarding(profile.id);
+      await sendPostCreationMessage(from, projectId);
+    } catch (err: any) {
+      console.error('[Onboarding] Project creation failed (handleOnboardingMessage):', err);
+      await sendMessage(from, `⚠️ Couldn't create the project.\n\nError: ${err.message}\n\nType "start over" to try again.`);
+    }
+    return;
+  }
+  await sendMessage(
+    from,
+    `Please confirm your project first (reply 1 to create project), or type "start over" to begin again.`
+  );
+}
+
 // ─── OCR: Receipt Photo ───────────────────────────────────────────────────────
 
 async function processReceiptPhoto(
@@ -1773,16 +1792,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
-      // Guard: do NOT treat as expense if user is still in onboarding (e.g. stale profile)
-      if (!freshProfile?.onboarding_completed_at) {
-        console.log('[Expense Insert] Skipped: user still in onboarding', {
-          onboarding_state: freshProfile?.onboarding_state,
-          onboarding_completed_at: freshProfile?.onboarding_completed_at,
-        });
-        await sendMessage(
-          From,
-          `Please confirm your project first (reply 1 to create project), or type "start over" to begin again.`
-        );
+      // CRITICAL: Do not process expense confirmation during onboarding
+      if (!profile.onboarding_completed_at) {
+        console.log('[Expense Confirm] Blocked - user still onboarding');
+        await handleOnboardingMessage(From, profile, message);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
