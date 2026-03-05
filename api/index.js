@@ -1,6 +1,6 @@
 /**
  * Vercel Serverless Function Entry Point
- *
+ * 
  * Self-contained API handler. All /api/* routes are defined in this file.
  * Does NOT load any external server file (no dist/server).
  * Webhook: /webhook/webhook -> api/whatsapp-webhook.js (see vercel.json).
@@ -399,10 +399,10 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       expenseRows = result.data;
       if (expError && (expError.message || '').toLowerCase().includes('category')) {
         const fallback = await supabase
-          .from('expenses')
-          .select('id, description, amount, expense_date, source, created_at, disputed')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false });
+        .from('expenses')
+        .select('id, description, amount, expense_date, source, created_at, disputed')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
         expError = fallback.error;
         expenseRows = (fallback.data || []).map((e) => ({ ...e, category: null }));
       }
@@ -1106,7 +1106,7 @@ function requireAuth(req, res, next) {
       message: 'Please log in to access this resource',
     });
   }
-  const decoded = verifyToken(token);
+    const decoded = verifyToken(token);
   if (!decoded) {
     return res.status(401).json({
       success: false,
@@ -1114,10 +1114,10 @@ function requireAuth(req, res, next) {
       message: 'Please log in again',
     });
   }
-  req.userId = decoded.userId;
-  req.userEmail = decoded.email;
-  req.user = { id: decoded.userId };
-  return next();
+      req.userId = decoded.userId;
+      req.userEmail = decoded.email;
+      req.user = { id: decoded.userId };
+      return next();
 }
 
 // POST /api/auth/login - Login user with Supabase Auth
@@ -1227,6 +1227,54 @@ app.post('/api/auth/login', async (req, res) => {
       }
       userProfile = inserted;
       console.log('[Login] ✅ Profile created in profiles table');
+    }
+
+    // Merge WhatsApp-only profiles: if this user's profile has whatsapp_number set,
+    // find any other profile with same number (orphan from WhatsApp) and move projects/expenses here
+    const dashboardId = authData.user.id;
+    const waNumber = (userProfile.whatsapp_number || '').trim();
+    if (waNumber && !waNumber.startsWith('pending-')) {
+      const { data: orphanProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('whatsapp_number', waNumber)
+        .neq('id', dashboardId);
+      if (orphanProfiles && orphanProfiles.length > 0) {
+        for (const orphan of orphanProfiles) {
+          const orphanId = orphan.id;
+          const { count: projectCount } = await supabaseAdmin
+            .from('projects')
+            .select('*', { count: 'exact', head: true })
+            .eq('user_id', orphanId);
+          if (projectCount > 0) {
+            const { error: updateProjErr } = await supabaseAdmin
+              .from('projects')
+              .update({ user_id: dashboardId })
+              .eq('user_id', orphanId);
+            if (updateProjErr) {
+              console.error('[Login] Merge projects error:', updateProjErr.message);
+            } else {
+              console.log('[Login] Merged', projectCount, 'projects from WhatsApp profile', orphanId, '→', dashboardId);
+            }
+          }
+          const { error: updateExpErr } = await supabaseAdmin
+            .from('expenses')
+            .update({ user_id: dashboardId })
+            .eq('user_id', orphanId);
+          if (updateExpErr) {
+            console.error('[Login] Merge expenses error:', updateExpErr.message);
+          }
+          const { error: delErr } = await supabaseAdmin
+            .from('profiles')
+            .delete()
+            .eq('id', orphanId);
+          if (delErr) {
+            console.error('[Login] Delete orphan profile error:', delErr.message);
+          } else {
+            console.log('[Login] Removed orphan WhatsApp profile', orphanId);
+          }
+        }
+      }
     }
 
     // Generate JWT token (client stores it and sends via Authorization header)
@@ -1537,41 +1585,37 @@ app.post('/api/auth/link-whatsapp', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    // Verify there is actually a WhatsApp profile for this number
-    const { data: waProfile } = await supabase
+    // 1) Set auth_user_id on the WhatsApp profile so GET /api/projects includes its projects
+    const { data, error } = await supabase
       .from('profiles')
-      .select('id')
+      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
       .eq('whatsapp_number', withPlus)
-      .maybeSingle();
+      .select('id');
 
-    if (!waProfile) {
+    if (error) {
+      if ((error.message || '').toLowerCase().includes('auth_user_id')) {
+        return res.status(500).json({
+          success: false,
+          error: 'Linking not available: add column auth_user_id (UUID) to profiles table.',
+        });
+      }
+      console.error('[Link WhatsApp]', error);
+      return res.status(500).json({ success: false, error: error.message || 'Update failed' });
+    }
+
+    if (!data || data.length === 0) {
       return res.status(404).json({
         success: false,
-        error: `No WhatsApp profile found for ${withPlus}. Make sure you have messaged the bot at least once with this number.`,
+        error: 'No WhatsApp profile found for this number. Use this exact number in WhatsApp (e.g. +2349165631240).',
       });
     }
 
-    // Strategy A: save whatsapp_number to the web user's profile (works without any migration)
-    const { error: updateSelfErr } = await supabase
+    // 2) Set dashboard profile's whatsapp_number so login merge can consolidate later
+    await supabase
       .from('profiles')
       .update({ whatsapp_number: withPlus, updated_at: new Date().toISOString() })
       .eq('id', userId);
 
-    if (updateSelfErr) {
-      console.error('[Link WhatsApp] Could not update own profile:', updateSelfErr);
-      return res.status(500).json({ success: false, error: updateSelfErr.message || 'Update failed' });
-    }
-
-    // Strategy B: also try to set auth_user_id on the WhatsApp profile (requires migration, ignore if column missing)
-    const { error: linkErr } = await supabase
-      .from('profiles')
-      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
-      .eq('whatsapp_number', withPlus);
-    if (linkErr) {
-      console.warn('[Link WhatsApp] auth_user_id update skipped (migration not run yet):', linkErr.message);
-    }
-
-    console.log(`[Link WhatsApp] User ${userId} linked to WhatsApp ${withPlus}`);
     return res.status(200).json({ success: true, message: 'WhatsApp number linked. Your WhatsApp projects will now appear on the web.' });
   } catch (err) {
     console.error('[Link WhatsApp]', err);
@@ -1641,91 +1685,24 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       },
     });
 
-    // Collect all user_ids whose projects should be visible:
-    // 1. The auth user themselves
-    // 2. Any profiles linked via auth_user_id (if migration has been run)
-    // 3. Any profiles sharing the same whatsapp_number as this user's profile
-    //    (covers WhatsApp-created projects before migration / without explicit linking)
+    // Include projects from linked WhatsApp profiles (profiles.auth_user_id = this user)
     let userIdsToFetch = [userId];
-
-    // Attempt to get this user's own profile (to find their whatsapp_number)
-    const { data: selfProfile } = await supabase
-      .from('profiles')
-      .select('id, whatsapp_number, email')
-      .eq('id', userId)
-      .maybeSingle();
-
-    // Path 1: auth_user_id column link (requires migration)
-    const { data: linkedByAuthId } = await supabase
+    const { data: linkedProfiles, error: linkedError } = await supabase
       .from('profiles')
       .select('id')
       .eq('auth_user_id', userId);
-    if (linkedByAuthId && Array.isArray(linkedByAuthId)) {
-      userIdsToFetch.push(...linkedByAuthId.map((p) => p.id).filter(Boolean));
+    if (!linkedError && linkedProfiles && Array.isArray(linkedProfiles)) {
+      const ids = linkedProfiles.map((p) => p.id).filter(Boolean);
+      userIdsToFetch = [...new Set([userId, ...ids])];
     }
 
-    // Path 2: match by whatsapp_number saved in this user's web profile
-    if (selfProfile?.whatsapp_number) {
-      const { data: samePhone } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('whatsapp_number', selfProfile.whatsapp_number);
-      if (samePhone && Array.isArray(samePhone)) {
-        userIdsToFetch.push(...samePhone.map((p) => p.id).filter(Boolean));
-      }
-    }
-
-    // Path 3: match by email (web register uses email; WhatsApp creates email as <phone>@whatsapp.local)
-    if (selfProfile?.email) {
-      const { data: sameEmail } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', selfProfile.email);
-      if (sameEmail && Array.isArray(sameEmail)) {
-        userIdsToFetch.push(...sameEmail.map((p) => p.id).filter(Boolean));
-      }
-    }
-
-    // Path 4: the user's Supabase Auth email might match a profile email
-    if (req.userEmail) {
-      const { data: byAuthEmail } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', req.userEmail);
-      if (byAuthEmail && Array.isArray(byAuthEmail)) {
-        userIdsToFetch.push(...byAuthEmail.map((p) => p.id).filter(Boolean));
-      }
-    }
-
-    // Path 5: look up the Supabase Auth user's phone number and match WhatsApp profiles
-    // This is the automatic path for users who registered with their phone via Supabase Auth
-    try {
-      const { data: authUserData } = await supabase.auth.admin.getUserById(userId);
-      const authPhone = authUserData?.user?.phone;
-      if (authPhone) {
-        // Normalize: ensure it starts with +
-        const normalizedPhone = authPhone.startsWith('+') ? authPhone : `+${authPhone}`;
-        const { data: phoneProfiles } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('whatsapp_number', normalizedPhone);
-        if (phoneProfiles && Array.isArray(phoneProfiles)) {
-          userIdsToFetch.push(...phoneProfiles.map((p) => p.id).filter(Boolean));
-        }
-      }
-    } catch (_authLookupErr) {
-      // auth.admin.getUserById may not be available in all configs — silently skip
-    }
-
-    userIdsToFetch = [...new Set(userIdsToFetch.filter(Boolean))];
-    console.log('[Get Projects] Fetching for user_ids:', userIdsToFetch);
-
-    // Fetch projects from database using Supabase client
-    const { data: projects, error } = await supabase
+    // Fetch projects where user is owner (user_id in list) OR manager (manager_id = userId)
+    const { data: projectsByOwner, error: errOwner } = await supabase
       .from('projects')
       .select(`
         id,
         user_id,
+        manager_id,
         name,
         description,
         budget,
@@ -1738,13 +1715,45 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       .in('user_id', userIdsToFetch)
       .order('created_at', { ascending: false });
 
+    let projects = projectsByOwner || [];
+    let error = errOwner;
+
     if (error) {
       console.error('[Get Projects] Database error:', error);
-      return res.status(500).json({ 
+      return res.status(500).json({
         success: false,
         error: 'Failed to fetch projects',
-        message: error.message 
+        message: error.message
       });
+    }
+
+    const { data: projectsByManager } = await supabase
+      .from('projects')
+      .select(`
+        id,
+        user_id,
+        manager_id,
+        name,
+        description,
+        budget,
+        spent,
+        currency,
+        status,
+        created_at,
+        updated_at
+      `)
+      .eq('manager_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (projectsByManager && projectsByManager.length > 0) {
+      const seen = new Set((projects || []).map((p) => p.id));
+      for (const p of projectsByManager) {
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          projects = [...projects, p];
+        }
+      }
+      projects.sort((a, b) => new Date((b.updated_at || b.created_at) || 0) - new Date((a.updated_at || a.created_at) || 0));
     }
 
     console.log('[Get Projects] Successfully fetched', projects?.length || 0, 'projects');
@@ -1803,20 +1812,20 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       const progress = budget > 0 ? Math.min(100, Math.round((realSpent / budget) * 100)) : 0;
 
       return {
-        id: project.id,
-        userId: project.user_id,
-        name: project.name,
-        description: project.description,
+      id: project.id,
+      userId: project.user_id,
+      name: project.name,
+      description: project.description,
         budget,
         budgetAmount: budget,
         spent: realSpent,
         totalSpent: realSpent,
-        currency: project.currency || 'UGX',
-        status: project.status || 'active',
+      currency: project.currency || 'UGX',
+      status: project.status || 'active',
         progress,
         lastActivity: lastActivity || project.updated_at || project.created_at,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
+      createdAt: project.created_at,
+      updatedAt: project.updated_at,
       };
     });
 
@@ -1964,8 +1973,8 @@ app.post('/api/projects', requireAuth, async (req, res) => {
 
     if (!profileCheck) {
       console.error('[Create Project] ❌ User profile not found:', userId);
-      return res.status(400).json({
-        success: false,
+          return res.status(400).json({
+            success: false,
         error: 'User profile not found',
         message: 'Your profile was not found. Please log out and log in again, or contact support.',
       });
@@ -3133,15 +3142,15 @@ app.get('/api/test/supabase', async (req, res) => {
 // FALLBACK ROUTES (non-auth debug etc.)
 // ============================================================================
 
-app.get('/api/debug/db', async (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Debug endpoint (fallback mode)',
-    database: {
-      url: process.env.DATABASE_URL ? 'configured' : 'not configured'
-    }
+  app.get('/api/debug/db', async (req, res) => {
+    res.json({
+      status: 'ok',
+      message: 'Debug endpoint (fallback mode)',
+      database: {
+        url: process.env.DATABASE_URL ? 'configured' : 'not configured'
+      }
+    });
   });
-});
 
 // ============================================================================
 // STATIC FILES

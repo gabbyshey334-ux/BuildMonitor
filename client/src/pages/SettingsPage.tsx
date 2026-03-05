@@ -324,23 +324,23 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
-              <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
-            </div>
-            <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
-              {hasProjects ? "No project selected" : "Create your first project"}
-            </h2>
-            <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
-              {hasProjects
-                ? "Select a project from the list or create your first project to manage settings."
-                : "Get started by creating your first project."}
-            </p>
-            <Button asChild className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90">
-              <Link href="/projects">
-                <a>Create your first project</a>
-              </Link>
-            </Button>
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
+            <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
+          </div>
+          <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
+            {hasProjects ? "No project selected" : "Create your first project"}
+          </h2>
+          <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
+            {hasProjects
+              ? "Select a project from the list or create your first project to manage settings."
+              : "Get started by creating your first project."}
+          </p>
+          <Button asChild className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90">
+            <Link href="/projects">
+              <a>Create your first project</a>
+            </Link>
+          </Button>
           </div>
         </div>
       </AppLayout>
@@ -663,7 +663,7 @@ export default function SettingsPage() {
                       handleMarkCompleted();
                     }}
                     className="bg-red-600 hover:bg-red-700 text-white"
-                    >
+                  >
                     {t("settings.completeConfirmButton")}
                   </AlertDialogAction>
                 </AlertDialogFooter>

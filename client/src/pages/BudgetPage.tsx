@@ -581,9 +581,9 @@ export default function BudgetPage() {
                 >
                   View All <ChevronRight className="w-3 h-3" />
                 </button>
-              </div>
+        </div>
 
-              <div className="mb-6">
+        <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-sm font-medium" style={{ color: COLORS.textPrimary }}>
                     Progress vs. Expenditure
@@ -597,7 +597,7 @@ export default function BudgetPage() {
                     </select>
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs">▼</span>
                   </div>
-                </div>
+          </div>
 
                 <BudgetComparisonBars
                   categorySegments={categorySegments}
@@ -605,8 +605,8 @@ export default function BudgetPage() {
                   caption={budgetCaption}
                   empty={categorySegments.length === 0 && summary.spent === 0}
                 />
-              </div>
-            </div>
+          </div>
+        </div>
 
             {/* Cost Trend Card */}
             <div
@@ -653,16 +653,16 @@ export default function BudgetPage() {
               >
                 View All <ChevronRight className="w-3 h-3" />
               </button>
-            </div>
+                      </div>
 
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm" style={{ color: COLORS.textSecondary }}>
                 Over Budget Items: {alerts.filter((a) => a.tag === "Budget Overrun").length}
-              </span>
+                      </span>
               <button style={{ color: COLORS.textSecondary }}>
                 <MoreHorizontal className="w-4 h-4" />
               </button>
-            </div>
+                    </div>
 
             <div className="divide-y" style={{ borderColor: COLORS.cardBorder }}>
               {alerts.length === 0 ? (
@@ -686,10 +686,10 @@ export default function BudgetPage() {
             Recent Transactions
           </h3>
 
-          {recent.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
+            {recent.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
                   <tr style={{ borderBottom: `1px solid ${COLORS.cardBorder}` }}>
                     <th className="py-3 pr-4 text-left font-medium" style={{ color: COLORS.textSecondary }}>
                       Date
@@ -706,8 +706,8 @@ export default function BudgetPage() {
                     <th className="py-3 pr-4 text-left font-medium" style={{ color: COLORS.textSecondary }}>
                       Status
                     </th>
-                  </tr>
-                </thead>
+                    </tr>
+                  </thead>
                 <tbody className="divide-y" style={{ borderColor: COLORS.cardBorder }}>
                   {recent.slice(0, 10).map((r, index) => {
                     const id = r?.id ?? `row-${index}`;
@@ -734,7 +734,7 @@ export default function BudgetPage() {
                             style={{ backgroundColor: `${categoryColor}30`, color: categoryColor }}
                           >
                             {String(r?.category ?? "Other")}
-                          </span>
+                            </span>
                         </td>
                         <td className="py-3 pr-4 text-right font-medium" style={{ color: COLORS.textPrimary }}>
                           {formatUgxFull(amount)}
@@ -748,15 +748,15 @@ export default function BudgetPage() {
                             }}
                           >
                             {disputed ? "Disputed" : "Confirmed"}
-                          </span>
+                            </span>
                         </td>
                       </tr>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
+                  </tbody>
+                </table>
+              </div>
+            ) : (
             <div className="py-12 text-center">
               <p style={{ color: COLORS.textSecondary }}>No transactions yet.</p>
               <p className="text-sm mt-2" style={{ color: COLORS.textSecondary }}>

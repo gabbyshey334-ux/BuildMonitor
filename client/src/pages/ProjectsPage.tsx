@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, FolderOpen, ChevronLeft, ChevronRight, Link2 } from "lucide-react";
+import { Plus, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProjectCard } from "@/components/projects/ProjectCard";
@@ -14,7 +14,6 @@ import { parseBudget } from "@/lib/budgetUtils";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Project } from "@/contexts/ProjectContext";
-import { Link } from "wouter";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
@@ -118,20 +117,6 @@ export default function ProjectsPage() {
             <Plus className="h-4 w-4 mr-2" />
             {t("projects.new")}
           </Button>
-        </div>
-
-        {/* WhatsApp linking hint — always visible so users know where to link */}
-        <div className="flex items-center gap-3 mb-5 px-4 py-3 rounded-xl border dark:border-emerald-700/40 border-emerald-300 dark:bg-emerald-900/10 bg-emerald-50 text-sm">
-          <span className="text-xl">📱</span>
-          <span className="dark:text-zinc-300 text-slate-700 flex-1">
-            Created a project via WhatsApp? It won&apos;t show here until you link your number.
-          </span>
-          <Link href="/settings">
-            <a className="shrink-0 inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium hover:underline">
-              <Link2 className="h-3.5 w-3.5" />
-              Link now
-            </a>
-          </Link>
         </div>
 
         {isLoading ? (
