@@ -86,17 +86,17 @@ function BudgetSkeleton() {
     <div className="space-y-6 animate-pulse">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-24 rounded-xl bg-[#1a1a1a] border border-zinc-800" />
+          <div key={i} className="h-24 rounded-xl dark:bg-[#1a1a1a] bg-slate-100 dark:border-zinc-800 border-slate-200" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="h-64 rounded-xl bg-[#1a1a1a] border border-zinc-800" />
-          <div className="h-72 rounded-xl bg-[#1a1a1a] border border-zinc-800" />
+          <div className="h-64 rounded-xl dark:bg-[#1a1a1a] bg-slate-100 dark:border-zinc-800 border-slate-200" />
+          <div className="h-72 rounded-xl dark:bg-[#1a1a1a] bg-slate-100 dark:border-zinc-800 border-slate-200" />
         </div>
-        <div className="h-96 rounded-xl bg-[#1a1a1a] border border-zinc-800" />
+        <div className="h-96 rounded-xl dark:bg-[#1a1a1a] bg-slate-100 dark:border-zinc-800 border-slate-200" />
       </div>
-      <div className="h-80 rounded-xl bg-[#1a1a1a] border border-zinc-800" />
+      <div className="h-80 rounded-xl dark:bg-[#1a1a1a] bg-slate-100 dark:border-zinc-800 border-slate-200" />
     </div>
   );
 }
@@ -118,21 +118,21 @@ function StatCard({
   valueClassName?: string;
 }) {
   return (
-    <div className="rounded-xl p-4 bg-[#1a1a1a] border border-zinc-800 flex flex-col justify-between min-h-[88px]">
-      <p className="text-sm text-zinc-400">{label}</p>
+    <div className="rounded-xl p-4 dark:bg-[#1a1a1a] bg-white dark:border-zinc-800 border-slate-200 flex flex-col justify-between min-h-[88px]">
+      <p className="text-sm dark:text-zinc-400 text-slate-600">{label}</p>
       <div className="flex items-end justify-between mt-2 gap-2">
         <div>
-          <p className={`text-lg font-bold leading-tight ${valueClassName ?? "text-white"}`}>{value}</p>
-          {sub && <p className="text-xs text-zinc-500 mt-0.5">{sub}</p>}
+          <p className={`text-lg font-bold leading-tight ${valueClassName ?? "dark:text-white text-slate-900"}`}>{value}</p>
+          {sub && <p className="text-xs dark:text-zinc-500 text-slate-500 mt-0.5">{sub}</p>}
         </div>
         {showViewAll && (
-          <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors shrink-0">
+          <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors shrink-0">
             View All <ChevronRight className="w-3 h-3" />
           </button>
         )}
       </div>
       {accent && (
-        <div className="mt-2 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+        <div className="mt-2 h-1.5 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
           <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: accent }} />
         </div>
       )}
@@ -150,7 +150,7 @@ function CategoryBreakdown({
 }) {
   if (categories.length === 0) {
     return (
-      <p className="text-sm text-zinc-500 py-4 text-center">
+      <p className="text-sm dark:text-zinc-500 text-slate-500 py-4 text-center">
         No expense data yet. Log expenses via WhatsApp to see the breakdown.
       </p>
     );
@@ -163,19 +163,19 @@ function CategoryBreakdown({
         return (
           <div key={cat.name}>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm text-zinc-300 flex items-center gap-2">
+              <span className="text-sm dark:text-zinc-300 text-slate-700 flex items-center gap-2">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-sm"
                   style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }}
                 />
                 {cat.name}
               </span>
-              <span className="text-sm font-medium text-white">
+              <span className="text-sm font-medium dark:text-white text-slate-900">
                 {formatUgx(cat.amount)}
-                <span className="text-xs text-zinc-500 ml-1">({share}%)</span>
+                <span className="text-xs dark:text-zinc-500 text-slate-500 ml-1">({share}%)</span>
               </span>
             </div>
-            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+            <div className="h-2 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
               <div
                 className="h-full rounded-full transition-all"
                 style={{
@@ -195,7 +195,7 @@ function CategoryBreakdown({
 function CostTrendChart({ data }: { data: Array<{ week: string; amount: number }> }) {
   if (data.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-zinc-500 text-sm">
+      <div className="h-64 flex items-center justify-center dark:text-zinc-500 text-slate-500 text-sm">
         No expense history yet to chart.
       </div>
     );
@@ -264,13 +264,13 @@ function AlertItem({
   dotColor: string;
 }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-zinc-800 last:border-0">
+    <div className="flex items-start gap-3 py-3 border-b dark:border-zinc-800 border-slate-200 last:border-0">
       <div className="mt-0.5 shrink-0">
         <Icon className="w-5 h-5" style={{ color: iconColor }} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm leading-relaxed text-white">{title}</p>
-        <p className="text-xs mt-1 text-zinc-500">{subtitle}</p>
+        <p className="text-sm leading-relaxed dark:text-white text-slate-900">{title}</p>
+        <p className="text-xs mt-1 dark:text-zinc-500 text-slate-500">{subtitle}</p>
       </div>
       <div
         className="w-2 h-2 rounded-full shrink-0 mt-1"
@@ -296,18 +296,18 @@ function TransactionItem({
 }) {
   const day = date.split(" ")[0] ?? date.slice(8, 10);
   return (
-    <div className="flex items-center justify-between py-3 border-b border-zinc-800 last:border-0">
+    <div className="flex items-center justify-between py-3 border-b dark:border-zinc-800 border-slate-200 last:border-0">
       <div className="flex items-center gap-4 flex-1 min-w-0">
-        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
-          <span className="text-xs text-zinc-400">{day}</span>
+        <div className="w-10 h-10 rounded-full dark:bg-zinc-800 bg-slate-100 flex items-center justify-center shrink-0">
+          <span className="text-xs dark:text-zinc-400 text-slate-500">{day}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white font-medium truncate">{description}</p>
-          <p className="text-xs text-zinc-500">{category}</p>
+          <p className="text-sm dark:text-white text-slate-900 font-medium truncate">{description}</p>
+          <p className="text-xs dark:text-zinc-500 text-slate-500">{category}</p>
         </div>
       </div>
       <div className="text-right shrink-0 ml-4">
-        <p className="text-sm text-white font-medium">{amount}</p>
+        <p className="text-sm dark:text-white text-slate-900 font-medium">{amount}</p>
         <span
           className={`text-xs px-2 py-0.5 rounded-full ${
             status === "confirmed"
@@ -557,9 +557,9 @@ export default function BudgetPage() {
   if (!projectId) {
     return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-[#0a0a0a] min-h-screen">
-          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
-          <p className="max-w-md mx-auto mb-6 text-zinc-400">
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center dark:bg-[#0a0a0a] bg-slate-50 min-h-screen">
+          <h1 className="text-2xl font-bold mb-2 dark:text-white text-slate-900">{t("budget.title")}</h1>
+          <p className="max-w-md mx-auto mb-6 dark:text-zinc-400 text-slate-600">
             {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
           </p>
           <Button asChild variant="outline">
@@ -575,8 +575,8 @@ export default function BudgetPage() {
   if (showLoading) {
     return (
       <AppLayout>
-        <div className="min-h-screen p-6 bg-[#0a0a0a]">
-          <h1 className="text-2xl font-bold mb-6 text-white">Budgets & Costs</h1>
+        <div className="min-h-screen p-6 dark:bg-[#0a0a0a] bg-slate-50">
+          <h1 className="text-2xl font-bold mb-6 dark:text-white text-slate-900">Budgets & Costs</h1>
           <BudgetSkeleton />
         </div>
       </AppLayout>
@@ -586,9 +586,9 @@ export default function BudgetPage() {
   if (isError) {
     return (
       <AppLayout>
-        <div className="py-16 px-4 text-center min-h-screen bg-[#0a0a0a]">
-          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
-          <p className="mb-4 text-zinc-400">
+        <div className="py-16 px-4 text-center min-h-screen dark:bg-[#0a0a0a] bg-slate-50">
+          <h1 className="text-2xl font-bold mb-2 dark:text-white text-slate-900">{t("budget.title")}</h1>
+          <p className="mb-4 dark:text-zinc-400 text-slate-600">
             {error instanceof Error ? error.message : t("common.error")}
           </p>
           <Button onClick={() => refetch()}>
@@ -603,14 +603,14 @@ export default function BudgetPage() {
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
-      <div className="min-h-screen p-6 bg-[#0a0a0a]">
+      <div className="min-h-screen p-6 dark:bg-[#0a0a0a] bg-slate-50">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-white">Budgets & Costs</h1>
+          <h1 className="text-2xl font-bold dark:text-white text-slate-900">Budgets & Costs</h1>
           <button
             onClick={() => refetch()}
-            className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+            className="p-2 rounded-lg dark:bg-zinc-800 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-700 bg-slate-200 text-slate-600 hover:bg-slate-300 hover:text-slate-900 transition-colors"
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4" />
@@ -634,7 +634,7 @@ export default function BudgetPage() {
             value={formatUgx(Math.abs(balance))}
             sub={balance < 0 ? "⚠️ Over budget!" : balance === budget ? "No expenses yet" : undefined}
             accent={balance >= 0 && balance !== budget ? `${Math.min(100, percentSpent)}%` : undefined}
-            valueClassName={balance < 0 ? "text-red-400" : undefined}
+            valueClassName={balance < 0 ? "text-red-500 dark:text-red-400" : undefined}
           />
           <StatCard
             label="This Month"
@@ -660,10 +660,10 @@ export default function BudgetPage() {
           <div className="lg:col-span-2 space-y-6">
 
             {/* Category Breakdown Card */}
-            <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
+            <div className="rounded-xl p-6 dark:bg-[#1a1a1a] bg-white dark:border-zinc-800 border-slate-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Spending by Category</h3>
-                <span className="text-xs text-zinc-500">
+                <h3 className="text-lg font-semibold dark:text-white text-slate-900">Spending by Category</h3>
+                <span className="text-xs dark:text-zinc-500 text-slate-500">
                   {expenses.length} expense{expenses.length !== 1 ? "s" : ""} total
                       </span>
                     </div>
@@ -671,24 +671,24 @@ export default function BudgetPage() {
               <CategoryBreakdown categories={categoryTotals} totalSpent={totalSpent} />
 
               {categoryTotals.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
-                  <span className="text-sm text-zinc-400">Total Spent</span>
-                  <span className="text-sm font-bold text-white">{formatUgxFull(totalSpent)}</span>
+                <div className="mt-4 pt-4 border-t dark:border-zinc-800 border-slate-200 flex items-center justify-between">
+                  <span className="text-sm dark:text-zinc-400 text-slate-600">Total Spent</span>
+                  <span className="text-sm font-bold dark:text-white text-slate-900">{formatUgxFull(totalSpent)}</span>
                 </div>
               )}
             </div>
 
             {/* Cost Trend Card */}
-            <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
+            <div className="rounded-xl p-6 dark:bg-[#1a1a1a] bg-white dark:border-zinc-800 border-slate-200">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">Cost Trend</h3>
-                <span className="text-xs text-zinc-500">Last 8 weeks</span>
+                <h3 className="text-lg font-semibold dark:text-white text-slate-900">Cost Trend</h3>
+                <span className="text-xs dark:text-zinc-500 text-slate-500">Last 8 weeks</span>
               </div>
 
               <CostTrendChart data={costTrendData} />
 
               {weeklyBurn > 0 && (
-                <p className="text-xs mt-4 text-zinc-500">
+                <p className="text-xs mt-4 dark:text-zinc-500 text-slate-500">
                   ~{formatUgx(weeklyBurn)} average weekly spend over the last 30 days
                 </p>
               )}
@@ -696,20 +696,20 @@ export default function BudgetPage() {
           </div>
 
           {/* RIGHT COLUMN — Real Alerts */}
-          <div className="rounded-xl p-6 h-fit bg-[#1a1a1a] border border-zinc-800">
+          <div className="rounded-xl p-6 h-fit dark:bg-[#1a1a1a] bg-white dark:border-zinc-800 border-slate-200">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Alerts</h3>
-              <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
+              <h3 className="text-lg font-semibold dark:text-white text-slate-900">Alerts</h3>
+              <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors">
                 View All <ChevronRight className="w-3 h-3" />
               </button>
             </div>
 
             <div className="flex items-center justify-between mb-4">
-              <span className="text-sm text-zinc-400">
+              <span className="text-sm dark:text-zinc-400 text-slate-600">
                 {alerts.filter((a) => a.dotColor !== COLORS.green).length} active alert
                 {alerts.filter((a) => a.dotColor !== COLORS.green).length !== 1 ? "s" : ""}
                     </span>
-              <button className="text-zinc-500 hover:text-white">
+              <button className="dark:text-zinc-500 text-slate-500 hover:text-slate-700 dark:hover:text-white">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
@@ -723,18 +723,18 @@ export default function BudgetPage() {
         </div>
 
         {/* BOTTOM — Recent Transactions */}
-        <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
+        <div className="rounded-xl p-6 dark:bg-[#1a1a1a] bg-white dark:border-zinc-800 border-slate-200">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Recent Transactions</h3>
-            <span className="text-xs text-zinc-500">
+            <h3 className="text-lg font-semibold dark:text-white text-slate-900">Recent Transactions</h3>
+            <span className="text-xs dark:text-zinc-500 text-slate-500">
               Showing {recentTransactions.length} of {expenses.length}
             </span>
           </div>
 
           {recentTransactions.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-zinc-500 text-sm">No transactions yet.</p>
-              <p className="text-zinc-600 text-xs mt-1">
+              <p className="dark:text-zinc-500 text-slate-500 text-sm">No transactions yet.</p>
+              <p className="dark:text-zinc-600 text-slate-400 text-xs mt-1">
                 Log expenses via WhatsApp to see them here.
               </p>
             </div>
