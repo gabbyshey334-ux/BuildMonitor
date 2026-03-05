@@ -10,17 +10,25 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
   LineChart,
   Line,
+  XAxis,
+  YAxis,
   Tooltip,
+  Area,
+  AreaChart,
 } from "recharts";
-import { RefreshCw, ChevronRight, MoreHorizontal, AlertTriangle, Zap } from "lucide-react";
+import {
+  RefreshCw,
+  ChevronRight,
+  MoreHorizontal,
+  AlertTriangle,
+  Zap,
+  PackageOpen,
+  TrendingUp,
+} from "lucide-react";
 
-// Color palette matching the screenshot
+// ─── Color palette ────────────────────────────────────────────────────────────
 const COLORS = {
   teal: "#14b8a6",
   green: "#22c55e",
@@ -36,7 +44,6 @@ const COLORS = {
   textSecondary: "#a1a1aa",
 };
 
-// Category colors for budget comparison bars
 const PROJECT_COLORS = [
   COLORS.green,
   COLORS.teal,
@@ -45,10 +52,11 @@ const PROJECT_COLORS = [
   COLORS.pink,
 ];
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatUgx(n: number): string {
   const num = Number(n) || 0;
-  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(0)}B`;
-  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(0)}M`;
+  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(1)}B`;
+  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(1)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
   return `UGX ${num.toLocaleString()}`;
 }
@@ -59,6 +67,12 @@ function formatUgxFull(amount: unknown): string {
   return `UGX ${Math.round(n).toLocaleString()}`;
 }
 
+function pct(numerator: number, denominator: number): number {
+  if (!denominator || denominator <= 0) return 0;
+  return Math.min(100, Math.round((numerator / denominator) * 100));
+}
+
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
@@ -79,114 +93,121 @@ function BudgetSkeleton() {
   );
 }
 
-// Stat Card Component
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
-  dotColor,
+  sub,
+  accent,
   showViewAll,
 }: {
   label: string;
   value: string;
-  dotColor?: string;
+  sub?: string;
+  accent?: string;
   showViewAll?: boolean;
 }) {
   return (
-    <div className="rounded-xl p-4 bg-[#1a1a1a] border border-zinc-800 flex flex-col justify-between">
+    <div className="rounded-xl p-4 bg-[#1a1a1a] border border-zinc-800 flex flex-col justify-between min-h-[88px]">
       <p className="text-sm text-zinc-400">{label}</p>
-      <div className="flex items-center justify-between mt-2">
-        <p className="text-lg font-bold text-white">
-          {value}
-        </p>
+      <div className="flex items-end justify-between mt-2 gap-2">
+        <div>
+          <p className="text-lg font-bold text-white leading-tight">{value}</p>
+          {sub && <p className="text-xs text-zinc-500 mt-0.5">{sub}</p>}
+        </div>
         {showViewAll && (
-          <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
+          <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors shrink-0">
             View All <ChevronRight className="w-3 h-3" />
           </button>
         )}
       </div>
+      {accent && (
+        <div className="mt-2 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+          <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: accent }} />
+        </div>
+      )}
     </div>
   );
 }
 
-// Budget Comparison Component - Matches screenshot exactly
-function BudgetComparison({
-  projects,
+// ─── Category Breakdown (replaces mock BudgetComparison) ─────────────────────
+function CategoryBreakdown({
+  categories,
+  totalSpent,
 }: {
-  projects: Array<{ name: string; progress: number; budgetUsed: number }>;
+  categories: Array<{ name: string; amount: number }>;
+  totalSpent: number;
 }) {
-  return (
-    <div className="space-y-4">
-      {/* Project Progress Bar */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-zinc-300">Project Progress</span>
-          <span className="text-sm font-bold text-white">75%</span>
-        </div>
-        <div className="h-3 rounded-full overflow-hidden flex bg-zinc-800">
-          {projects.map((project, i) => (
-            <div
-              key={project.name}
-              style={{ 
-                width: `${project.progress}%`, 
-                backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] 
-              }}
-              className="h-full"
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Budget Used Bar */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-zinc-300">Budget Used</span>
-          <span className="text-sm font-bold text-white">90%</span>
-        </div>
-        <div className="h-3 rounded-full overflow-hidden flex bg-zinc-800">
-          {projects.map((project, i) => (
-            <div
-              key={project.name}
-              style={{ 
-                width: `${project.budgetUsed}%`, 
-                backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] 
-              }}
-              className="h-full"
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 mt-4">
-        {projects.map((project, i) => (
-          <div key={project.name} className="flex items-center gap-2">
-            <div 
-              className="w-3 h-3 rounded" 
-              style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }} 
-            />
-            <span className="text-xs text-zinc-400">{project.name}</span>
-          </div>
-        ))}
-      </div>
-
-      <p className="text-xs italic mt-2 text-zinc-500">
-        Budget ahead of progress by 15%
+  if (categories.length === 0) {
+    return (
+      <p className="text-sm text-zinc-500 py-4 text-center">
+        No expense data yet. Log expenses via WhatsApp to see the breakdown.
       </p>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {categories.map((cat, i) => {
+        const share = pct(cat.amount, totalSpent);
+        return (
+          <div key={cat.name}>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-sm text-zinc-300 flex items-center gap-2">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-sm"
+                  style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }}
+                />
+                {cat.name}
+              </span>
+              <span className="text-sm font-medium text-white">
+                {formatUgx(cat.amount)}
+                <span className="text-xs text-zinc-500 ml-1">({share}%)</span>
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${share}%`,
+                  backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// Cost Trend Chart
+// ─── Cost Trend Chart (real weekly data) ─────────────────────────────────────
 function CostTrendChart({ data }: { data: Array<{ week: string; amount: number }> }) {
+  if (data.length === 0) {
+    return (
+      <div className="h-64 flex items-center justify-center text-zinc-500 text-sm">
+        No expense history yet to chart.
+      </div>
+    );
+  }
+
   return (
     <div className="h-64">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+        <AreaChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="gradRed" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={COLORS.red} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={COLORS.red} stopOpacity={0} />
+            </linearGradient>
+          </defs>
           <YAxis
             axisLine={false}
             tickLine={false}
             tick={{ fill: COLORS.textSecondary, fontSize: 11 }}
-            tickFormatter={(v) => `UGX ${(v / 1_000_000).toFixed(0)}M`}
+            tickFormatter={(v) =>
+              v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${(v / 1_000).toFixed(0)}K`
+            }
           />
           <XAxis
             dataKey="week"
@@ -201,67 +222,55 @@ function CostTrendChart({ data }: { data: Array<{ week: string; amount: number }
               borderRadius: "8px",
             }}
             labelStyle={{ color: COLORS.textSecondary }}
-            formatter={(value: number) => [formatUgxFull(value), "Amount"]}
+            formatter={(value: number) => [formatUgxFull(value), "Spent"]}
           />
-          <Line
+          <Area
             type="monotone"
             dataKey="amount"
             stroke={COLORS.red}
             strokeWidth={3}
+            fill="url(#gradRed)"
             dot={{ fill: COLORS.red, strokeWidth: 0, r: 4 }}
             activeDot={{ r: 6, fill: COLORS.red }}
           />
-          {/* Gradient fill under line */}
-          <defs>
-            <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={COLORS.red} stopOpacity={0.3}/>
-              <stop offset="95%" stopColor={COLORS.red} stopOpacity={0}/>
-            </linearGradient>
-          </defs>
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     </div>
   );
 }
 
-// Alert Item Component
+// ─── Alert Item ───────────────────────────────────────────────────────────────
 function AlertItem({
   icon: Icon,
   iconColor,
   title,
   subtitle,
-  time,
   dotColor,
 }: {
   icon: React.ElementType;
   iconColor: string;
   title: string;
   subtitle: string;
-  time: string;
   dotColor: string;
 }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-zinc-800">
-      <div className="mt-0.5">
+    <div className="flex items-start gap-3 py-3 border-b border-zinc-800 last:border-0">
+      <div className="mt-0.5 shrink-0">
         <Icon className="w-5 h-5" style={{ color: iconColor }} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm leading-relaxed text-white">
-          {title}
-        </p>
-        <p className="text-xs mt-1 text-zinc-500">
-          {subtitle}
-        </p>
-        <p className="text-xs mt-1 text-zinc-500">
-          {time}
-        </p>
+        <p className="text-sm leading-relaxed text-white">{title}</p>
+        <p className="text-xs mt-1 text-zinc-500">{subtitle}</p>
       </div>
-      <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: dotColor }} />
+      <div
+        className="w-2 h-2 rounded-full shrink-0 mt-1"
+        style={{ backgroundColor: dotColor }}
+      />
     </div>
   );
 }
 
-// Recent Transaction Item
+// ─── Transaction Item ─────────────────────────────────────────────────────────
 function TransactionItem({
   date,
   description,
@@ -275,24 +284,27 @@ function TransactionItem({
   amount: string;
   status: "confirmed" | "pending";
 }) {
+  const day = date.split(" ")[0] ?? date.slice(8, 10);
   return (
     <div className="flex items-center justify-between py-3 border-b border-zinc-800 last:border-0">
-      <div className="flex items-center gap-4 flex-1">
-        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center">
-          <span className="text-xs text-zinc-400">{date.split(" ")[0]}</span>
+      <div className="flex items-center gap-4 flex-1 min-w-0">
+        <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center shrink-0">
+          <span className="text-xs text-zinc-400">{day}</span>
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm text-white font-medium truncate">{description}</p>
           <p className="text-xs text-zinc-500">{category}</p>
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right shrink-0 ml-4">
         <p className="text-sm text-white font-medium">{amount}</p>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${
-          status === "confirmed" 
-            ? "bg-green-500/20 text-green-400" 
-            : "bg-amber-500/20 text-amber-400"
-        }`}>
+        <span
+          className={`text-xs px-2 py-0.5 rounded-full ${
+            status === "confirmed"
+              ? "bg-green-500/20 text-green-400"
+              : "bg-amber-500/20 text-amber-400"
+          }`}
+        >
           {status === "confirmed" ? "Confirmed" : "Pending"}
         </span>
       </div>
@@ -300,13 +312,18 @@ function TransactionItem({
   );
 }
 
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function BudgetPage() {
   const { t } = useLanguage();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];
   const hasProjects = projects.length > 0;
-  const projectIdFromUrl = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("project") : null;
+
+  const projectIdFromUrl =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("project")
+      : null;
   const projectId = projectIdFromUrl || currentProject?.id || null;
 
   const { data, isLoading, isError, error, refetch } = useProjectExpenses(projectId);
@@ -315,69 +332,224 @@ export default function BudgetPage() {
   const isProjectSwitch = projectId != null && data === undefined && !isError;
   const showLoading = isLoading || isProjectSwitch;
 
-  // Mock data matching screenshot
-  const mockProjects = [
-    { name: "Hilltop Apts.", progress: 25, budgetUsed: 20 },
-    { name: "LakeView", progress: 20, budgetUsed: 25 },
-    { name: "GreenField", progress: 15, budgetUsed: 15 },
-    { name: "Serene Apts.", progress: 10, budgetUsed: 20 },
-    { name: "Others", progress: 5, budgetUsed: 10 },
-  ];
+  // ── Derive all real numbers from expenses ──────────────────────────────────
+  const expenses: any[] = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+  const materials: any[] = useMemo(
+    () => (Array.isArray(materialsData) ? materialsData : []),
+    [materialsData]
+  );
 
-  const costTrendData = [
-    { week: "Week 1", amount: 60_000_000 },
-    { week: "Week 2", amount: 80_000_000 },
-    { week: "Week 3", amount: 85_000_000 },
-    { week: "Week 4", amount: 112_000_000 },
-  ];
+  const budget = useMemo(
+    () => parseFloat(String(currentProject?.budget || 0)),
+    [currentProject]
+  );
 
-  const alerts = [
-    {
-      icon: AlertTriangle,
-      iconColor: COLORS.amber,
-      title: "Tiles are UGX 400,000 over their allocated budget.",
-      subtitle: "Budget Overrun",
-      time: "",
-      dotColor: COLORS.amber,
-    },
-    {
-      icon: Zap,
-      iconColor: COLORS.orange,
-      title: "Fuel costs increased by 15% This week.",
-      subtitle: "Price Spike: 2h ago",
-      time: "",
-      dotColor: COLORS.orange,
-    },
-    {
-      icon: AlertTriangle,
-      iconColor: COLORS.red,
-      title: "Steel inventory is running low at 3 tons remaining",
-      subtitle: "Detected Yesterday",
-      time: "",
-      dotColor: COLORS.red,
-    },
-  ];
+  const totalSpent = useMemo(
+    () => expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0),
+    [expenses]
+  );
 
-  const recentTransactions = [
-    { date: "Jan 15", description: "Cement purchase - 50 bags", category: "Materials", amount: "UGX 2,500,000", status: "confirmed" as const },
-    { date: "Jan 14", description: "Labor payment - Week 2", category: "Labor", amount: "UGX 5,000,000", status: "confirmed" as const },
-    { date: "Jan 13", description: "Steel rods - 2 tons", category: "Materials", amount: "UGX 8,000,000", status: "pending" as const },
-    { date: "Jan 12", description: "Transport costs", category: "Logistics", amount: "UGX 500,000", status: "confirmed" as const },
-    { date: "Jan 11", description: "Equipment rental", category: "Equipment", amount: "UGX 1,200,000", status: "confirmed" as const },
-  ];
+  const balance = Math.max(0, budget - totalSpent);
+  const percentSpent = pct(totalSpent, budget);
+  const overBudget = totalSpent > budget && budget > 0;
 
+  // Last 30 days spend
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const recentSpend = useMemo(
+    () =>
+      expenses
+        .filter((e) => new Date(e.expense_date || e.created_at).getTime() >= thirtyDaysAgo)
+        .reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0),
+    [expenses]
+  );
+
+  // Weekly burn for "weeks remaining" estimate
+  const weeklyBurn = recentSpend / 4.3;
+  const weeksRemaining =
+    weeklyBurn > 0 ? Math.max(0, Math.round(balance / weeklyBurn)) : null;
+
+  // ── Category breakdown (group by description keywords) ────────────────────
+  const CATEGORY_KEYWORDS: Record<string, string[]> = {
+    Materials: ["cement", "sand", "stone", "tiles", "brick", "steel", "rod", "iron", "timber", "wood", "paint", "wire", "pipe", "block", "material", "receipt"],
+    Labor: ["labor", "labour", "worker", "casual", "wage", "plumber", "electrician", "mason", "carpenter", "painter", "driver"],
+    Equipment: ["equipment", "tool", "machine", "rental", "hire", "generator", "pump", "mixer"],
+    Logistics: ["transport", "delivery", "fuel", "logistics", "truck"],
+  };
+
+  const categoryTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    expenses.forEach((e) => {
+      const desc = String(e.description || "").toLowerCase();
+      let matched = false;
+      for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        if (keywords.some((kw) => desc.includes(kw))) {
+          totals[cat] = (totals[cat] || 0) + parseFloat(String(e.amount || 0));
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        totals["Other"] = (totals["Other"] || 0) + parseFloat(String(e.amount || 0));
+      }
+    });
+    return Object.entries(totals)
+      .map(([name, amount]) => ({ name, amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [expenses]);
+
+  // ── Weekly cost trend (last 8 weeks) ──────────────────────────────────────
+  const costTrendData = useMemo(() => {
+    const weeks: Record<string, number> = {};
+    const now = new Date();
+    // Initialise last 8 weeks with 0
+    for (let i = 7; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i * 7);
+      const label = `W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString("default", { month: "short" })}`;
+      weeks[label] = 0;
+    }
+    expenses.forEach((e) => {
+      const date = new Date(e.expense_date || e.created_at);
+      const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+      if (diffDays > 56) return; // only last 8 weeks
+      const weekIndex = Math.floor(diffDays / 7);
+      const d = new Date(now);
+      d.setDate(d.getDate() - weekIndex * 7);
+      const label = `W${Math.ceil((d.getDate()) / 7)} ${d.toLocaleString("default", { month: "short" })}`;
+      if (weeks[label] !== undefined) {
+        weeks[label] += parseFloat(String(e.amount || 0));
+      }
+    });
+    return Object.entries(weeks).map(([week, amount]) => ({ week, amount }));
+  }, [expenses]);
+
+  // ── Real-time alerts ───────────────────────────────────────────────────────
+  const alerts = useMemo(() => {
+    const result: Array<{
+      icon: React.ElementType;
+      iconColor: string;
+      title: string;
+      subtitle: string;
+      dotColor: string;
+    }> = [];
+
+    // Over budget alert
+    if (overBudget) {
+      result.push({
+        icon: AlertTriangle,
+        iconColor: COLORS.red,
+        title: `Total spend is ${formatUgx(totalSpent - budget)} over budget!`,
+        subtitle: "Budget Overrun",
+        dotColor: COLORS.red,
+      });
+    } else if (percentSpent >= 80) {
+      result.push({
+        icon: AlertTriangle,
+        iconColor: COLORS.amber,
+        title: `${percentSpent}% of budget used. Only ${formatUgx(balance)} remaining.`,
+        subtitle: "High Budget Usage",
+        dotColor: COLORS.amber,
+      });
+    }
+
+    // Weekly spend spike: if this week > 1.5× last week
+    if (costTrendData.length >= 2) {
+      const thisWeek = costTrendData[costTrendData.length - 1]?.amount || 0;
+      const lastWeek = costTrendData[costTrendData.length - 2]?.amount || 0;
+      if (lastWeek > 0 && thisWeek > lastWeek * 1.5) {
+        const spike = Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+        result.push({
+          icon: Zap,
+          iconColor: COLORS.orange,
+          title: `Weekly spend jumped ${spike}% vs last week (${formatUgx(thisWeek)} this week).`,
+          subtitle: "Spend Spike",
+          dotColor: COLORS.orange,
+        });
+      }
+    }
+
+    // Low material stock alerts
+    materials.forEach((m) => {
+      if (parseFloat(String(m.quantity || 0)) <= 5) {
+        result.push({
+          icon: PackageOpen,
+          iconColor: COLORS.red,
+          title: `${m.material_name} stock is low: only ${m.quantity} ${m.unit || "units"} remaining.`,
+          subtitle: "Low Stock",
+          dotColor: COLORS.red,
+        });
+      }
+    });
+
+    // Weeks remaining warning
+    if (weeksRemaining !== null && weeksRemaining <= 4 && balance > 0) {
+      result.push({
+        icon: TrendingUp,
+        iconColor: COLORS.amber,
+        title: `At current burn rate, budget runs out in ~${weeksRemaining} week${weeksRemaining === 1 ? "" : "s"}.`,
+        subtitle: "Burn Rate Warning",
+        dotColor: COLORS.amber,
+      });
+    }
+
+    if (result.length === 0) {
+      result.push({
+        icon: AlertTriangle,
+        iconColor: COLORS.green,
+        title: "All good! No budget alerts at this time.",
+        subtitle: "Budget on track",
+        dotColor: COLORS.green,
+      });
+    }
+
+    return result;
+  }, [overBudget, percentSpent, budget, balance, totalSpent, costTrendData, materials, weeksRemaining]);
+
+  // ── Recent transactions (last 10, most recent first) ──────────────────────
+  const recentTransactions = useMemo(() => {
+    return [...expenses]
+      .sort(
+        (a, b) =>
+          new Date(b.expense_date || b.created_at).getTime() -
+          new Date(a.expense_date || a.created_at).getTime()
+      )
+      .slice(0, 10)
+      .map((e) => {
+        const date = new Date(e.expense_date || e.created_at);
+        const dateStr = date.toLocaleDateString("en-UG", { month: "short", day: "numeric" });
+        const desc = String(e.description || "Expense");
+        // Determine category
+        let category = "Other";
+        const descLower = desc.toLowerCase();
+        for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+          if (keywords.some((kw) => descLower.includes(kw))) {
+            category = cat;
+            break;
+          }
+        }
+        return {
+          date: dateStr,
+          description: desc,
+          category,
+          amount: formatUgxFull(e.amount),
+          status: (e.source === "whatsapp" ? "confirmed" : "confirmed") as "confirmed" | "pending",
+        };
+      });
+  }, [expenses]);
+
+  // ── Guard: no project ──────────────────────────────────────────────────────
   if (!projectId) {
     return (
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center bg-[#0a0a0a] min-h-screen">
-          <h1 className="text-2xl font-bold mb-2 text-white">
-            {t("budget.title")}
-          </h1>
+          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
           <p className="max-w-md mx-auto mb-6 text-zinc-400">
             {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
           </p>
           <Button asChild variant="outline">
-            <Link href="/projects">{hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}</Link>
+            <Link href="/projects">
+              {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
+            </Link>
           </Button>
         </div>
       </AppLayout>
@@ -388,9 +560,7 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="min-h-screen p-6 bg-[#0a0a0a]">
-          <h1 className="text-2xl font-bold mb-6 text-white">
-            Budgets & Costs
-          </h1>
+          <h1 className="text-2xl font-bold mb-6 text-white">Budgets & Costs</h1>
           <BudgetSkeleton />
         </div>
       </AppLayout>
@@ -401,9 +571,7 @@ export default function BudgetPage() {
     return (
       <AppLayout>
         <div className="py-16 px-4 text-center min-h-screen bg-[#0a0a0a]">
-          <h1 className="text-2xl font-bold mb-2 text-white">
-            {t("budget.title")}
-          </h1>
+          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
           <p className="mb-4 text-zinc-400">
             {error instanceof Error ? error.message : t("common.error")}
           </p>
@@ -416,87 +584,104 @@ export default function BudgetPage() {
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <div className="min-h-screen p-6 bg-[#0a0a0a]">
-        <h1 className="text-2xl font-bold mb-6 text-white">
-          Budgets & Costs
-        </h1>
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-white">Budgets & Costs</h1>
+          <button
+            onClick={() => refetch()}
+            className="p-2 rounded-lg bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* TOP ROW — 5 Stat Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <StatCard label="Total Budget" value="UGX 400,000,000" />
-          <StatCard label="Total Expenditure" value="UGX 360,000,000" />
-          <StatCard label="Balance" value="UGX 40,000,000" />
-          <StatCard label="Balance" value="UGX 40,000,000" />
           <StatCard
-            label="Percentage Spent"
-            value="90% spent"
-            dotColor={COLORS.green}
+            label="Total Budget"
+            value={formatUgx(budget)}
+            sub={budget === 0 ? "Not set" : undefined}
+          />
+          <StatCard
+            label="Total Expenditure"
+            value={formatUgx(totalSpent)}
+            sub={`${expenses.length} transactions`}
+          />
+          <StatCard
+            label="Balance"
+            value={formatUgx(balance)}
+            sub={overBudget ? "⚠️ Over budget!" : undefined}
+            accent={`${percentSpent}%`}
+          />
+          <StatCard
+            label="This Month"
+            value={formatUgx(recentSpend)}
+            sub="Last 30 days"
+          />
+          <StatCard
+            label="Budget Used"
+            value={`${percentSpent}%`}
+            sub={
+              weeksRemaining !== null
+                ? `~${weeksRemaining} wk${weeksRemaining === 1 ? "" : "s"} remaining`
+                : undefined
+            }
             showViewAll
           />
         </div>
 
         {/* MAIN AREA — 2 Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* LEFT COLUMN (~70%) */}
+
+          {/* LEFT COLUMN */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Budget Comparison Card */}
+
+            {/* Category Breakdown Card */}
             <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Budget Comparison
-                </h3>
-                <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#14b8a6]/20 text-[#14b8a6] hover:bg-[#14b8a6]/30 transition-colors">
-                  View All <ChevronRight className="w-3 h-3" />
-                </button>
+                <h3 className="text-lg font-semibold text-white">Spending by Category</h3>
+                <span className="text-xs text-zinc-500">
+                  {expenses.length} expense{expenses.length !== 1 ? "s" : ""} total
+                </span>
               </div>
 
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-medium text-white">
-                    Progress vs. Expenditure
-                  </h4>
-                  <div className="relative">
-                    <select className="text-xs px-3 py-1.5 rounded-md appearance-none pr-8 bg-zinc-800 text-white border border-zinc-700 focus:outline-none">
-                      <option>Budget (Descending)</option>
-                    </select>
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 pointer-events-none">▼</span>
-                  </div>
+              <CategoryBreakdown categories={categoryTotals} totalSpent={totalSpent} />
+
+              {categoryTotals.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-zinc-800 flex items-center justify-between">
+                  <span className="text-sm text-zinc-400">Total Spent</span>
+                  <span className="text-sm font-bold text-white">{formatUgxFull(totalSpent)}</span>
                 </div>
-
-                <BudgetComparison projects={mockProjects} />
-              </div>
+              )}
             </div>
 
             {/* Cost Trend Card */}
             <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Cost Trend
-                </h3>
-                <div className="relative">
-                  <select className="text-xs px-3 py-1.5 rounded-md appearance-none pr-8 bg-zinc-800 text-white border border-zinc-700 focus:outline-none">
-                    <option>1 Month</option>
-                  </select>
-                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-400 pointer-events-none">▼</span>
-                </div>
+                <h3 className="text-lg font-semibold text-white">Cost Trend</h3>
+                <span className="text-xs text-zinc-500">Last 8 weeks</span>
               </div>
 
               <CostTrendChart data={costTrendData} />
 
-              <p className="text-xs mt-4 text-zinc-500">
-                UGX 29M spent last week
-              </p>
+              {weeklyBurn > 0 && (
+                <p className="text-xs mt-4 text-zinc-500">
+                  ~{formatUgx(weeklyBurn)} average weekly spend over the last 30 days
+                </p>
+              )}
             </div>
           </div>
 
-          {/* RIGHT COLUMN (~30%) — Alerts */}
+          {/* RIGHT COLUMN — Real Alerts */}
           <div className="rounded-xl p-6 h-fit bg-[#1a1a1a] border border-zinc-800">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">
-                Alerts
-              </h3>
+              <h3 className="text-lg font-semibold text-white">Alerts</h3>
               <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors">
                 View All <ChevronRight className="w-3 h-3" />
               </button>
@@ -504,31 +689,47 @@ export default function BudgetPage() {
 
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-zinc-400">
-                Over Budget Items: 3
+                {alerts.filter((a) => a.dotColor !== COLORS.green).length} active alert
+                {alerts.filter((a) => a.dotColor !== COLORS.green).length !== 1 ? "s" : ""}
               </span>
               <button className="text-zinc-500 hover:text-white">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="divide-y divide-zinc-800">
-              {alerts.map((alert, i) => <AlertItem key={i} {...alert} />)}
+            <div>
+              {alerts.map((alert, i) => (
+                <AlertItem key={i} {...alert} />
+              ))}
             </div>
           </div>
         </div>
 
         {/* BOTTOM — Recent Transactions */}
         <div className="rounded-xl p-6 bg-[#1a1a1a] border border-zinc-800">
-          <h3 className="text-lg font-semibold mb-4 text-white">
-            Recent Transactions
-          </h3>
-
-          <div className="divide-y divide-zinc-800">
-            {recentTransactions.map((transaction, i) => (
-              <TransactionItem key={i} {...transaction} />
-            ))}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-white">Recent Transactions</h3>
+            <span className="text-xs text-zinc-500">
+              Showing {recentTransactions.length} of {expenses.length}
+            </span>
           </div>
+
+          {recentTransactions.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-zinc-500 text-sm">No transactions yet.</p>
+              <p className="text-zinc-600 text-xs mt-1">
+                Log expenses via WhatsApp to see them here.
+              </p>
+            </div>
+          ) : (
+            <div>
+              {recentTransactions.map((tx, i) => (
+                <TransactionItem key={i} {...tx} />
+              ))}
+            </div>
+          )}
         </div>
+
       </div>
     </AppLayout>
   );
