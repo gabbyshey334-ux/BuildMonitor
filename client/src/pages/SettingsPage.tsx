@@ -91,6 +91,45 @@ export default function SettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
+  const [linkPhone, setLinkPhone] = useState("");
+  const [linkingWhatsApp, setLinkingWhatsApp] = useState(false);
+  const [linkError, setLinkError] = useState("");
+  const [linkSuccess, setLinkSuccess] = useState(false);
+
+  const handleLinkWhatsApp = async () => {
+    setLinkError("");
+    setLinkSuccess(false);
+    if (!linkPhone.trim()) {
+      setLinkError("Enter your WhatsApp number (e.g. +2349165631240)");
+      return;
+    }
+    setLinkingWhatsApp(true);
+    try {
+      const token = typeof window !== "undefined" ? getToken() : null;
+      const res = await fetch("/api/auth/link-whatsapp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ phone: linkPhone.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Link failed");
+      setLinkSuccess(true);
+      setLinkPhone("");
+      await invalidateProjects();
+      toast({
+        title: "WhatsApp linked",
+        description: "Projects created via WhatsApp will now appear in My Projects.",
+      });
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : "Failed to link");
+    } finally {
+      setLinkingWhatsApp(false);
+    }
+  };
+
   const handlePasswordChange = async () => {
     setPasswordError("");
     setPasswordSuccess(false);
@@ -253,23 +292,56 @@ export default function SettingsPage() {
   if (!projectId) {
     return (
       <AppLayout>
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
-            <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
+        <div className="max-w-2xl mx-auto">
+          <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("settings.title")}</h1>
+
+          <Card className="mb-6 dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200 border-emerald-500/30">
+            <CardHeader>
+              <CardTitle className="dark:text-white text-slate-800 text-lg">📱 Link WhatsApp number</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="dark:text-zinc-400 text-slate-600 text-sm">
+                Created a project via WhatsApp? Link the same number here to see those projects in My Projects.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={linkPhone}
+                  onChange={(e) => setLinkPhone(e.target.value)}
+                  placeholder="+2349165631240"
+                  className="flex-1 min-w-[180px] dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
+                />
+                <Button
+                  type="button"
+                  onClick={handleLinkWhatsApp}
+                  disabled={linkingWhatsApp}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {linkingWhatsApp ? "Linking…" : "Link"}
+                </Button>
+              </div>
+              {linkError && <p className="text-red-500 text-sm">{linkError}</p>}
+              {linkSuccess && <p className="text-emerald-500 text-sm">✅ Linked. Go to My Projects to see them.</p>}
+            </CardContent>
+          </Card>
+
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+            <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
+              <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
+            </div>
+            <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
+              {hasProjects ? "No project selected" : "Create your first project"}
+            </h2>
+            <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
+              {hasProjects
+                ? "Select a project from the list or create your first project to manage settings."
+                : "Get started by creating your first project."}
+            </p>
+            <Button asChild className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90">
+              <Link href="/projects">
+                <a>Create your first project</a>
+              </Link>
+            </Button>
           </div>
-          <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
-            {hasProjects ? "No project selected" : "Create your first project"}
-          </h2>
-          <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
-            {hasProjects
-              ? "Select a project from the list or create your first project to manage settings."
-              : "Get started by creating your first project."}
-          </p>
-          <Button asChild className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90">
-            <Link href="/projects">
-              <a>Create your first project</a>
-            </Link>
-          </Button>
         </div>
       </AppLayout>
     );
@@ -294,6 +366,38 @@ export default function SettingsPage() {
     <AppLayout>
       <div className="max-w-2xl mx-auto">
         <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("settings.title")}</h1>
+
+        {/* Link WhatsApp — show so WhatsApp-created projects appear in My Projects */}
+        <Card className="mb-6 dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200 border-emerald-500/30">
+          <CardHeader>
+            <CardTitle className="dark:text-white text-slate-800 text-lg flex items-center gap-2">
+              📱 Link WhatsApp number
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="dark:text-zinc-400 text-slate-600 text-sm">
+              Created a project via WhatsApp? Link the same number here to see those projects in My Projects.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={linkPhone}
+                onChange={(e) => setLinkPhone(e.target.value)}
+                placeholder="+2349165631240"
+                className="flex-1 min-w-[180px] dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
+              />
+              <Button
+                type="button"
+                onClick={handleLinkWhatsApp}
+                disabled={linkingWhatsApp}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {linkingWhatsApp ? "Linking…" : "Link"}
+              </Button>
+            </div>
+            {linkError && <p className="text-red-500 text-sm">{linkError}</p>}
+            {linkSuccess && <p className="text-emerald-500 text-sm">✅ Linked. Refresh My Projects to see WhatsApp projects.</p>}
+          </CardContent>
+        </Card>
 
         {error && (
           <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm mb-6">

@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, FolderOpen } from "lucide-react";
+import { Plus, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProjectCard } from "@/components/projects/ProjectCard";
@@ -17,6 +17,7 @@ import type { Project } from "@/contexts/ProjectContext";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
+const PROJECTS_PER_PAGE = 6;
 
 function ProjectsLoadingSkeleton() {
   return (
@@ -44,6 +45,7 @@ export default function ProjectsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjects();
 
@@ -55,6 +57,16 @@ export default function ProjectsPage() {
 
   const list = Array.isArray(fetched) ? fetched : projects;
   const hasProjects = list.length > 0;
+
+  const totalPages = Math.max(1, Math.ceil(list.length / PROJECTS_PER_PAGE));
+  const paginatedList = useMemo(() => {
+    const start = (page - 1) * PROJECTS_PER_PAGE;
+    return list.slice(start, start + PROJECTS_PER_PAGE);
+  }, [list, page]);
+
+  useEffect(() => {
+    if (page > totalPages && totalPages >= 1) setPage(1);
+  }, [page, totalPages]);
 
   const handleCreateProject = async (form: NewProjectFormData) => {
     setCreating(true);
@@ -119,11 +131,41 @@ export default function ProjectsPage() {
             </Button>
           </div>
         ) : hasProjects ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {list.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedList.map((project) => (
+                <ProjectCard key={project.id} project={project} />
+              ))}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="dark:border-zinc-600 dark:text-zinc-300"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                <span className="text-sm dark:text-zinc-400 text-slate-600">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="dark:border-zinc-600 dark:text-zinc-300"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
             <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">

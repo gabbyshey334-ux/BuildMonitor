@@ -469,7 +469,28 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     const base64Image = buffer.toString('base64');
     const contentType = response.headers.get('content-type') || 'image/jpeg';
 
-    // Try OpenAI Vision first
+    // Try Gemini vision first
+    if (gemini && process.env.GEMINI_API_KEY) {
+      try {
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const imagePart = {
+          inlineData: {
+            data: base64Image,
+            mimeType: contentType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+          },
+        };
+        const result = await model.generateContent([receiptPrompt, imagePart]);
+        const content = result.response.text().trim();
+        if (content && (await applyOcrResult(content))) {
+          console.log('[OCR] Gemini success');
+          return;
+        }
+      } catch (err: any) {
+        console.error('[OCR] Gemini failed:', err?.message);
+      }
+    }
+
+    // OpenAI Vision fallback
     if (process.env.OPENAI_API_KEY) {
       try {
         const ocrResult = await openai.chat.completions.create({
@@ -498,27 +519,6 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
       }
     }
 
-    // Gemini vision fallback
-    if (gemini && process.env.GEMINI_API_KEY) {
-      try {
-        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-        const imagePart = {
-          inlineData: {
-            data: base64Image,
-            mimeType: contentType as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
-          },
-        };
-        const result = await model.generateContent([receiptPrompt, imagePart]);
-        const content = result.response.text().trim();
-        if (content && (await applyOcrResult(content))) {
-          console.log('[OCR] Gemini success');
-          return;
-        }
-      } catch (err: any) {
-        console.error('[OCR] Gemini failed:', err?.message);
-      }
-    }
-
     await sendMessage(from,
       `Couldn't read that receipt clearly. Try:\n• Better lighting\n• Lay receipt flat\n• Photo straight from above\n\nOr type the details manually: "Bought [item] for [amount] from [vendor]"`
     );
@@ -543,26 +543,7 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
     });
     const buffer = await response.buffer();
 
-    // Try OpenAI Whisper first
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const blob = new Blob([buffer], { type: 'audio/ogg' });
-        const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
-        const transcription = await openai.audio.transcriptions.create({
-          model: 'whisper-1',
-          file,
-          language: 'en',
-        });
-        if (transcription.text) {
-          console.log('[Voice] OpenAI Whisper success');
-          return transcription.text;
-        }
-      } catch (err: any) {
-        console.error('[Voice] OpenAI Whisper failed:', err?.message);
-      }
-    }
-
-    // Gemini audio fallback
+    // Try Gemini transcription first
     if (gemini && process.env.GEMINI_API_KEY) {
       try {
         const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
@@ -583,6 +564,25 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
         }
       } catch (err: any) {
         console.error('[Voice] Gemini failed:', err?.message);
+      }
+    }
+
+    // OpenAI Whisper fallback
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const blob = new Blob([buffer], { type: 'audio/ogg' });
+        const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
+        const transcription = await openai.audio.transcriptions.create({
+          model: 'whisper-1',
+          file,
+          language: 'en',
+        });
+        if (transcription.text) {
+          console.log('[Voice] OpenAI Whisper success');
+          return transcription.text;
+        }
+      } catch (err: any) {
+        console.error('[Voice] OpenAI Whisper failed:', err?.message);
       }
     }
 
@@ -780,7 +780,25 @@ Return ONLY valid JSON:
     }
   }
 
-  // Try OpenAI first
+    // Try Gemini first
+    if (gemini && process.env.GEMINI_API_KEY) {
+      try {
+        console.log('[Intent] Trying Gemini...');
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const prompt = `${systemPrompt}\n\nMessage to classify: "${message}"\n\nReturn ONLY the JSON object, no other text.`;
+        const result = await model.generateContent(prompt);
+        const content = result.response.text().trim();
+        const parsed = parseIntentResponse(content);
+        if (parsed) {
+          console.log('[Intent] Gemini success:', parsed.intent);
+          return parsed;
+        }
+      } catch (err: any) {
+        console.error('[Intent] Gemini failed:', err?.message);
+      }
+    }
+
+  // Try OpenAI as fallback
   if (process.env.OPENAI_API_KEY) {
     try {
       console.log('[Intent] Trying OpenAI...');
@@ -801,24 +819,6 @@ Return ONLY valid JSON:
       }
     } catch (err: any) {
       console.error('[Intent] OpenAI failed:', err?.message);
-    }
-  }
-
-  // Try Gemini as fallback
-  if (gemini && process.env.GEMINI_API_KEY) {
-    try {
-      console.log('[Intent] Trying Gemini...');
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-      const prompt = `${systemPrompt}\n\nMessage to classify: "${message}"\n\nReturn ONLY the JSON object, no other text.`;
-      const result = await model.generateContent(prompt);
-      const content = result.response.text().trim();
-      const parsed = parseIntentResponse(content);
-      if (parsed) {
-        console.log('[Intent] Gemini success:', parsed.intent);
-        return parsed;
-      }
-    } catch (err: any) {
-      console.error('[Intent] Gemini failed:', err?.message);
     }
   }
 
@@ -993,6 +993,20 @@ Always stay on-topic with construction project management.
 Write in plain text (no markdown), be warm and practical.`;
 
     try {
+      if (gemini && process.env.GEMINI_API_KEY) {
+        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+        const result = await model.generateContent(`${systemPrompt}\n\nUser: ${msg}`);
+        const reply = result.response.text().trim();
+        if (reply) {
+          await sendMessage(from, reply);
+          return;
+        }
+      }
+    } catch (err: any) {
+      console.error('[Chat] Gemini failed:', err?.message);
+    }
+
+    try {
       if (process.env.OPENAI_API_KEY) {
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
@@ -1011,20 +1025,6 @@ Write in plain text (no markdown), be warm and practical.`;
       }
     } catch (err: any) {
       console.error('[Chat] OpenAI failed:', err?.message);
-    }
-
-    try {
-      if (gemini && process.env.GEMINI_API_KEY) {
-        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-        const result = await model.generateContent(`${systemPrompt}\n\nUser: ${msg}`);
-        const reply = result.response.text().trim();
-        if (reply) {
-          await sendMessage(from, reply);
-          return;
-        }
-      }
-    } catch (err: any) {
-      console.error('[Chat] Gemini failed:', err?.message);
     }
   }
 
@@ -1337,7 +1337,18 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
 
   let answer: string | null = null;
 
-  if (process.env.OPENAI_API_KEY) {
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent([systemPrompt, userMessage]);
+      answer = result.response.text()?.trim() || null;
+      if (answer) console.log('[SmartQuery] Gemini success');
+    } catch (err: any) {
+      console.error('[SmartQuery] Gemini failed:', err?.message);
+    }
+  }
+
+  if (!answer && process.env.OPENAI_API_KEY) {
     try {
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -1352,17 +1363,6 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       if (answer) console.log('[SmartQuery] OpenAI success');
     } catch (err: any) {
       console.error('[SmartQuery] OpenAI failed:', err?.message);
-    }
-  }
-
-  if (!answer && gemini && process.env.GEMINI_API_KEY) {
-    try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-      const result = await model.generateContent([systemPrompt, userMessage]);
-      answer = result.response.text()?.trim() || null;
-      if (answer) console.log('[SmartQuery] Gemini success');
-    } catch (err: any) {
-      console.error('[SmartQuery] Gemini failed:', err?.message);
     }
   }
 

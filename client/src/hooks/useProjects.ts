@@ -13,8 +13,9 @@ interface ApiProject {
   budget?: string | number | null;
   budgetAmount?: string | null;
   status: string;
-  totalSpent?: string;
+  totalSpent?: string | number;
   lastActivity?: string | null;
+  progress?: number;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: unknown;
@@ -23,13 +24,15 @@ interface ApiProject {
 function mapApiProjectToProject(api: ApiProject): Project {
   const budget = api.budget != null ? parseFloat(String(api.budget)) : (api.budgetAmount != null ? parseFloat(String(api.budgetAmount)) : 0);
   const spent = api.totalSpent != null ? parseFloat(String(api.totalSpent)) : 0;
+  const progress = typeof api.progress === 'number' && Number.isFinite(api.progress) ? api.progress : undefined;
   return {
     id: api.id,
     name: api.name,
     location: api.description?.trim() || undefined,
     totalBudget: Number.isFinite(budget) ? budget : undefined,
     spentAmount: Number.isFinite(spent) ? spent : 0,
-    lastActivityAt: api.lastActivity || undefined,
+    progress,
+    lastActivityAt: api.lastActivity ? String(api.lastActivity) : undefined,
     status: api.status === "completed" ? "completed" : "active",
   };
 }

@@ -84,7 +84,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
     <Link href={`/dashboard?project=${project.id}`}>
       <a
         onClick={handleClick}
-        className="block rounded-xl border dark:border-zinc-700/50 border-slate-200 dark:bg-zinc-800/90 bg-white shadow-sm p-5 hover:border-zinc-600 dark:hover:bg-zinc-800 hover:border-slate-300 hover:bg-slate-50 transition-all duration-200 group"
+        className="block rounded-xl border dark:border-zinc-700/50 border-slate-200 dark:bg-zinc-800/90 bg-white shadow-sm p-5 hover:border-zinc-600 dark:hover:bg-zinc-800 hover:border-slate-300 hover:bg-slate-50 transition-all duration-200 group cursor-pointer"
       >
         {/* Header: Project name and menu */}
         <div className="flex items-start justify-between mb-2">

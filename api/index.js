@@ -1512,6 +1512,62 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/auth/link-whatsapp - Link WhatsApp number so web app shows WhatsApp-created projects
+app.post('/api/auth/link-whatsapp', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const { phone } = req.body;
+    if (!phone || typeof phone !== 'string') {
+      return res.status(400).json({ success: false, error: 'Phone number is required' });
+    }
+
+    const normalized = phone.trim().replace(/\s/g, '');
+    const withPlus = normalized.startsWith('+') ? normalized : `+${normalized}`;
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ auth_user_id: userId, updated_at: new Date().toISOString() })
+      .eq('whatsapp_number', withPlus)
+      .select('id');
+
+    if (error) {
+      if ((error.message || '').toLowerCase().includes('auth_user_id')) {
+        return res.status(500).json({
+          success: false,
+          error: 'Linking not available: add column auth_user_id (UUID) to profiles table.',
+        });
+      }
+      console.error('[Link WhatsApp]', error);
+      return res.status(500).json({ success: false, error: error.message || 'Update failed' });
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'No WhatsApp profile found for this number. Use this exact number in WhatsApp (e.g. +2349165631240).',
+      });
+    }
+
+    return res.status(200).json({ success: true, message: 'WhatsApp number linked. Your WhatsApp projects will now appear on the web.' });
+  } catch (err) {
+    console.error('[Link WhatsApp]', err);
+    return res.status(500).json({ success: false, error: 'Failed to link WhatsApp' });
+  }
+});
+
 // POST /api/waitlist - Join waitlist (landing page)
 app.post('/api/waitlist', async (req, res) => {
   try {
@@ -1574,6 +1630,17 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       },
     });
 
+    // Include projects from linked WhatsApp profiles (profiles.auth_user_id = this user)
+    let userIdsToFetch = [userId];
+    const { data: linkedProfiles, error: linkedError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('auth_user_id', userId);
+    if (!linkedError && linkedProfiles && Array.isArray(linkedProfiles)) {
+      const ids = linkedProfiles.map((p) => p.id).filter(Boolean);
+      userIdsToFetch = [...new Set([userId, ...ids])];
+    }
+
     // Fetch projects from database using Supabase client
     const { data: projects, error } = await supabase
       .from('projects')
@@ -1589,7 +1656,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
         created_at,
         updated_at
       `)
-      .eq('user_id', userId)
+      .in('user_id', userIdsToFetch)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -1603,21 +1670,76 @@ app.get('/api/projects', requireAuth, async (req, res) => {
 
     console.log('[Get Projects] Successfully fetched', projects?.length || 0, 'projects');
 
-    // Transform to match frontend expectations
-    const transformedProjects = (projects || []).map(project => ({
-      id: project.id,
-      userId: project.user_id,
-      name: project.name,
-      description: project.description,
-      budget: parseFloat(project.budget || 0),
-      budgetAmount: parseFloat(project.budget || 0), // Keep for backward compatibility
-      spent: parseFloat(project.spent || 0),
-      totalSpent: parseFloat(project.spent || 0), // For frontend mapping
-      currency: project.currency || 'UGX',
-      status: project.status || 'active',
-      createdAt: project.created_at,
-      updatedAt: project.updated_at,
-    }));
+    const projectIds = (projects || []).map((p) => p.id).filter(Boolean);
+    let expenseSums = {}; // project_id -> { totalSpent, lastActivity }
+    let dailyLogMax = {}; // project_id -> lastLogDate
+
+    if (projectIds.length > 0) {
+      const { data: expenseRows } = await supabase
+        .from('expenses')
+        .select('project_id, amount, created_at')
+        .in('project_id', projectIds);
+      if (expenseRows && Array.isArray(expenseRows)) {
+        for (const row of expenseRows) {
+          const pid = row.project_id;
+          if (!pid) continue;
+          if (!expenseSums[pid]) expenseSums[pid] = { totalSpent: 0, lastActivity: null };
+          expenseSums[pid].totalSpent += parseFloat(row.amount || 0);
+          const at = row.created_at;
+          if (at && (!expenseSums[pid].lastActivity || new Date(at) > new Date(expenseSums[pid].lastActivity))) {
+            expenseSums[pid].lastActivity = at;
+          }
+        }
+      }
+      const { data: logRows } = await supabase
+        .from('daily_logs')
+        .select('project_id, log_date')
+        .in('project_id', projectIds);
+      if (logRows && Array.isArray(logRows)) {
+        for (const row of logRows) {
+          const pid = row.project_id;
+          if (!pid || !row.log_date) continue;
+          const d = row.log_date.toString().substring(0, 10);
+          if (!dailyLogMax[pid] || d > dailyLogMax[pid]) dailyLogMax[pid] = d;
+        }
+      }
+    }
+
+    // Transform to match frontend expectations — use real spent & last activity from DB
+    const transformedProjects = (projects || []).map(project => {
+      const pid = project.id;
+      const fromExpenses = expenseSums[pid] || {};
+      const realSpent = fromExpenses.totalSpent != null ? fromExpenses.totalSpent : parseFloat(project.spent || 0);
+      const lastExpenseAt = fromExpenses.lastActivity || null;
+      const lastLogDate = dailyLogMax[pid] || null;
+      const projectUpdated = project.updated_at || project.created_at || null;
+      const lastActivity = [lastExpenseAt, lastLogDate, projectUpdated]
+        .filter(Boolean)
+        .map(d => (d.toString().length === 10 ? d + 'T12:00:00Z' : d))
+        .reduce((latest, d) => {
+          const t = new Date(d).getTime();
+          return !latest || t > new Date(latest).getTime() ? d : latest;
+        }, null);
+      const budget = parseFloat(project.budget || 0);
+      const progress = budget > 0 ? Math.min(100, Math.round((realSpent / budget) * 100)) : 0;
+
+      return {
+        id: project.id,
+        userId: project.user_id,
+        name: project.name,
+        description: project.description,
+        budget,
+        budgetAmount: budget,
+        spent: realSpent,
+        totalSpent: realSpent,
+        currency: project.currency || 'UGX',
+        status: project.status || 'active',
+        progress,
+        lastActivity: lastActivity || project.updated_at || project.created_at,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at,
+      };
+    });
 
     res.json({
       success: true,
