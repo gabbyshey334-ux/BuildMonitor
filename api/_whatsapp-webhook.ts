@@ -113,6 +113,7 @@ type IntentType =
   | 'WEATHER_DELAY'
   | 'SMART_QUERY'
   | 'SWITCH_PROJECT'
+  | 'LIST_PROJECTS'
   | 'GREETING';
 
 interface IntentResult {
@@ -226,42 +227,27 @@ async function getActiveProject(
     .eq('status', 'active')
     .order('created_at', { ascending: false });
 
-  const allProjects = [
-    ...(ownedProjects || []),
-    ...(managedProjects || []),
-  ].filter((p, index, self) => index === self.findIndex((t) => t.id === p.id));
+  const allProjects = [...(ownedProjects || []), ...(managedProjects || [])]
+    .filter((p, i, self) => i === self.findIndex((t) => t.id === p.id));
 
   if (allProjects.length === 0) {
     return { project: null, needsSelection: false, projects: [] };
   }
-
   if (allProjects.length === 1) {
     if (profile.active_project_id !== allProjects[0].id) {
-      await supabase
-        .from('profiles')
-        .update({
-          active_project_id: allProjects[0].id,
-          active_project_set_at: new Date().toISOString(),
-        })
-        .eq('id', userId);
+      await supabase.from('profiles').update({
+        active_project_id: allProjects[0].id,
+        active_project_set_at: new Date().toISOString(),
+      }).eq('id', userId);
     }
     return { project: allProjects[0], needsSelection: false, projects: allProjects };
   }
-
   if (profile.active_project_id) {
     const activeProject = allProjects.find((p) => p.id === profile.active_project_id);
     if (activeProject) {
-      const setAt = profile.active_project_set_at
-        ? new Date(profile.active_project_set_at)
-        : null;
-      const today = new Date();
-      const isToday = setAt && setAt.toDateString() === today.toDateString();
-      if (isToday) {
-        return { project: activeProject, needsSelection: false, projects: allProjects };
-      }
+      return { project: activeProject, needsSelection: false, projects: allProjects };
     }
   }
-
   return { project: null, needsSelection: true, projects: allProjects };
 }
 
@@ -675,6 +661,13 @@ function preClassifyIntent(message: string): IntentResult | null {
     return { intent: 'SWITCH_PROJECT', extracted: {} };
   }
 
+  if (/list.*project|my project|show.*project|all.*project|project.*list|what project/i.test(m)) {
+    return { intent: 'LIST_PROJECTS', extracted: {} };
+  }
+  if (/update.*dashboard|log.*expense|add.*expense|record|log something|what can|what do/i.test(m)) {
+    return { intent: 'GREETING', extracted: {} };
+  }
+
   // EXPENSE patterns
   if (/bought|paid|spent|purchased|cost|price|buying|pay|expense/i.test(m) && /\d/.test(m)) {
     const amountMatch = message.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/g);
@@ -839,7 +832,7 @@ Return ONLY valid JSON:
 
   const validIntents: IntentType[] = [
     'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
-    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'SMART_QUERY', 'GREETING',
+    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'SMART_QUERY', 'LIST_PROJECTS', 'GREETING',
   ];
 
   function parseIntentResponse(content: string): IntentResult | null {
@@ -1050,19 +1043,32 @@ async function handleGreeting(
   // If message is longer/more complex than a simple greeting, use AI to reply conversationally
   const msg = (rawMessage || '').trim();
   const isPureGreeting = !msg || PURE_GREETING_RE.test(msg);
+  const wantsUpdateMenu = /update.*dashboard|log.*expense|add.*expense|record|log something|what can|what do/i.test(msg);
 
-  if (!isPureGreeting && msg && currentProject) {
+  if (!isPureGreeting && msg && currentProject && !wantsUpdateMenu) {
     // Use AI for any non-trivial free-form message
-    const projectContext = `Project: ${currentProject.name}. Budget: UGX ${Number(currentProject.budget || 0).toLocaleString()}.`;
-    const systemPrompt = `You are JengaTrack, a friendly WhatsApp assistant for construction site management in Uganda. 
-You help track expenses, materials, workers, and project progress.
-Current project context: ${projectContext}
+    const systemPrompt = `You are JengaTrack, a WhatsApp construction 
+tracking assistant for African building projects.
+Active project: ${currentProject.name}. Budget: UGX ${Number(currentProject.budget || 0).toLocaleString()}.
 
-Respond helpfully and concisely to the user's message (2-3 short sentences max). 
-If they seem to want to log something (expense, material, labor), guide them on the correct format.
-If they're asking a general question, answer it clearly.
-Always stay on-topic with construction project management.
-Write in plain text (no markdown), be warm and practical.`;
+Your ONLY job is to help users LOG data or QUERY their project.
+Keep replies under 4 lines. Plain text only, no markdown, no asterisks.
+
+If the user says they want to update/log/record/add something, 
+respond with this exact menu (copy it exactly):
+
+What would you like to log?
+
+💰 Expense: "Bought cement for 400,000"
+📦 Materials: "Received 50 bags cement"
+👷 Workers: "8 workers on site today"
+📊 Budget check: "How much have we spent?"
+📸 Send a receipt photo
+🎙️ Send a voice note
+
+If they ask a factual question about their project, answer it 
+concisely using the project context. Never ask for info you already 
+have (like the budget). Never ask clarifying questions.`;
 
     try {
       if (gemini && process.env.GEMINI_API_KEY) {
@@ -1613,10 +1619,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Handle reply to "Which project?" menu (BEFORE intent classification)
     if (expenseState === 'awaiting_project_selection') {
+      if (/list.*project|my project|show.*project|all.*project|project.*list|what project/i.test(message)) {
+        await handleListProjects(From, userId);
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
       const options = pendingData.project_options || [];
       const selection = parseInt(rawMessage.trim(), 10);
       const nameMatch = options.findIndex(
-        (p: any) => message.toLowerCase().includes(String(p.name).toLowerCase().split(' ')[0])
+        (p: any) =>
+          message.toLowerCase().includes(String(p.name).toLowerCase().split(' ')[0]) ||
+          String(p.name).toLowerCase().includes(message.toLowerCase().trim())
       );
 
       let selectedProject: { id: string; name: string; location?: string } | null = null;
@@ -1931,6 +1944,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // ─── Route Intent ─────────────────────────────────────────────────────────────
 
+async function handleListProjects(from: string, userId: string): Promise<void> {
+  const { data: ownedProjects } = await supabase
+    .from('projects')
+    .select('id, name, description, budget, status')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  const { data: managedProjects } = await supabase
+    .from('projects')
+    .select('id, name, description, budget, status')
+    .eq('manager_id', userId)
+    .order('created_at', { ascending: false });
+
+  const all = [...(ownedProjects || []), ...(managedProjects || [])]
+    .filter((p, i, self) => i === self.findIndex((t) => t.id === p.id));
+
+  if (all.length === 0) {
+    await sendMessage(from, 'You don\'t have any projects yet.\n\nType "start" to create your first project.');
+    return;
+  }
+
+  const lines = all.map((p, i) => {
+    const budget = parseFloat(String(p.budget || 0));
+    const budgetStr = budget > 0 ? ` — Budget: ${fmt(budget)} UGX` : '';
+    const dot = p.status === 'active' ? '🟢' : '🔴';
+    return `${dot} ${i + 1}. ${p.name}${budgetStr}`;
+  }).join('\n');
+
+  await sendMessage(from,
+    `📋 *Your Projects (${all.length})*\n\n${lines}\n\nSay "switch project" to change your active project.`
+  );
+}
+
 async function routeIntent(
   intent: IntentType,
   extracted: Record<string, unknown>,
@@ -1965,6 +2011,9 @@ async function routeIntent(
       break;
     case 'SMART_QUERY':
       await handleSmartQuery(from, project.id, rawMessage);
+      break;
+    case 'LIST_PROJECTS':
+      await handleListProjects(from, userId);
       break;
     case 'GREETING':
     default:
