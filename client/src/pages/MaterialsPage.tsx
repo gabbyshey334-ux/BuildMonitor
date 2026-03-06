@@ -108,7 +108,17 @@ export default function MaterialsPage() {
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("materials.title")}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-0">{t("materials.title")}</h1>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 bg-slate-200 text-slate-700 hover:bg-slate-300 text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
 
         {inventory.length === 0 ? (
           <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">

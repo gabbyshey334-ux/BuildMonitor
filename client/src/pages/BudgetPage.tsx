@@ -215,9 +215,13 @@ function CostTrendChart({ data }: { data: Array<{ week: string; amount: number }
             axisLine={false}
             tickLine={false}
             tick={{ fill: COLORS.textSecondary, fontSize: 11 }}
-            tickFormatter={(v) =>
-              v >= 1_000_000 ? `${(v / 1_000_000).toFixed(0)}M` : `${(v / 1_000).toFixed(0)}K`
-            }
+            tickFormatter={(value) => {
+              const num = parseFloat(String(value)) || 0;
+              if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+              if (num >= 1_000) return `${Math.round(num / 1_000)}K`;
+              return String(Math.round(num));
+            }}
+            width={55}
           />
           <XAxis
             dataKey="week"
@@ -415,7 +419,6 @@ export default function BudgetPage() {
       .sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  // ── Weekly cost trend (last 8 weeks, oldest to newest) ───────────────────────
   const costTrendData = useMemo(() => {
     const now = new Date();
     const result: Array<{ week: string; amount: number }> = [];
@@ -432,7 +435,8 @@ export default function BudgetPage() {
       let amount = 0;
       expenses.forEach((e) => {
         const d = new Date(e.expense_date || e.created_at);
-        if (d >= weekStart && d <= weekEnd) amount += parseFloat(String(e.amount || 0));
+        const amt = parseFloat(String(e.amount ?? "0").replace(/,/g, "")) || 0;
+        if (d >= weekStart && d <= weekEnd) amount += amt;
       });
       result.push({ week: label, amount });
     }

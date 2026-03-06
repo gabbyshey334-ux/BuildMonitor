@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, AlertCircle, FileText, X } from 'lucide-react';
-import { useProjectSummary } from '@/hooks/useDashboard';
+import { Plus, Upload, AlertCircle, FileText, X, RefreshCw } from 'lucide-react';
+import { useProjectSummary, useProjectTasks, useProjectExpenses, DASHBOARD_SUMMARY_QUERY_KEY } from '@/hooks/useDashboard';
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjects } from '@/hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,6 +60,31 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     refetch,
     dataUpdatedAt,
   } = useProjectSummary(effectiveProjectId);
+
+  const { data: tasksData } = useProjectTasks(effectiveProjectId);
+  const { data: expensesData } = useProjectExpenses(effectiveProjectId);
+  const tasks = Array.isArray(tasksData) ? tasksData : (tasksData as any)?.tasks ?? [];
+  const expenses = (expensesData as any)?.recent ?? (expensesData as any)?.expenses ?? [];
+
+  const budgetHealth = useMemo(() => {
+    const budget = parseFloat(String(currentProject?.budget ?? (summaryData as any)?.budget?.total ?? 0));
+    const spent = expenses?.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0) || 0;
+    if (!budget) return { pct: 0, remaining: 0 };
+    return {
+      pct: Math.min(100, Math.round((spent / budget) * 100)),
+      remaining: Math.max(0, budget - spent),
+    };
+  }, [currentProject, summaryData, expenses]);
+
+  const progressPct = useMemo(() => {
+    if (tasks && tasks.length > 0) {
+      const completed = tasks.filter((t: any) => t.status === 'completed').length;
+      return Math.round((completed / tasks.length) * 100);
+    }
+    const dailyLogs = (summaryData as any)?.activity?.recentUpdates ?? [];
+    if (dailyLogs.length > 0) return Math.min(95, dailyLogs.length * 2);
+    return 0;
+  }, [tasks, summaryData]);
 
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -244,7 +269,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
   const summary = summaryData!;
   const summaryHealth = {
-    overallProgress: summary.progress?.overallPercentage ?? summary.summaryHealth?.overallProgress ?? 0,
+    overallProgress: progressPct ?? summary.progress?.overallPercentage ?? summary.summaryHealth?.overallProgress ?? 0,
     onTimeStatus: {
       isDelayed: summary.schedule?.status === 'Delayed',
       daysDelayed: summary.schedule?.daysBehind ?? summary.summaryHealth?.onTimeStatus?.daysDelayed ?? 0,
@@ -252,8 +277,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       daysAhead: summary.schedule?.daysAhead,
     },
     budgetHealth: {
-      percent: summary.budget?.percentage ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
-      remaining: summary.budget?.remaining ?? summary.summaryHealth?.budgetHealth?.remaining ?? 0,
+      percent: budgetHealth.pct || summary.budget?.percentage ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
+      remaining: budgetHealth.remaining ?? summary.budget?.remaining ?? summary.summaryHealth?.budgetHealth?.remaining ?? 0,
     },
     activeIssues: {
       total: summary.issues?.total ?? summary.summaryHealth?.activeIssues?.total ?? 0,
@@ -303,11 +328,29 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       <section className="mb-8">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <h1 className="text-3xl font-bold dark:text-white text-slate-800">Project Dashboard</h1>
-          {lastSyncLabel && (
-            <p className="text-sm dark:text-zinc-500 text-slate-500">
-              Last updated: {lastSyncLabel}
-            </p>
-          )}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                refetch();
+                queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY] });
+                queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                queryClient.invalidateQueries({ queryKey: ['project-expenses'] });
+                queryClient.invalidateQueries({ queryKey: ['project-daily'] });
+                queryClient.invalidateQueries({ queryKey: ['project-materials'] });
+              }}
+              className="dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+            {lastSyncLabel && (
+              <p className="text-sm dark:text-zinc-500 text-slate-500">
+                Last updated: {lastSyncLabel}
+              </p>
+            )}
+          </div>
         </div>
         <ProjectHealthSummary data={summaryHealth} />
       </section>

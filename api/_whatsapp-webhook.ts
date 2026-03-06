@@ -1,6 +1,16 @@
 /**
  * JengaTrack WhatsApp Webhook — Complete Implementation
  *
+ * Required Supabase table:
+ * CREATE TABLE IF NOT EXISTS tasks (
+ *   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+ *   project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
+ *   title text NOT NULL,
+ *   status text DEFAULT 'pending',
+ *   completed_at timestamptz,
+ *   created_at timestamptz DEFAULT now()
+ * );
+ *
  * Features:
  * - Two operating modes: Group Chat (Mode A) & Direct Tracker (Mode B)
  * - GPT-4o intent classification
@@ -114,6 +124,7 @@ type IntentType =
   | 'SMART_QUERY'
   | 'SWITCH_PROJECT'
   | 'LIST_PROJECTS'
+  | 'BUDGET_UPDATE'
   | 'GREETING';
 
 interface IntentResult {
@@ -144,6 +155,42 @@ async function sendOptions(to: string, message: string, options: string[]): Prom
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
+
+async function ai(prompt: string, fallback: string, maxTokens = 200): Promise<string> {
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent(
+        `You are JengaTrack, a WhatsApp construction assistant for African building projects. Be warm, practical, and concise. Plain text only. No markdown. Under 4 lines.\n\n${prompt}`
+      );
+      const text = result.response.text().trim();
+      if (text) return text;
+    } catch (err: any) {
+      console.error('[AI Helper] Gemini failed:', err?.message);
+    }
+  }
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are JengaTrack, a WhatsApp construction assistant for African building projects. Be warm, practical, concise. Plain text only. No markdown. Under 4 lines.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.7,
+        max_tokens: maxTokens,
+      });
+      const text = completion.choices[0]?.message?.content?.trim();
+      if (text) return text;
+    } catch (err: any) {
+      console.error('[AI Helper] OpenAI failed:', err?.message);
+    }
+  }
+  return fallback;
+}
 
 // ─── User Profile ─────────────────────────────────────────────────────────────
 
@@ -274,24 +321,22 @@ async function sendProjectSelectionMenu(
     .map((p, i) => `${i + 1}. ${p.name}` + (p.description ? ` — ${p.description}` : ''))
     .join('\n');
 
-  await sendMessage(
-    to,
-    `👋 You have ${projects.length} active projects.\n\n` +
-      `Which one are you updating today?\n\n` +
-      `${projectList}\n\n` +
-      `Reply with the number (e.g. "1" or "2")\n\n` +
-      `💡 Tip: Say "switch project" anytime to change.`
+  const msg = await ai(
+    `Ask the user which project they are working on today. List these projects:\n${projectList}\nTell them to reply with the number.`,
+    `You have ${projects.length} active projects:\n\n${projectList}\n\nWhich one are you updating today? Reply with the number.`
   );
+  await sendMessage(to, msg);
 }
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
 
 async function sendWelcomeMessage(to: string, name?: string) {
-  const greeting = name && name !== 'WhatsApp User' ? `Hey ${name}! 👋` : 'Hey! 👋';
-  await sendOptions(to,
-    `${greeting} Welcome to *JengaTrack* 🏗️\n\nI help you track your construction project — expenses, materials, workers, progress — all via WhatsApp.\n\nLet's set up your first project. What kind of build is this?`,
-    ['🏠 Residential home', '🏢 Commercial building', '🏗️ Other / Skip for now']
+  const greeting = name && name !== 'WhatsApp User' ? name.split(' ')[0] : null;
+  const msg = await ai(
+    `Welcome a new user named ${greeting || 'a new user'} to JengaTrack. Tell them JengaTrack helps track construction expenses, materials, workers and progress via WhatsApp. Ask them what kind of project they are building. Give 3 short project type options numbered 1-3: residential home, commercial building, other.`,
+    `Hey${greeting ? ' ' + greeting : ''}! Welcome to JengaTrack. I help you track your construction project via WhatsApp.\n\nWhat kind of build is this?\n\n1. Residential home\n2. Commercial building\n3. Other`
   );
+  await sendMessage(to, msg);
 }
 
 async function handleProjectTypeSelection(userId: string, to: string, msg: string) {
@@ -299,19 +344,31 @@ async function handleProjectTypeSelection(userId: string, to: string, msg: strin
   if (msg.includes('1') || /residential|home/i.test(msg)) projectType = 'btn_residential';
   else if (msg.includes('2') || /commercial|office|shop/i.test(msg)) projectType = 'btn_commercial';
   await updateOnboardingState(userId, 'awaiting_location', { project_type: projectType });
-  await sendMessage(to, `Great choice! 📍 Where's the site?\n\n(e.g., Kampala Road, Entebbe, Plot 24 Mukono — or type "skip")`);
+  const out = await ai(
+    'Ask the user where their construction site is located. Keep it casual and short. Examples: Kampala Road, Plot 24 Mukono. Tell them they can skip.',
+    'Great choice! Where is the site? (e.g. Kampala Road, Entebbe — or type "skip")'
+  );
+  await sendMessage(to, out);
 }
 
 async function handleLocationInput(userId: string, to: string, body: string) {
   const location = /skip/i.test(body) ? undefined : body.trim();
   await updateOnboardingState(userId, 'awaiting_start_date', { location });
-  await sendMessage(to, `Nice! 📅 When did the project start?\n\n(e.g., Today, 15 Feb 2026, January 2026 — or "skip")`);
+  const out = await ai(
+    'Ask the user when their construction project started. Keep it casual. Examples: Today, 15 Feb 2026. Tell them they can skip.',
+    'When did the project start? (e.g. Today, 15 Feb 2026 — or "skip")'
+  );
+  await sendMessage(to, out);
 }
 
 async function handleStartDateInput(userId: string, to: string, body: string) {
   const start_date = /skip/i.test(body) ? undefined : body.trim();
   await updateOnboardingState(userId, 'awaiting_budget', { start_date });
-  await sendMessage(to, `Almost done! 💰 What's the total project budget?\n\n(e.g., 150,000,000 UGX or 150M — or "skip")`);
+  const out = await ai(
+    'Ask the user what their total project budget is in UGX. Keep it casual. Examples: 150,000,000 or 150M. Tell them they can skip.',
+    'What is the total project budget? (e.g. 150M UGX — or "skip")'
+  );
+  await sendMessage(to, out);
 }
 
 async function handleBudgetInput(userId: string, to: string, body: string) {
@@ -344,13 +401,16 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
   const typeLabel = d.project_type === 'btn_residential' ? 'Residential home'
     : d.project_type === 'btn_commercial' ? 'Commercial building' : 'Construction Project';
 
-  const summary = `Here's your project summary:\n\n` +
-    `🏗️ Type: ${typeLabel}\n` +
-    `📍 Location: ${d.location || 'TBD'}\n` +
-    `📅 Started: ${d.start_date || 'TBD'}\n` +
-    `💰 Budget: ${budget ? fmt(budget) + ' UGX' : 'TBD'}\n\n` +
-    `Looks good?`;
-  await sendOptions(to, summary, ['✅ Yes – Create project!', '✏️ Edit something', '⏭️ Skip for now']);
+  const summaryPrompt = `Present this project summary to the user and ask them to confirm:
+  Type: ${typeLabel}
+  Location: ${d.location || 'TBD'}
+  Started: ${d.start_date || 'TBD'}
+  Budget: ${budget ? fmt(budget) + ' UGX' : 'TBD'}
+  Ask them to reply 1 to confirm and create the project, 2 to edit, or 3 to skip. Keep it friendly and concise.`;
+  const summary = await ai(summaryPrompt,
+    `Here's your project summary:\n\nType: ${typeLabel}\nLocation: ${d.location || 'TBD'}\nBudget: ${budget ? fmt(budget) + ' UGX' : 'TBD'}\n\n1. Create project\n2. Edit\n3. Skip`
+  );
+  await sendOptions(to, summary, ['1. Yes – Create project', '2. Edit', '3. Skip']);
 }
 
 async function createProjectFromOnboarding(userId: string): Promise<string> {
@@ -433,17 +493,11 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
 }
 
 async function sendPostCreationMessage(to: string, projectId: string) {
-  await sendMessage(to,
-    `🎉 Project created! Your dashboard is live:\n${DASHBOARD_URL}/dashboard?project=${projectId}\n\n` +
-    `Now just chat updates to me anytime:\n\n` +
-    `• "Bought 50 bags cement for 1,900,000"\n` +
-    `• "6 workers on site today"\n` +
-    `• "Foundation 80% done"\n` +
-    `• "How much have we spent?"\n` +
-    `• Send receipt photos 📸\n` +
-    `• Send voice notes 🎙️\n\n` +
-    `I'll organize everything into your dashboard automatically. Type "help" anytime.`
+  const msg = await ai(
+    `Tell the user their construction project has been created and their dashboard is live at this URL: ${DASHBOARD_URL}/dashboard?project=${projectId}. Then briefly explain they can now log expenses, materials, workers and progress just by chatting. Give 3-4 short examples naturally. End by saying they can send a receipt photo or voice note too.`,
+    `Project created! Dashboard: ${DASHBOARD_URL}/dashboard?project=${projectId}\n\nJust chat updates to me anytime:\n• "Bought cement for 400,000"\n• "6 workers on site"\n• "Foundation 80% done"\n• Send receipt photos or voice notes`
   );
+  await sendMessage(to, msg);
 }
 
 /** Route message to onboarding flow (e.g. when "1" was meant to confirm project, not expense). */
@@ -455,14 +509,17 @@ async function handleOnboardingMessage(from: string, profile: any, message: stri
       await sendPostCreationMessage(from, projectId);
     } catch (err: any) {
       console.error('[Onboarding] Project creation failed (handleOnboardingMessage):', err);
-      await sendMessage(from, `⚠️ Couldn't create the project.\n\nError: ${err.message}\n\nType "start over" to try again.`);
+      await sendMessage(from, await ai(
+        `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
+        `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
+      ));
     }
     return;
   }
-  await sendMessage(
-    from,
-    `Please confirm your project first (reply 1 to create project), or type "start over" to begin again.`
-  );
+  await sendMessage(from, await ai(
+    'Tell the user to confirm their project first by replying 1, or type "start over" to begin again.',
+    'Please confirm your project first (reply 1), or type "start over" to begin again.'
+  ));
 }
 
 // ─── OCR: Receipt Photo ───────────────────────────────────────────────────────
@@ -473,7 +530,10 @@ async function processReceiptPhoto(
   projectId: string,
   mediaUrl: string
 ): Promise<void> {
-  await sendMessage(from, '📸 Receipt received! Scanning it now...');
+  await sendMessage(from, await ai(
+    'Tell the user you received their receipt and are scanning it. One short line.',
+    'Receipt received! Scanning it now...'
+  ));
 
   const receiptPrompt = `This is a construction receipt. Extract all details and return ONLY valid JSON:
 {
@@ -496,12 +556,49 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     const itemsList = (ocrData.items || [])
       .map((i: any) => `  • ${i.name}${i.quantity ? ` x${i.quantity}` : ''}: ${fmt(i.amount || 0)} UGX`)
       .join('\n');
-    const summary = `📋 Receipt scanned!\n\n` +
-      `🏪 Vendor: ${vendor}\n` +
-      `📅 Date: ${ocrData.date || 'Not visible'}\n` +
-      `Items:\n${itemsList || '  • (unable to read items)'}\n` +
-      `💰 Total: ${fmt(total)} UGX\n\n` +
-      `Save this to your records?`;
+
+    // Update materials_inventory with line items
+    if (ocrData.items && ocrData.items.length > 0) {
+      for (const item of ocrData.items) {
+        if (!item.name) continue;
+        const materialName = String(item.name).toLowerCase().trim();
+        const qty = parseFloat(String(item.quantity || 0));
+        if (qty <= 0) continue;
+
+        const { data: existing } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity')
+          .eq('project_id', projectId)
+          .eq('material_name', materialName)
+          .maybeSingle();
+
+        const newQty = parseFloat(String(existing?.quantity || 0)) + qty;
+
+        if (existing) {
+          await supabase.from('materials_inventory')
+            .update({ quantity: newQty, last_updated: new Date().toISOString() })
+            .eq('id', existing.id);
+        } else {
+          await supabase.from('materials_inventory').insert({
+            project_id: projectId,
+            material_name: materialName,
+            quantity: qty,
+            unit: item.unit || 'units',
+          });
+        }
+        console.log('[OCR Materials] Inventory updated:', materialName, '+', qty);
+      }
+    }
+
+    const summary = await ai(
+      `Summarise this receipt scan result naturally and ask the user to confirm saving it:
+    Vendor: ${vendor}
+    Date: ${ocrData.date || 'Not visible'}
+    Items: ${itemsList || '(unable to read items)'}
+    Total: ${fmt(total)} UGX
+    End with: reply 1 to save, 2 to edit, 3 to cancel.`,
+      `Receipt scanned!\n\nVendor: ${vendor}\nDate: ${ocrData.date || 'Not visible'}\nTotal: ${fmt(total)} UGX\n\nSave it?\n1. Yes\n2. Edit\n3. Cancel`
+    );
     await updateExpenseState(userId, 'awaiting_confirmation', {
       amount: total,
       description: `Receipt: ${vendor}${ocrData.items?.length ? ` (${ocrData.items.map((i: any) => i.name).join(', ')})` : ''}`,
@@ -577,14 +674,16 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
       }
     }
 
-    await sendMessage(from,
-      `Couldn't read that receipt clearly. Try:\n• Better lighting\n• Lay receipt flat\n• Photo straight from above\n\nOr type the details manually: "Bought [item] for [amount] from [vendor]"`
-    );
+    await sendMessage(from, await ai(
+      'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
+      'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
+    ));
   } catch (err: any) {
     console.error('[OCR Error]', err);
-    await sendMessage(from,
-      `Couldn't read that receipt clearly. Try:\n• Better lighting\n• Lay receipt flat\n• Photo straight from above\n\nOr type the details manually: "Bought [item] for [amount] from [vendor]"`
-    );
+    await sendMessage(from, await ai(
+      'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
+      'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
+    ));
   }
 }
 
@@ -628,7 +727,7 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
     // OpenAI Whisper fallback
     if (process.env.OPENAI_API_KEY) {
       try {
-    const blob = new Blob([buffer], { type: 'audio/ogg' });
+    const blob = new Blob([new Uint8Array(buffer)], { type: 'audio/ogg' });
     const file = new File([blob], 'voice.ogg', { type: 'audio/ogg' });
     const transcription = await openai.audio.transcriptions.create({
       model: 'whisper-1',
@@ -653,8 +752,46 @@ async function processVoiceNote(mediaUrl: string): Promise<string | null> {
 
 // ─── Intent Classification (GPT-4o) ──────────────────────────────────────────
 
+async function translateToEnglish(text: string): Promise<string> {
+  const hasLugandaIndicators = /mpa|nze|nno|sseminti|emisumaali|okulunda|nsimba|abasajja|bajja|nfunyeyo|mugezi|hali|jangu|genda|kola|nkola|leeta|sente|eggulo|enkya/i.test(text);
+  if (!hasLugandaIndicators) return text;
+  console.log('[Translate] Detected Luganda, translating...');
+  try {
+    if (gemini && process.env.GEMINI_API_KEY) {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent(
+        `Translate this Luganda construction site message to English. Return ONLY the English translation, nothing else: "${text}"`
+      );
+      const translated = result.response.text().trim();
+      console.log('[Translate] Result:', translated);
+      return translated || text;
+    }
+  } catch (err: any) {
+    console.error('[Translate] Failed:', err?.message);
+  }
+  return text;
+}
+
 function preClassifyIntent(message: string): IntentResult | null {
   const m = message.toLowerCase().trim();
+
+  // BUDGET_UPDATE — must be at top so "add 10M to budget" is caught before other budget patterns
+  if (/edit.*budget|update.*budget|add.*budget|increase.*budget|change.*budget|set.*budget|new.*budget/i.test(m)) {
+    const mMatch = message.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
+    const bMatch = message.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
+    const numMatch = message.match(/(\d+(?:,\d{3})*)/);
+    const isAdd = /add|increase|plus|more/i.test(m);
+    let amount = 0;
+    if (mMatch) amount = parseFloat(mMatch[1]) * 1_000_000;
+    else if (bMatch) amount = parseFloat(bMatch[1]) * 1_000_000_000;
+    else if (numMatch) amount = parseFloat(numMatch[1].replace(/,/g, ''));
+    return { intent: 'BUDGET_UPDATE', extracted: { amount, action: isAdd ? 'add' : 'set' } };
+  }
+
+  // MATERIAL_QUERY — inventory/stock questions (before generic budget query)
+  if (/how much|how many|do (i|we) have|in.*inventory|current stock|stock.*left|remaining.*material/i.test(m) && !/budget|spent|expense|cost/i.test(m)) {
+    return { intent: 'MATERIAL_QUERY', extracted: {} };
+  }
 
   // SWITCH_PROJECT — must be before greeting check so it's always caught
   if (/switch|change project|other project|different project|wanna switch|want to switch/i.test(m)) {
@@ -748,7 +885,8 @@ function preClassifyIntent(message: string): IntentResult | null {
 }
 
 async function classifyIntent(message: string, phoneNumber: string): Promise<IntentResult> {
-  const preClassified = preClassifyIntent(message);
+  const translatedMessage = await translateToEnglish(message);
+  const preClassified = preClassifyIntent(translatedMessage);
   if (preClassified) {
     console.log('[Intent] Regex match:', preClassified.intent);
     return preClassified;
@@ -832,7 +970,7 @@ Return ONLY valid JSON:
 
   const validIntents: IntentType[] = [
     'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
-    'BUDGET_QUERY', 'MATERIAL_QUERY', 'WEATHER_DELAY', 'SMART_QUERY', 'LIST_PROJECTS', 'GREETING',
+    'BUDGET_QUERY', 'MATERIAL_QUERY', 'BUDGET_UPDATE', 'WEATHER_DELAY', 'SMART_QUERY', 'LIST_PROJECTS', 'GREETING',
   ];
 
   function parseIntentResponse(content: string): IntentResult | null {
@@ -850,7 +988,7 @@ Return ONLY valid JSON:
       try {
         console.log('[Intent] Trying Gemini...');
         const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-        const prompt = `${systemPrompt}\n\nMessage to classify: "${message}"\n\nReturn ONLY the JSON object, no other text.`;
+        const prompt = `${systemPrompt}\n\nMessage to classify: "${translatedMessage}"\n\nReturn ONLY the JSON object, no other text.`;
         const result = await model.generateContent(prompt);
         const content = result.response.text().trim();
         const parsed = parseIntentResponse(content);
@@ -871,7 +1009,7 @@ Return ONLY valid JSON:
         model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
+        { role: 'user', content: translatedMessage },
       ],
       temperature: 0.1,
       max_tokens: 300,
@@ -1013,19 +1151,19 @@ async function handleBudgetQuery(from: string, projectId: string): Promise<void>
     : 0;
   const weeksLeft = weeklyBurn > 0 ? Math.round(remaining / weeklyBurn) : null;
 
-  let reply = `📊 *Budget Summary*\n\n` +
-    `💰 Total Spent: ${fmt(totalSpent)} UGX\n` +
-    `🎯 Budget: ${fmt(budget)} UGX\n` +
-    `📈 Used: ${pct}%\n` +
-    `✅ Remaining: ${fmt(remaining)} UGX`;
-
-  if (weeksLeft !== null) reply += `\n⏱️ At current rate: ~${weeksLeft} weeks of budget left`;
-  if (pct > 80) reply += `\n\n⚠️ *Warning:* Over 80% of budget used!`;
-
-  await sendMessage(from, reply);
+  const msg = await ai(
+    `Give the user a natural budget summary for their project:
+    Total spent: ${fmt(totalSpent)} UGX
+    Budget: ${fmt(budget)} UGX
+    Used: ${pct}%
+    Remaining: ${fmt(remaining)} UGX
+    ${weeksLeft !== null ? 'At current rate: ~' + weeksLeft + ' weeks of budget left' : ''}
+    ${pct > 80 ? 'IMPORTANT: Warn them they have used over 80% of budget!' : ''}
+    Be conversational, not just a list of numbers.`,
+    `Budget summary: Spent: ${fmt(totalSpent)} UGX | Budget: ${fmt(budget)} UGX | Used: ${pct}% | Remaining: ${fmt(remaining)} UGX`
+  );
+  await sendMessage(from, msg);
 }
-
-const PURE_GREETING_RE = /^(hi|hey|hello|hola|good\s*(morning|afternoon|evening|day)|howdy|sup|yo|greetings|jambo|habari|sasa?|niaje|oya|eyo|ola|whaddup|what'?s\s+up)[\s!?.]*$/i;
 
 async function handleGreeting(
   from: string,
@@ -1038,114 +1176,123 @@ async function handleGreeting(
     profile?.full_name && profile.full_name !== 'WhatsApp User'
       ? profile.full_name.split(' ')[0]
       : null;
-  const hi = firstName ? `👋 Hey ${firstName}!` : `👋 Hey!`;
 
-  // If message is longer/more complex than a simple greeting, use AI to reply conversationally
-  const msg = (rawMessage || '').trim();
-  const isPureGreeting = !msg || PURE_GREETING_RE.test(msg);
-  const wantsUpdateMenu = /update.*dashboard|log.*expense|add.*expense|record|log something|what can|what do/i.test(msg);
-
-  if (!isPureGreeting && msg && currentProject && !wantsUpdateMenu) {
-    // Use AI for any non-trivial free-form message
-    const systemPrompt = `You are JengaTrack, a WhatsApp construction 
-tracking assistant for African building projects.
-Active project: ${currentProject.name}. Budget: UGX ${Number(currentProject.budget || 0).toLocaleString()}.
-
-Your ONLY job is to help users LOG data or QUERY their project.
-Keep replies under 4 lines. Plain text only, no markdown, no asterisks.
-
-If the user says they want to update/log/record/add something, 
-respond with this exact menu (copy it exactly):
-
-What would you like to log?
-
-💰 Expense: "Bought cement for 400,000"
-📦 Materials: "Received 50 bags cement"
-👷 Workers: "8 workers on site today"
-📊 Budget check: "How much have we spent?"
-📸 Send a receipt photo
-🎙️ Send a voice note
-
-If they ask a factual question about their project, answer it 
-concisely using the project context. Never ask for info you already 
-have (like the budget). Never ask clarifying questions.`;
-
-    try {
-      if (gemini && process.env.GEMINI_API_KEY) {
-        const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-        const result = await model.generateContent(`${systemPrompt}\n\nUser: ${msg}`);
-        const reply = result.response.text().trim();
-        if (reply) {
-          await sendMessage(from, reply);
-          return;
-        }
-      }
-    } catch (err: any) {
-      console.error('[Chat] Gemini failed:', err?.message);
-    }
-
-    try {
-      if (process.env.OPENAI_API_KEY) {
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: msg },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-        });
-        const reply = completion.choices[0]?.message?.content?.trim();
-        if (reply) {
-          await sendMessage(from, reply);
-          return;
-        }
-      }
-    } catch (err: any) {
-      console.error('[Chat] OpenAI failed:', err?.message);
-    }
-  }
-
-  // Pure greeting or AI unavailable → show scripted menu
+  let recentActivity = '';
   if (currentProject) {
-  await sendMessage(
-    from,
-      `${hi} Welcome back to *JengaTrack* 🏗️\n\n` +
-        `📌 *Active project:* ${currentProject.name}\n\n` +
-        `What would you like to log?\n\n` +
-        `💰 *Expense:* "Bought cement for 400,000"\n` +
-        `📦 *Materials:* "Received 50 bags cement"\n` +
-        `👷 *Workers:* "8 workers on site today"\n` +
-        `📊 *Budget:* "How much have we spent?"\n` +
-        `📸 Send a receipt photo or voice note\n\n` +
-        `Say *"switch project"* to change projects\n` +
-        `Say *"menu"* to see all commands`
-    );
+    const { data: recentExpenses } = await supabase
+      .from('expenses')
+      .select('description, amount, created_at')
+      .eq('project_id', currentProject.id)
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    const { data: todayLog } = await supabase
+      .from('daily_logs')
+      .select('worker_count, notes')
+      .eq('project_id', currentProject.id)
+      .eq('log_date', new Date().toISOString().split('T')[0])
+      .maybeSingle();
+
+    if (recentExpenses?.length) {
+      recentActivity += `Recent expenses: ${recentExpenses.map((e: any) =>
+        `${e.description} (UGX ${Number(e.amount).toLocaleString()})`
+      ).join(', ')}. `;
+    }
+    if (todayLog?.worker_count) recentActivity += `Today: ${todayLog.worker_count} workers. `;
+    if (todayLog?.notes) recentActivity += `Notes: ${todayLog.notes}.`;
+  }
+
+  const systemPrompt = `You are JengaTrack, a smart WhatsApp assistant for construction site management in Uganda/Africa.
+
+User: ${firstName || 'Site manager'}
+Active project: ${currentProject?.name || 'None set'}
+Budget: UGX ${Number(currentProject?.budget || 0).toLocaleString()}
+${recentActivity ? 'Recent activity: ' + recentActivity : ''}
+
+Your personality:
+- Warm, practical, concise — like a knowledgeable site supervisor
+- You understand English, Luganda, and Swahili construction terms
+- Never show numbered menus unless user explicitly asks for options
+- Never say "I am an AI"
+- Keep replies under 5 lines
+- Plain text only, no markdown asterisks or bold
+
+What you can do:
+- Log expenses, materials received/used, daily workers, progress
+- Answer budget questions and data queries
+- Update project budget
+- Analyse spending patterns and vendor history
+- Understand voice notes and receipt photos
+
+If user wants to log something, confirm naturally and tell them you're saving it. If they ask a question, answer it directly.`;
+
+  let reply: string | null = null;
+
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent(`${systemPrompt}\n\nUser: ${rawMessage || 'Hello'}`);
+      reply = result.response.text().trim();
+    } catch (err: any) {
+      console.error('[Greeting] Gemini failed:', err?.message);
+    }
+  }
+
+  if (!reply && process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: rawMessage || 'Hello' },
+        ],
+        temperature: 0.7,
+        max_tokens: 300,
+      });
+      reply = completion.choices[0]?.message?.content?.trim() || null;
+    } catch (err: any) {
+      console.error('[Greeting] OpenAI failed:', err?.message);
+    }
+  }
+
+  if (!reply) {
+    reply = firstName
+      ? `Hey ${firstName}! What would you like to update on ${currentProject?.name || 'your project'} today?`
+      : `Hey! What would you like to update today?`;
+  }
+
+  await sendMessage(from, reply);
+}
+
+async function handleBudgetUpdate(from: string, projectId: string, extracted: Record<string, unknown>): Promise<void> {
+  const { data: project } = await supabase
+    .from('projects').select('budget, name').eq('id', projectId).single();
+
+  const currentBudget = parseFloat(String(project?.budget || 0));
+  const amount = typeof extracted.amount === 'number' ? extracted.amount : 0;
+  const action = extracted.action as string;
+
+  if (!amount || amount <= 0) {
+    await sendMessage(from, await ai(
+      'Ask the user what the new budget should be. Give examples: "Set budget to 200M" or "Add 10M to budget".',
+      'What should the new budget be? Try: "Set budget to 200M" or "Add 10M to budget"'
+    ));
     return;
   }
 
-  if (allProjects && allProjects.length > 1) {
-    const list = allProjects.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
-    await sendMessage(
-      from,
-      `${hi} Welcome back to *JengaTrack* 🏗️\n\n` +
-        `You have *${allProjects.length} projects*.\n` +
-        `Which one are you updating today?\n\n` +
-        `${list}\n\n` +
-        `Reply with the number (e.g. "1")`
-    );
-    return;
-  }
+  const newBudget = action === 'add' ? currentBudget + amount : amount;
 
-  await sendMessage(
-    from,
-    `${hi} Welcome to *JengaTrack* 🏗️\n\n` +
-      `I help you track your construction project via WhatsApp — expenses, materials, workers, progress — all in one place.\n\n` +
-      `Ready to set up your project?\n\n` +
-      `1. 🏗️ Create a new project\n` +
-      `2. ℹ️ Learn more\n\n` +
-      `Reply *"1"* to get started!`
+  await supabase.from('projects')
+    .update({ budget: newBudget, updated_at: new Date().toISOString() })
+    .eq('id', projectId);
+
+  console.log('[BudgetUpdate] Old:', currentBudget, '→ New:', newBudget);
+
+  const msg = await ai(
+    `Tell the user their budget was updated. Previous: ${fmt(currentBudget)} UGX. ${action === 'add' ? 'Added' : 'New budget'}: ${fmt(amount)} UGX. New total: ${fmt(newBudget)} UGX. Tell them to refresh their dashboard.`,
+    `Budget updated! Previous: ${fmt(currentBudget)} UGX. New total: ${fmt(newBudget)} UGX. Refresh your dashboard to see the update.`
   );
+  await sendMessage(from, msg);
 }
 
 async function handleExpenseLog(
@@ -1170,12 +1317,19 @@ async function handleExpenseLog(
   // If quantity + item but no price → ask for price
   if ((!amount || amount <= 0) && quantity > 0 && item) {
     await updateExpenseState(userId, 'awaiting_price', { quantity, item, unit: unit || 'units', project_id: projectId, vendor });
-    await sendMessage(from, `Got it! ${quantity} ${unit || 'units'} of *${item}*${vendor ? ` from ${vendor}` : ''}.\n\nWhat was the total cost? (e.g. 1,900,000 UGX)`);
+    const msg = await ai(
+      `Tell the user you got it: ${quantity} ${unit || 'units'} of ${item}${vendor ? ' from ' + vendor : ''}. Ask them what the total cost was. Give an example: 1,900,000 UGX.`,
+      `Got it! ${quantity} ${unit || 'units'} of ${item}${vendor ? ' from ' + vendor : ''}. What was the total cost? (e.g. 1,900,000 UGX)`
+    );
+    await sendMessage(from, msg);
     return;
   }
 
   if (!amount || amount <= 0) {
-    await sendMessage(from, `I need the amount. Try:\n"Bought cement for 200,000 UGX"\n"Paid plumber 150k"\n"Spent 500,000 on steel rods"`);
+    await sendMessage(from, await ai(
+      'Tell the user you need the amount. Give examples: Bought cement for 200,000 UGX, Paid plumber 150k, Spent 500,000 on steel rods.',
+      'I need the amount. Try: "Bought cement for 200,000 UGX" or "Paid plumber 150k"'
+    ));
     return;
   }
 
@@ -1191,16 +1345,18 @@ async function handleExpenseLog(
     unit_price: quantity > 0 ? Math.round(amount / quantity) : undefined,
   });
 
-  let confirmMsg = `Got it! 🧱\n\n` +
-    `📦 ${description}\n` +
-    (vendor ? `🏪 Vendor: ${vendor}\n` : '') +
-    `💰 Total: ${fmt(amount)} UGX` +
-    (quantity > 0 ? `\n📊 Per ${unit || 'unit'}: ${fmt(amount / quantity)} UGX` : '') +
-    `\n\nLooks good?`;
-
-  if (anomalyAlert) confirmMsg = `${anomalyAlert}\n\n${confirmMsg}`;
-
-  await sendOptions(from, confirmMsg, ['✅ Yes – Log it', '✏️ Edit', '❌ Cancel']);
+  const msg = await ai(
+    `Confirm this expense with the user and ask if it looks correct:
+    Item: ${description}
+    Total: ${fmt(amount)} UGX
+    ${vendor ? 'From: ' + vendor : ''}
+    ${quantity > 0 ? 'Per ' + (unit || 'unit') + ': ' + fmt(amount / quantity) + ' UGX' : ''}
+    ${anomalyAlert ? 'Note: ' + anomalyAlert : ''}
+    End with: reply 1 to save, 2 to edit, 3 to cancel.`,
+    `${description} — ${fmt(amount)} UGX${vendor ? ' from ' + vendor : ''}. Save it?\n\n1. Yes\n2. Edit\n3. Cancel`
+  );
+  const confirmMsg = anomalyAlert ? `${anomalyAlert}\n\n${msg}` : msg;
+  await sendMessage(from, confirmMsg);
 }
 
 async function handleMaterialLog(
@@ -1212,22 +1368,60 @@ async function handleMaterialLog(
   let item = String(extracted.item || '').trim();
   let qty = typeof extracted.quantity === 'number' ? extracted.quantity : parseFloat(String(extracted.quantity || '0')) || 0;
   let unit = String(extracted.unit || 'units').trim();
-  let action = String(extracted.action || 'bought').toLowerCase();
-  let vendor = String(extracted.vendor || '').trim();
+  const action = String(extracted.action || 'bought').toLowerCase();
+  const vendor = String(extracted.vendor || '').trim();
 
-  // Fallback regex
   const qm = rawMessage.match(/(\d+(?:,\d+)*)\s*(bags?|kg|tons?|pieces?|trips?|units?)\s+(?:of\s+)?([a-z\s]+)/i);
   if (qm) {
     if (!qty) qty = parseFloat(qm[1].replace(/,/g, ''));
     if (!item) item = qm[3].trim();
     if (!unit || unit === 'units') unit = qm[2].toLowerCase();
   }
-  if (/used|consumed|for\s+foundation|for\s+/i.test(rawMessage)) action = 'used';
+  const effectiveAction = /used|consumed|for\s+foundation|for\s+/i.test(rawMessage) ? 'used' : action;
 
+  // Fallback quantity extraction for natural language (e.g. "I have just used 5 bricks")
+  if (!qty || qty <= 0) {
+    const naturalMatch = rawMessage.match(
+      /(\d+)\s*(bricks?|bags?|kg|tons?|pieces?|rods?|bars?|sheets?|units?|rolls?)/i
+    );
+    if (naturalMatch) {
+      qty = parseFloat(naturalMatch[1]);
+      if (!unit || unit === 'units') unit = naturalMatch[2].toLowerCase();
+    }
+  }
+
+  if (!item || item === 'material') {
+    const itemMatch = rawMessage.match(
+      /(\d+)\s+(?:bags?\s+of\s+|pieces?\s+of\s+|units?\s+of\s+)?([a-z\s]+?)(?:\s*$|\s+for|\s+from)/i
+    );
+    if (itemMatch) item = itemMatch[2].trim();
+  }
   if (!item) item = 'material';
   if (!qty || qty <= 0) qty = 1;
 
-  const materialName = item.toLowerCase().trim();
+  // Get all existing materials for fuzzy matching
+  const { data: allMaterials } = await supabase
+    .from('materials_inventory')
+    .select('id, material_name, quantity, unit')
+    .eq('project_id', projectId);
+
+  let materialName = item.toLowerCase().trim() || 'material';
+
+  if (allMaterials && allMaterials.length > 0 && materialName !== 'material') {
+    const fuzzyMatch = allMaterials.find((m: any) =>
+      m.material_name === materialName ||
+      m.material_name.includes(materialName) ||
+      materialName.includes(m.material_name) ||
+      materialName.split(' ').some((word: string) =>
+        word.length > 3 && m.material_name.includes(word)
+      )
+    );
+    if (fuzzyMatch) {
+      console.log('[MaterialLog] Fuzzy matched:', materialName, '→', fuzzyMatch.material_name);
+      materialName = fuzzyMatch.material_name;
+    }
+  }
+
   const { data: existing } = await supabase
     .from('materials_inventory')
     .select('id, quantity')
@@ -1235,7 +1429,7 @@ async function handleMaterialLog(
     .eq('material_name', materialName)
     .maybeSingle();
 
-  const delta = action === 'used' ? -Math.abs(qty) : Math.abs(qty);
+  const delta = effectiveAction === 'used' ? -Math.abs(qty) : Math.abs(qty);
   const newQty = Math.max(0, parseFloat(String(existing?.quantity || 0)) + delta);
 
   if (existing) {
@@ -1251,19 +1445,18 @@ async function handleMaterialLog(
     });
   }
 
-  // Track vendor if buying
-  if (action !== 'used' && vendor) await upsertVendor(projectId, vendor, 0);
+  if (effectiveAction !== 'used' && vendor) await upsertVendor(projectId, vendor, 0);
 
-  let reply = `✅ *Inventory updated*\n\n` +
-    `📦 ${materialName}: ${action === 'used' ? `used ${qty}` : `added ${qty}`} ${unit}\n` +
-    `📊 Current stock: *${newQty} ${unit}*`;
-
-  // Low stock alert (threshold: less than 10% of what was last received, or absolute threshold)
-  if (newQty <= 5 && action === 'used') {
-    reply += `\n\n🚨 *Low stock alert!* Only ${newQty} ${unit} of ${materialName} remaining. Consider restocking soon.`;
-  }
-
-  await sendMessage(from, reply);
+  const msg = await ai(
+    `Tell the user their materials inventory was updated:
+    Material: ${materialName}
+    Action: ${effectiveAction === 'used' ? 'used ' + qty : 'added ' + qty} ${unit}
+    Current stock: ${newQty} ${unit}
+    ${newQty <= 5 && effectiveAction === 'used' ? 'IMPORTANT: Warn them stock is critically low at only ' + newQty + ' ' + unit + ' remaining.' : ''}
+    Tell them to check Materials & Supplies page.`,
+    `Inventory updated — ${materialName}: ${newQty} ${unit} remaining. Check Materials & Supplies page.`
+  );
+  await sendMessage(from, msg);
 }
 
 async function handleLaborLog(
@@ -1282,7 +1475,10 @@ async function handleLaborLog(
   }
 
   if (workerCount <= 0) {
-    await sendMessage(from, 'How many workers were on site today? e.g. "6 workers on site"');
+    await sendMessage(from, await ai(
+      'Ask the user how many workers were on site today. Give an example: "6 workers on site".',
+      'How many workers were on site today? e.g. "6 workers on site"'
+    ));
     return;
   }
 
@@ -1306,7 +1502,14 @@ async function handleLaborLog(
   }
 
   await upsertDailyLog(projectId, { worker_count: workerCount });
-  await sendMessage(from, `✅ *${workerCount} workers* logged for today.${anomalyMsg}`);
+  const msg = await ai(
+    `Confirm to the user that ${workerCount} workers were logged for today.
+    ${anomalyMsg ? 'Also note: ' + anomalyMsg : ''}
+    Tell them to check Daily Accountability page.
+    Keep it brief.`,
+    `${workerCount} workers logged for today. Check Daily Accountability page.`
+  );
+  await sendMessage(from, msg);
 }
 
 async function handleProgressUpdate(
@@ -1315,9 +1518,52 @@ async function handleProgressUpdate(
   extracted: Record<string, unknown>,
   rawMessage: string
 ): Promise<void> {
-  const note = String(extracted.note || rawMessage).trim();
-  await upsertDailyLog(projectId, { notes: note });
-  await sendMessage(from, `✅ Progress logged:\n"${note}"\n\nThis will appear on your dashboard timeline.`);
+  const taskLines = rawMessage
+    .split('\n')
+    .map((l: string) => l.replace(/^[\d\.\-\*\•]\s*/, '').trim())
+    .filter((l: string) =>
+      l.length > 5 &&
+      !/^(i completed|following tasks|tasks today|completed today)/i.test(l)
+    );
+
+  const today = new Date().toISOString().split('T')[0];
+
+  if (taskLines.length > 1) {
+    for (const taskText of taskLines) {
+      const { error } = await supabase.from('tasks').insert({
+        project_id: projectId,
+        title: taskText,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+      if (error) console.error('[Task Insert Error]', error.message);
+    }
+    await upsertDailyLog(projectId, { notes: taskLines.join('\n') });
+    const msg = await ai(
+      `Tell the user their progress update was logged: ${taskLines.length} tasks: ${taskLines.join(', ')}. Tell them it will appear on their dashboard timeline. Keep it brief and encouraging.`,
+      `Logged ${taskLines.length} completed tasks. Check your dashboard timeline.`
+    );
+    await sendMessage(from, msg);
+  } else {
+    const note = String(extracted.note || rawMessage).trim();
+    await upsertDailyLog(projectId, { notes: note });
+
+    if (/finished|completed|done|built|laid|poured|installed/i.test(note)) {
+      await supabase.from('tasks').insert({
+        project_id: projectId,
+        title: note,
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    }
+    const msg = await ai(
+      `Tell the user their progress update was logged: "${note}". Tell them it will appear on their dashboard timeline. Keep it brief and encouraging.`,
+      `Progress logged: "${note}". Check your dashboard timeline.`
+    );
+    await sendMessage(from, msg);
+  }
 }
 
 async function handleWeatherDelay(
@@ -1328,7 +1574,11 @@ async function handleWeatherDelay(
 ): Promise<void> {
   const reason = String(extracted.reason || rawMessage).trim();
   await upsertDailyLog(projectId, { weather_condition: reason, notes: `Delay: ${reason}` });
-  await sendMessage(from, `✅ Delay noted: "${reason}"\n\nThis has been added to your project timeline.`);
+  const msg = await ai(
+    `Tell the user their weather delay has been noted: "${reason}". Tell them it has been added to their project timeline. Express brief empathy about the delay.`,
+    `Delay noted: "${reason}". Added to your project timeline.`
+  );
+  await sendMessage(from, msg);
 }
 
 async function handleMaterialQuery(from: string, projectId: string): Promise<void> {
@@ -1339,18 +1589,32 @@ async function handleMaterialQuery(from: string, projectId: string): Promise<voi
     .order('material_name');
 
   if (!materials || materials.length === 0) {
-    await sendMessage(from, 'No materials in inventory yet.\n\nLog some with:\n"Received 50 bags cement from Hima Hardware"');
+    const msg = await ai(
+      'Tell the user there are no materials in inventory yet. Give an example: "Received 50 bags cement from Hima".',
+      'No materials in inventory yet. Log received stock like: "Received 50 bags cement from Hima"'
+    );
+    await sendMessage(from, msg);
     return;
   }
 
-  const lines = materials.map((m) => `• ${m.material_name}: *${m.quantity} ${m.unit || 'units'}*`).join('\n');
-  await sendMessage(from, `📦 *Current Inventory:*\n\n${lines}\n\nView full details on your dashboard.`);
+  const lines = materials.map((m: any) =>
+    `• ${m.material_name}: ${m.quantity} ${m.unit || 'units'}`
+  ).join('\n');
+
+  const msg = await ai(
+    `Show the user their current inventory:\n${lines}\nThen tell them they can send "Used X bags cement" to update stock. Be brief.`,
+    `Current inventory:\n\n${lines}\n\nSend "Used X bags cement" to update stock.`
+  );
+  await sendMessage(from, msg);
 }
 
 // ─── SMART_QUERY: free-form questions over historical data ─────────────────────
 
 async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
-  await sendMessage(from, '🔍 Looking up your data…');
+  await sendMessage(from, await ai(
+    'Tell the user you are looking up their data. One short line.',
+    'Looking up your data…'
+  ));
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -1377,6 +1641,11 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     .gte('log_date', fromDate)
     .order('log_date', { ascending: false })
     .limit(500);
+
+  const { data: materials } = await supabase
+    .from('materials_inventory')
+    .select('material_name, quantity, unit, last_updated')
+    .eq('project_id', projectId);
 
   let vendors: { name: string; total_spent: number }[] = [];
   try {
@@ -1407,9 +1676,15 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       notes: l.notes,
     })),
     vendors,
+    materialsInventory: (materials || []).map((m: any) => ({
+      name: m.material_name,
+      currentStock: m.quantity,
+      unit: m.unit || 'units',
+      lastUpdated: m.last_updated,
+    })),
   };
 
-  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using ONLY the provided project data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). If the data does not contain enough information to answer, say so clearly. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
+  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using ONLY the provided project data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
@@ -1447,10 +1722,10 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
   if (answer) {
     await sendMessage(from, answer);
   } else {
-    await sendMessage(
-      from,
-      "I couldn't generate an answer right now. Try asking something like:\n• \"How much did I spend on cement last month?\"\n• \"What was my biggest expense in January?\"\n• \"Compare spending this month vs last month\""
-    );
+    await sendMessage(from, await ai(
+      'Tell the user you could not generate an answer right now. Suggest they try asking something like: How much did I spend on cement last month? Compare spending this month vs last month. Be brief.',
+      'Could not generate an answer right now. Try: "How much did I spend on cement last month?" or "Compare spending this month vs last month"'
+    ));
   }
 }
 
@@ -1503,18 +1778,21 @@ export async function sendDailyHeartbeat(): Promise<void> {
     const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
 
     const hadActivity = todayLog !== null;
-    const activityDot = hadActivity ? '🟢' : '🔴';
 
-    let msg = `🌆 *Daily Heartbeat — ${project.name}*\n\n` +
-      `${activityDot} Site activity today: ${hadActivity ? 'Yes' : 'No updates received'}\n`;
-    if (todayLog?.worker_count) msg += `👷 Workers: ${todayLog.worker_count}\n`;
-    if (dailySpend > 0) msg += `💰 Spent today: ${fmt(dailySpend)} UGX\n`;
-    if (todayLog?.notes) msg += `📝 Update: "${todayLog.notes}"\n`;
-    msg += `\n📊 Total spent: ${fmt(totalSpent)} UGX / ${fmt(budget)} UGX (${pct}%)`;
-    if (!hadActivity) msg += `\n\n⚠️ No updates from site today. Consider following up with your manager.`;
-    msg += `\n\nFull dashboard: ${DASHBOARD_URL}`;
-
-    await sendMessage(`whatsapp:${owner.whatsapp_number}`, msg);
+    const heartbeatMsg = await ai(
+      `Generate a daily site update summary for the project owner:
+    Project: ${project.name}
+    Site active today: ${hadActivity ? 'Yes' : 'No updates received'}
+    ${todayLog?.worker_count ? 'Workers: ' + todayLog.worker_count : ''}
+    ${dailySpend > 0 ? 'Spent today: ' + fmt(dailySpend) + ' UGX' : ''}
+    ${todayLog?.notes ? 'Update: ' + todayLog.notes : ''}
+    Total spent: ${fmt(totalSpent)} UGX of ${fmt(budget)} UGX (${pct}%)
+    Dashboard: ${DASHBOARD_URL}
+    ${!hadActivity ? 'Mention no updates were received and suggest following up with site manager.' : ''}
+    Be professional but brief. Include the dashboard URL.`,
+      `Daily update — ${project.name}\n\nActive today: ${hadActivity ? 'Yes' : 'No'}\nTotal spent: ${fmt(totalSpent)}/${fmt(budget)} UGX (${pct}%)\n\n${DASHBOARD_URL}`
+    );
+    await sendMessage(`whatsapp:${owner.whatsapp_number}`, heartbeatMsg);
   }
 }
 
@@ -1596,14 +1874,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               await sendPostCreationMessage(From, projectId);
             } catch (err: any) {
               console.error('[Onboarding] Project creation failed:', err);
-              await sendMessage(From, `⚠️ Couldn't create the project.\n\nError: ${err.message}\n\nType "start over" to try again.`);
+              await sendMessage(From, await ai(
+                `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
+                `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
+              ));
             }
           } else if (message.includes('2') || /edit/i.test(message)) {
             await updateOnboardingState(userId, 'welcome_sent', {});
             await sendWelcomeMessage(From, profile.full_name);
           } else {
             await updateOnboardingState(userId, 'completed');
-            await sendMessage(From, 'No problem! Create a project from the dashboard anytime.\n\nYou can still send me updates and I\'ll log them.');
+            await sendMessage(From, await ai(
+              'Tell the user no problem — they can create a project from the dashboard anytime. Say they can still send you updates and you will log them.',
+              'No problem! Create a project from the dashboard anytime. You can still send me updates and I will log them.'
+            ));
           }
           break;
         default:
@@ -1650,19 +1934,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
           .eq('id', userId);
 
-        await sendMessage(
-          From,
-          `✅ Got it! Logging updates to:\n*${selectedProject.name}*` +
-            (selectedProject.location && selectedProject.location !== 'No location'
-              ? ` — ${selectedProject.location}`
-              : '') +
-            `\n\nSend your first update now or type "switch project" to change projects.`
+        const msg = await ai(
+          `Tell the user you are now tracking updates for their project called "${selectedProject.name}". Be brief and encouraging. Tell them to send their first update.`,
+          `Got it! Tracking updates for ${selectedProject.name}. Send your first update anytime.`
         );
+        await sendMessage(From, msg);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
         const projectList = options.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
-        await sendMessage(From, `Please reply with a number:\n\n${projectList}`);
+        await sendMessage(From, await ai(
+          `Ask the user to reply with a number. List: ${projectList}`,
+          `Please reply with a number:\n\n${projectList}`
+        ));
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -1680,10 +1964,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Check for "switch project" command (before classifyIntent)
     if (/switch\s*project|change\s*project|select\s*project/i.test(rawMessage)) {
       if (projects.length <= 1) {
-        await sendMessage(
-          From,
-          `You only have one active project: *${projects[0]?.name || 'None'}*`
-        );
+        await sendMessage(From, await ai(
+          `Tell the user they only have one active project: ${projects[0]?.name}. They cannot switch because there is nothing to switch to.`,
+          `You only have one active project: ${projects[0]?.name}`
+        ));
       } else {
         await supabase
           .from('profiles')
@@ -1695,23 +1979,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // Help / menu — full list of commands (no AI needed)
+    // Help / menu — AI-powered overview
     if (/^(help|menu|commands)$/i.test(rawMessage.trim())) {
-      const helpText =
-        `📋 *JengaTrack – All commands*\n\n` +
-        `💰 *Expenses:* "Bought 50 bags cement for 1,900,000" or "Paid plumber 150k"\n` +
-        `📦 *Materials in:* "Received 50 bags cement from Hima"\n` +
-        `📦 *Materials used:* "Used 5 bags cement today"\n` +
-        `👷 *Workers:* "8 workers on site today"\n` +
-        `📊 *Progress:* "Foundation 80% complete" or "Finished ring beam"\n` +
-        `🌧️ *Weather delay:* "Heavy rain, no work today"\n` +
-        `📊 *Budget:* "How much have we spent?" or "What's left in budget?"\n` +
-        `🔍 *Ask anything:* "How much did I spend on cement last month?" or "Compare spending this month vs last month"\n` +
-        `📦 *Stock:* "How much cement do we have?"\n` +
-        `📸 *Receipt:* Send a photo → I'll extract vendor & amount\n` +
-        `🎙️ *Voice:* Send a voice note → I'll transcribe and process\n\n` +
-        `*Other:* "Switch project" to change project • "Start over" to reset onboarding`;
-      await sendMessage(From, helpText);
+      await handleGreeting(From, profile, project, projects || [],
+        'Give me a quick overview of everything you can help me with on this project.');
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
@@ -1728,15 +1999,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastExpense) {
           await supabase.from('expenses').update({ disputed: true }).eq('id', lastExpense.id);
-          await sendMessage(From, `🚩 Flagged "${lastExpense.description}" (${fmt(parseFloat(lastExpense.amount))} UGX) as disputed on the dashboard.`);
+          await sendMessage(From, await ai(
+            `Tell the user that the expense "${lastExpense.description}" for ${fmt(parseFloat(lastExpense.amount))} UGX has been flagged as disputed on the dashboard.`,
+            `Flagged "${lastExpense.description}" as disputed on the dashboard.`
+          ));
         } else {
-          await sendMessage(From, 'No recent expense to dispute.');
+          await sendMessage(From, await ai(
+            'Tell the user there is no recent expense to dispute.',
+            'No recent expense to dispute.'
+          ));
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
       if (!isManager && !isOwner) {
-        await sendMessage(From, 'Only the project manager can log updates in this group.');
+        await sendMessage(From, await ai(
+          'Tell the user politely that only the project manager can log updates in this group.',
+          'Only the project manager can log updates in this group.'
+        ));
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -1745,25 +2025,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 5: Handle media ──────────────────────────────────────────────────
     if (hasMedia && MediaUrl0) {
       if (isVoiceNote) {
-        await sendMessage(From, '🎙️ Voice note received! Transcribing...');
+        await sendMessage(From, await ai(
+          'Tell the user you received their voice note and are transcribing it. One short line.',
+          'Voice note received! Transcribing now...'
+        ));
         const transcribed = await processVoiceNote(MediaUrl0);
         if (transcribed) {
-          await sendMessage(From, `📝 I heard: "${transcribed}"\n\nProcessing this now...`);
+          await sendMessage(From, await ai(
+            `Tell the user you transcribed their voice note as: "${transcribed}" and you are processing it now.`,
+            `Got it: "${transcribed}"\nProcessing now...`
+          ));
           const { intent, extracted } = await classifyIntent(transcribed, phoneNumber);
           if (!project) {
-            await sendMessage(From, 'You need a project first. Type "hey jenga" to create one.');
+            await sendMessage(From, await ai(
+              'Tell the user they need a project first. Tell them to type "hey jenga" to create one.',
+              'You need a project first. Type "hey jenga" to create one.'
+            ));
           } else {
             await routeIntent(intent, extracted, transcribed, From, userId, project, profile, projects || []);
           }
         } else {
-          await sendMessage(From, `Couldn't transcribe that voice note. Try speaking clearly or type your update instead.`);
+          await sendMessage(From, await ai(
+            'Tell the user you could not transcribe their voice note clearly. Ask them to try again with clearer audio or type their update instead.',
+            'Could not transcribe that voice note clearly. Try again or type your update.'
+          ));
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
 
       if (isImage && project) {
-        await processReceiptPhoto(From, userId, project.id, MediaUrl0);
+        try {
+          const mediaResponse = await fetch(MediaUrl0, {
+            headers: {
+              Authorization: `Basic ${Buffer.from(
+                `${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`
+              ).toString('base64')}`,
+            },
+          });
+          const buffer = await (mediaResponse as any).buffer();
+          const contentType = mediaResponse.headers.get('content-type') || 'image/jpeg';
+          const ext = contentType.includes('png') ? 'png' : 'jpg';
+          const fileName = `${project.id}/${Date.now()}.${ext}`;
+
+          const { error: uploadError } = await supabase.storage
+            .from('site-photos')
+            .upload(fileName, buffer, { contentType, upsert: false });
+
+          if (uploadError) throw uploadError;
+
+          const { data: urlData } = supabase.storage
+            .from('site-photos')
+            .getPublicUrl(fileName);
+
+          const permanentUrl = urlData?.publicUrl || MediaUrl0;
+          console.log('[Photo] Saved to Supabase:', permanentUrl);
+
+          await upsertDailyLog(project.id, { photo_urls: [permanentUrl] });
+          await sendMessage(From, await ai(
+            'Tell the user their photo was saved to their site progress feed on the dashboard. One short line.',
+            'Photo saved to your site progress feed on the dashboard!'
+          ));
+        } catch (err: any) {
+          console.error('[Photo Upload Error]', err?.message);
+          await upsertDailyLog(project.id, { photo_urls: [MediaUrl0] });
+          await sendMessage(From, await ai(
+            'Tell the user their photo was saved. Tell them to view it on their dashboard.',
+            'Photo saved! View it on your dashboard.'
+          ));
+        }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -1771,7 +2101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Video or other media — save as progress photo
       if (project) {
         await upsertDailyLog(project.id, { photo_urls: [MediaUrl0] });
-        await sendMessage(From, '📸 Photo/video saved to your progress feed on the dashboard!');
+        await sendMessage(From, await ai(
+          'Tell the user their photo or video was saved to their progress feed on the dashboard. One short line.',
+          'Photo/video saved to your progress feed on the dashboard!'
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -1797,7 +2130,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendPostCreationMessage(From, projectId);
       } catch (err: any) {
         console.error('[Onboarding] Project creation failed (from re-check):', err);
-        await sendMessage(From, `⚠️ Couldn't create the project.\n\nError: ${err.message}\n\nType "start over" to try again.`);
+        await sendMessage(From, await ai(
+          `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
+          `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -1805,6 +2141,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
+      const isConfirmationResponse =
+        /^[123]$/.test(rawMessage.trim()) ||
+        /^(yes|ok|no|log it|confirm|edit|cancel|save)$/i.test(rawMessage.trim());
+
+      const newIntent = preClassifyIntent(rawMessage);
+      const looksLikeNewIntent = newIntent !== null && newIntent.intent !== 'GREETING';
+
+      if (!isConfirmationResponse && looksLikeNewIntent) {
+        console.log('[AutoClear] Stale confirmation cleared, processing new intent');
+        await updateExpenseState(userId, null, {});
+        // Fall through to intent routing below
+      } else {
       // CRITICAL: Do not process expense confirmation during onboarding
       if (!profile.onboarding_completed_at) {
         console.log('[Expense Confirm] Blocked - user still onboarding');
@@ -1842,17 +2190,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (insertError) {
           console.error('[Expense Insert] FAILED:', insertError.message, insertError.code, insertError.details);
-          await sendMessage(
-            From,
-            `⚠️ Could not save expense.\nError: ${insertError.message}\n\nPlease try again.`
-          );
+          await sendMessage(From, await ai(
+            `Tell the user there was an error saving their expense and ask them to try again. Error details: ${insertError.message}`,
+            `Could not save that expense. Please try again.`
+          ));
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
 
         if (!insertedExpense || !insertedExpense.id) {
           console.error('[Expense Insert] No data returned from insert');
-          await sendMessage(From, `❌ Failed to save expense. Please try again.`);
+          await sendMessage(From, await ai(
+            'Tell the user the expense failed to save and ask them to try again.',
+            'Failed to save expense. Please try again.'
+          ));
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
@@ -1867,21 +2218,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await upsertVendor(pendingData.project_id, pendingData.vendor, pendingData.amount);
         }
         await updateExpenseState(userId, null, {});
-        await sendMessage(
-          From,
-          `✅ *Logged!*\n\n${pendingData.description}\n💰 ${fmt(pendingData.amount!)} UGX\n\nYour dashboard and budget have been updated.`
+        const msg = await ai(
+          `Tell the user their expense was saved successfully: ${pendingData.description} — ${fmt(pendingData.amount!)} UGX. Tell them their dashboard and budget have been updated. Keep it short and friendly. Tell them to check Budgets & Costs page.`,
+          `Saved! ${pendingData.description} — ${fmt(pendingData.amount!)} UGX logged. Check Budgets & Costs to see the update.`
         );
+        await sendMessage(From, msg);
       } else if (message.includes('2') || /edit|✏️/i.test(message)) {
         await updateExpenseState(userId, null, {});
-        await sendMessage(From, 'No problem! Send the corrected details.');
+        await sendMessage(From, await ai(
+          'Tell the user to send the corrected expense details.',
+          'No problem! Send the corrected details.'
+        ));
       } else if (message.includes('3') || /cancel|❌/i.test(message)) {
         await updateExpenseState(userId, null, {});
-        await sendMessage(From, 'Cancelled. Send a new update anytime.');
+        await sendMessage(From, await ai(
+          'Tell the user the expense was cancelled. Keep it very brief.',
+          'Cancelled. Send a new update anytime.'
+        ));
       } else {
-        await sendOptions(From, `Still waiting for your reply on:\n${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX`, ['✅ Yes – Log it', '✏️ Edit', '❌ Cancel']);
+        const stillMsg = await ai(
+          `Tell the user you are still waiting for their reply on this pending expense: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX. Ask them to reply 1 to save, 2 to edit, or 3 to cancel.`,
+          `Still waiting: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX\n\n1. Save\n2. Edit\n3. Cancel`
+        );
+        await sendOptions(From, stillMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
+      }
     }
 
     // ── STEP 7: Handle awaiting_price ─────────────────────────────────────────
@@ -1903,17 +2266,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ...pendingData, amount: price, unit_price: unitPrice, description,
         });
 
-        let confirmMsg = `Got it! 🧱\n\n` +
-          `📦 ${description}\n` +
-          (vendor ? `🏪 Vendor: ${vendor}\n` : '') +
-          `💰 Total: ${fmt(price)} UGX\n` +
-          `📊 Per ${unit || 'unit'}: ${fmt(unitPrice)} UGX\n\n` +
-          `Looks good?`;
-        if (anomalyAlert) confirmMsg = `${anomalyAlert}\n\n${confirmMsg}`;
-
-        await sendOptions(From, confirmMsg, ['✅ Yes – Log it', '✏️ Edit', '❌ Cancel']);
+        const confirmMsg = await ai(
+          `Confirm this expense with the user and ask if it looks correct:
+          Item: ${description}
+          Total: ${fmt(price)} UGX
+          ${vendor ? 'From: ' + vendor : ''}
+          Per ${unit || 'unit'}: ${fmt(unitPrice)} UGX
+          ${anomalyAlert ? 'Note: ' + anomalyAlert : ''}
+          End with: reply 1 to save, 2 to edit, 3 to cancel.`,
+          `${description} — ${fmt(price)} UGX${vendor ? ' from ' + vendor : ''}. Save it?\n\n1. Yes\n2. Edit\n3. Cancel`
+        );
+        const finalMsg = anomalyAlert ? `${anomalyAlert}\n\n${confirmMsg}` : confirmMsg;
+        await sendOptions(From, finalMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
       } else {
-        await sendMessage(From, 'Please send the total cost as a number (e.g. 1,900,000 or 1.9M).');
+        await sendMessage(From, await ai(
+          'Tell the user to send the total cost as a number. Give examples: 1,900,000 or 1.9M.',
+          'Send the total cost as a number (e.g. 1,900,000 or 1.9M).'
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -1921,7 +2290,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 8: No project → prompt ───────────────────────────────────────────
     if (!project) {
-      await sendMessage(From, 'You need a project first. Say "hey jenga" or "start" to create one!');
+      await sendMessage(From, await ai(
+        'Tell the user they need to create a project first before logging updates. Tell them to say "hey jenga" or "start" to create one.',
+        'You need a project first. Say "hey jenga" or "start" to create one!'
+      ));
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
@@ -1929,6 +2301,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 9: GPT-4o-mini intent classification + routing ───────────────────
     const { intent, extracted } = await classifyIntent(rawMessage, phoneNumber);
     console.log('[Intent]', intent, JSON.stringify(extracted));
+
+    const lines = rawMessage.split('\n')
+      .map((l: string) => l.replace(/^[•\-\*\d\.]\s*/, '').trim())
+      .filter((l: string) => l.length > 5);
+
+    if (lines.length > 1) {
+      let processedCount = 0;
+      for (const line of lines) {
+        const lineResult = preClassifyIntent(line);
+        if (lineResult && lineResult.intent !== 'GREETING') {
+          await routeIntent(lineResult.intent, lineResult.extracted, line, From, userId, project, profile, projects || []);
+          processedCount++;
+        }
+      }
+      if (processedCount > 0) {
+        console.log('[MultiIntent] Processing', processedCount, 'lines');
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+    }
+
     await routeIntent(intent, extracted, rawMessage, From, userId, project, profile, projects || []);
 
     res.setHeader('Content-Type', 'text/xml');
@@ -1961,20 +2354,24 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
     .filter((p, i, self) => i === self.findIndex((t) => t.id === p.id));
 
   if (all.length === 0) {
-    await sendMessage(from, 'You don\'t have any projects yet.\n\nType "start" to create your first project.');
+    await sendMessage(from, await ai(
+      'Tell the user they have no projects yet. Tell them to type "start" to create their first project.',
+      'You do not have any projects yet. Type "start" to create your first project.'
+    ));
     return;
   }
 
   const lines = all.map((p, i) => {
     const budget = parseFloat(String(p.budget || 0));
     const budgetStr = budget > 0 ? ` — Budget: ${fmt(budget)} UGX` : '';
-    const dot = p.status === 'active' ? '🟢' : '🔴';
-    return `${dot} ${i + 1}. ${p.name}${budgetStr}`;
+    return `${i + 1}. ${p.name}${budgetStr}`;
   }).join('\n');
 
-  await sendMessage(from,
-    `📋 *Your Projects (${all.length})*\n\n${lines}\n\nSay "switch project" to change your active project.`
+  const msg = await ai(
+    `List the user's projects and tell them they can say "switch project" to change their active project. Here are the projects:\n${lines}`,
+    `Your projects (${all.length}):\n\n${lines}\n\nSay "switch project" to change your active project.`
   );
+  await sendMessage(from, msg);
 }
 
 async function routeIntent(
@@ -1990,6 +2387,9 @@ async function routeIntent(
   switch (intent) {
     case 'BUDGET_QUERY':
       await handleBudgetQuery(from, project.id);
+      break;
+    case 'BUDGET_UPDATE':
+      await handleBudgetUpdate(from, project.id, extracted);
       break;
     case 'EXPENSE_LOG':
       await handleExpenseLog(from, userId, project.id, extracted, rawMessage);
@@ -2017,6 +2417,11 @@ async function routeIntent(
       break;
     case 'GREETING':
     default:
-      await handleGreeting(from, profile, project, projects, rawMessage);
+      if (rawMessage.trim().length > 15 && project) {
+        await handleSmartQuery(from, project.id, rawMessage);
+      } else {
+        await handleGreeting(from, profile, project, projects, rawMessage);
+      }
+      break;
   }
 }

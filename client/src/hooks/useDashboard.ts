@@ -108,6 +108,7 @@ export function useProjectSummary(projectId: string | null | undefined) {
     queryFn: () => fetchProjectSummary(projectId!),
     staleTime: 0,
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
     enabled: !!projectId,
   });
 }
@@ -172,6 +173,7 @@ export function useProjectExpenses(projectId: string | null | undefined) {
     enabled: !!projectId,
     staleTime: 30000,
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -207,6 +209,7 @@ export function useProjectMaterials(projectId: string | null | undefined) {
     enabled: !!projectId,
     staleTime: 30000,
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -255,7 +258,8 @@ export function useProjectDaily(projectId: string | null | undefined) {
     },
     enabled: !!projectId,
     staleTime: 30000,
-    refetchInterval: 30000,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -304,5 +308,29 @@ export function useProjectTrends(projectId: string | null | undefined) {
     enabled: !!projectId,
     staleTime: 30000,
     refetchInterval: 30000,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export interface ProjectTask {
+  id: string;
+  title: string;
+  status: string;
+  completed_at: string | null;
+  created_at?: string;
+}
+
+export function useProjectTasks(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["tasks", projectId],
+    queryFn: async (): Promise<ProjectTask[]> => {
+      const res = await apiRequest("GET", `/api/projects/${projectId}/tasks`);
+      const data = await res.json();
+      if (Array.isArray(data)) return data as ProjectTask[];
+      return (data?.tasks ?? data?.data ?? []) as ProjectTask[];
+    },
+    enabled: !!projectId,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 }

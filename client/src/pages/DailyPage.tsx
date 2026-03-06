@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
-import { useProjectDaily } from "@/hooks/useDashboard";
+import { useProjectDaily, useProjectTasks } from "@/hooks/useDashboard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,12 @@ export default function DailyPage() {
   const projectId = new URLSearchParams(search).get("project") ?? currentProject?.id ?? null;
 
   const { data, isLoading, isError, error, refetch } = useProjectDaily(projectId);
+  const today = new Date().toISOString().split("T")[0];
+  const { data: tasksData, refetch: refetchTasks } = useProjectTasks(projectId);
+  const tasksList = Array.isArray(tasksData) ? tasksData : (tasksData as any)?.tasks ?? [];
+  const todayTasks = tasksList.filter(
+    (t: any) => t.completed_at && String(t.completed_at).slice(0, 10) === today
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   if (!projectId) {
@@ -143,12 +149,25 @@ export default function DailyPage() {
               <span className={`text-2xl ${today.active ? "text-[#22c55e]" : "dark:text-zinc-500 text-slate-500"}`}>
                 {today.active ? t("daily.activeToday") : t("daily.noUpdatesYet")}
               </span>
-              {today.active && today.workerCount > 0 && (
-                <span className="dark:text-zinc-400 text-slate-500 text-sm">{today.workerCount} {t("daily.workersLogged")}</span>
-              )}
+              <span className="dark:text-zinc-400 text-slate-500 text-sm font-medium">
+                Workers on site today: {today.workerCount ?? 0}
+              </span>
             </div>
             {today.active && today.notes && (
               <p className="dark:text-zinc-400 text-slate-500 text-sm mt-2">{today.notes}</p>
+            )}
+            {todayTasks.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium dark:text-white text-slate-800 mb-2">Tasks completed today</p>
+                <ul className="space-y-1">
+                  {todayTasks.map((task: any) => (
+                    <li key={task.id} className="flex items-center gap-2 text-sm dark:text-zinc-300 text-slate-700">
+                      <span className="text-[#22c55e]">✓</span>
+                      {task.title}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
             {today.photos.length > 0 && (
               <div className="flex gap-2 mt-2">
