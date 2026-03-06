@@ -277,7 +277,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       daysAhead: summary.schedule?.daysAhead,
     },
     budgetHealth: {
-      percent: budgetHealth.pct || summary.budget?.percentage ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
+      percent: (budgetHealth.pct || summary.budget?.percentage) ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
       remaining: budgetHealth.remaining ?? summary.budget?.remaining ?? summary.summaryHealth?.budgetHealth?.remaining ?? 0,
     },
     activeIssues: {

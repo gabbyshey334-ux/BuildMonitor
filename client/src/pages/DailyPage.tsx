@@ -112,7 +112,7 @@ export default function DailyPage() {
     );
   }
 
-  const { heatmap, recentLogs, stats, today } = data!;
+  const { heatmap, recentLogs, stats, today: todayData } = data!;
   const selectedLog = selectedDate ? recentLogs.find((l) => (l.log_date || "").toString().substring(0, 10) === selectedDate) : null;
   const allPhotos = recentLogs.flatMap((l) => l.photo_urls || []);
 
@@ -146,15 +146,15 @@ export default function DailyPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">
-              <span className={`text-2xl ${today.active ? "text-[#22c55e]" : "dark:text-zinc-500 text-slate-500"}`}>
-                {today.active ? t("daily.activeToday") : t("daily.noUpdatesYet")}
+              <span className={`text-2xl ${todayData.active ? "text-[#22c55e]" : "dark:text-zinc-500 text-slate-500"}`}>
+                {todayData.active ? t("daily.activeToday") : t("daily.noUpdatesYet")}
               </span>
               <span className="dark:text-zinc-400 text-slate-500 text-sm font-medium">
-                Workers on site today: {today.workerCount ?? 0}
+                Workers on site today: {todayData.workerCount ?? 0}
               </span>
             </div>
-            {today.active && today.notes && (
-              <p className="dark:text-zinc-400 text-slate-500 text-sm mt-2">{today.notes}</p>
+            {todayData.active && todayData.notes && (
+              <p className="dark:text-zinc-400 text-slate-500 text-sm mt-2">{todayData.notes}</p>
             )}
             {todayTasks.length > 0 && (
               <div className="mt-4">
@@ -169,9 +169,9 @@ export default function DailyPage() {
                 </ul>
               </div>
             )}
-            {today.photos.length > 0 && (
+            {todayData.photos.length > 0 && (
               <div className="flex gap-2 mt-2">
-                {today.photos.slice(0, 5).map((url, i) => (
+                {todayData.photos.slice(0, 5).map((url, i) => (
                   <img
                     key={i}
                     src={url}
