@@ -45,8 +45,12 @@ const PROJECT_COLORS = [COLORS.teal, "#22c55e", "#3b82f6", COLORS.orange, "#ec48
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatUgx(value: number): string {
   const num = Number(value) || 0;
-  if (num >= 1_000_000_000) return `UGX ${(num / 1_000_000_000).toFixed(1)}B`;
-  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(0)}M`;
+  if (num >= 1_000_000_000) {
+    const billions = num / 1_000_000_000;
+    const decimals = billions % 1 === 0 ? 0 : billions < 10 ? 3 : 1;
+    return `UGX ${billions.toFixed(decimals)}B`;
+  }
+  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
   return `UGX ${num.toLocaleString()}`;
 }
@@ -119,6 +123,7 @@ function StatCard({
   label,
   value,
   sub,
+  extraSub,
   valueClassName,
   dotColor,
   showViewAll,
@@ -127,6 +132,7 @@ function StatCard({
   label: string;
   value: string;
   sub?: string;
+  extraSub?: React.ReactNode;
   valueClassName?: string;
   dotColor?: string;
   showViewAll?: boolean;
@@ -150,6 +156,11 @@ function StatCard({
               {value}
             </p>
             {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+            {extraSub && (
+              <div className="text-[11px] text-muted-foreground mt-1">
+                {extraSub}
+              </div>
+            )}
           </div>
         </div>
         {showViewAll && viewAllHref && (
@@ -171,17 +182,37 @@ function BudgetComparisonSection({
   totalSpent,
   budget,
   tasks,
+  expenses,
 }: {
   categoryTotals: Array<{ name: string; amount: number }>;
   totalSpent: number;
   budget: number;
   tasks: Array<{ status?: string }>;
+  expenses: any[];
 }) {
-  const progressPct = useMemo(() => {
-    if (!tasks || tasks.length === 0) return 0;
+  const tasksPct = useMemo(() => {
+    if (!tasks || tasks.length === 0) return null;
     const completed = tasks.filter((t) => t.status === "completed").length;
     return Math.round((completed / tasks.length) * 100);
   }, [tasks]);
+
+  const expenseProxyPct = useMemo(() => {
+    if (!expenses || expenses.length === 0) return 0;
+    return Math.min(Math.round((expenses.length / 20) * 100), 95);
+  }, [expenses]);
+
+  const progressPct = tasksPct ?? expenseProxyPct;
+
+  const budgetUsedPct =
+    budget > 0 ? parseFloat(((totalSpent / budget) * 100).toFixed(4)) : 0;
+
+  const gap = budgetUsedPct - progressPct;
+  const footerText =
+    gap > 5
+      ? `⚠️ Spending is ${gap.toFixed(1)}% ahead of recorded progress`
+      : gap < -5
+        ? `✅ Progress is ahead of spending by ${Math.abs(gap).toFixed(1)}%`
+        : `✅ Spending and progress are aligned`;
 
   const barData = useMemo(() => {
     const sorted = [...categoryTotals].sort((a, b) => b.amount - a.amount);
@@ -192,11 +223,6 @@ function BudgetComparisonSection({
       pctOfBudget: budget > 0 ? pct(c.amount, budget) : 0,
     }));
   }, [categoryTotals, totalSpent, budget]);
-
-  const budgetAhead =
-    budget > 0 && totalSpent < budget
-      ? pct(budget - totalSpent, budget)
-      : 0;
 
   return (
     <div className="rounded-xl p-6 border border-border bg-card">
@@ -215,57 +241,74 @@ function BudgetComparisonSection({
         </select>
       </div>
 
-      {barData.length > 0 || tasks.length > 0 ? (
+      {(barData.length > 0 || tasks.length > 0 || expenses.length > 0) ? (
         <div className="space-y-6">
           <div>
             <p className="text-xs text-muted-foreground mb-2">Project Progress</p>
-            <div className="h-6 rounded-full overflow-hidden bg-muted flex">
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ height: "12px", background: "#1e2333" }}
+            >
               <div
-                className="h-full transition-all rounded-full"
                 style={{
-                  width: `${progressPct}%`,
-                  backgroundColor: COLORS.teal,
+                  width: `${Math.max(progressPct, 2)}%`,
+                  height: "100%",
+                  background: "linear-gradient(90deg, #00bcd4, #0097a7)",
+                  borderRadius: "6px",
+                  transition: "width 0.6s ease",
                 }}
               />
             </div>
-            <p className="text-xs text-right mt-1 text-muted-foreground">
-              {progressPct}%{tasks.length === 0 ? " — no tasks logged yet" : ""}
-            </p>
+            <div className="text-right text-xs text-muted-foreground mt-1">
+              {tasksPct !== null
+                ? `${progressPct}%`
+                : `~${progressPct}% (estimated from ${expenses?.length ?? 0} logged expenses)`}
+            </div>
           </div>
 
           <div>
             <p className="text-xs text-muted-foreground mb-2">Budget Used</p>
-            <div className="h-6 rounded-full overflow-hidden bg-muted flex">
-              {barData.map((d, i) => (
-                <div
-                  key={d.name}
-                  className="h-full transition-all"
-                  style={{
-                    width: `${d.pctOfBudget}%`,
-                    backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
-                  }}
-                  title={`${d.name}: ${d.pctOfBudget.toFixed(1)}%`}
-                />
-              ))}
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ height: "12px", background: "#1e2333" }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(budgetUsedPct, budgetUsedPct > 0 ? 0.5 : 0)}%`,
+                  height: "100%",
+                  background:
+                    budgetUsedPct > 80
+                      ? "linear-gradient(90deg, #ef4444, #dc2626)"
+                      : budgetUsedPct > 60
+                        ? "linear-gradient(90deg, #f59e0b, #d97706)"
+                        : "linear-gradient(90deg, #22c55e, #16a34a)",
+                  borderRadius: "6px",
+                  transition: "width 0.6s ease",
+                }}
+              />
             </div>
-            <p className="text-xs text-right mt-1 text-muted-foreground">
-              {pct(totalSpent, budget).toFixed(0)}%
-            </p>
+            <div className="text-right text-xs text-muted-foreground mt-1">
+              {budgetUsedPct < 0.01
+                ? `${formatUgx(totalSpent)} of ${formatUgx(budget)} used`
+                : `${budgetUsedPct.toFixed(3)}%`}
+            </div>
           </div>
 
-          <div className="flex flex-wrap gap-3 mt-4">
-            {barData.map((d, i) => (
-              <div key={d.name} className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-sm"
-                  style={{
-                    backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
-                  }}
-                />
-                <span className="text-xs text-muted-foreground">{d.name}</span>
-              </div>
-            ))}
-          </div>
+          {barData.length > 0 && (
+            <div className="flex flex-wrap gap-3">
+              {barData.map((d, i) => (
+                <div key={d.name} className="flex items-center gap-2">
+                  <span
+                    className="w-3 h-3 rounded-sm"
+                    style={{
+                      backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">{d.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground py-6 text-center">
@@ -273,11 +316,12 @@ function BudgetComparisonSection({
         </p>
       )}
 
-      {budget > 0 && totalSpent < budget && (
-        <p className="text-sm text-[#00bcd4] mt-4">
-          Budget ahead of progress by {budgetAhead.toFixed(0)}%
-        </p>
-      )}
+      <div
+        className="text-[13px] mt-4"
+        style={{ color: gap > 5 ? "#f59e0b" : "#00bcd4" }}
+      >
+        {footerText}
+      </div>
     </div>
   );
 }
@@ -784,6 +828,7 @@ export default function BudgetPage() {
             label="Balance"
             value={formatUgx(balance)}
             sub={balance < 0 ? "Over budget" : undefined}
+            extraSub={<>{formatUgx(totalSpent)} spent</>}
             valueClassName={balance < 0 ? "text-red-400" : "text-foreground"}
           />
           <StatCard
@@ -807,6 +852,7 @@ export default function BudgetPage() {
               totalSpent={totalSpent}
               budget={budget}
               tasks={tasks}
+              expenses={expenses}
             />
           </div>
           <div>
