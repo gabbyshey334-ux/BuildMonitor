@@ -141,6 +141,8 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       let totalSpent = 0;
       let expenseRowsForCumulative = [];
       let materialsRows = [];
+      let openIssuesCount = 0;
+      let criticalIssuesCount = 0;
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -183,22 +185,24 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           materialsRows = materialsData || [];
         }
 
-        let openIssuesCount = 0;
-        let criticalIssuesCount = 0;
-        if (projectRow) {
+        try {
           const { count: openCount } = await supabase
             .from('issues')
             .select('*', { count: 'exact', head: true })
             .eq('project_id', projectId)
             .eq('status', 'open');
-          openIssuesCount = openCount ?? 0;
           const { count: criticalCount } = await supabase
             .from('issues')
             .select('*', { count: 'exact', head: true })
             .eq('project_id', projectId)
             .eq('status', 'open')
             .in('severity', ['high', 'critical']);
+          openIssuesCount = openCount ?? 0;
           criticalIssuesCount = criticalCount ?? 0;
+        } catch (issueErr) {
+          console.warn('[Summary] Issues count failed:', issueErr?.message);
+          openIssuesCount = 0;
+          criticalIssuesCount = 0;
         }
 
         console.log('[Summary Debug]', {
