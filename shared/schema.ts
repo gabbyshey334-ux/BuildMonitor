@@ -238,6 +238,24 @@ export const dailyLogs = pgTable("daily_logs", {
 }, (table) => [index("idx_daily_logs_project_id").on(table.projectId)]);
 
 // ============================================================================
+// 7c. ISSUES (reported issues per project)
+// ============================================================================
+export const issues = pgTable("issues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  severity: varchar("severity", { length: 20 }).default('medium'),
+  type: varchar("type", { length: 50 }).default('general'),
+  status: varchar("status", { length: 20 }).notNull().default('open'),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+}, (table) => [
+  index("idx_issues_project_id").on(table.projectId),
+  index("idx_issues_status").on(table.status),
+]);
+
+// ============================================================================
 // 8. AI_USAGE_LOG (cost tracking)
 // ============================================================================
 export const aiUsageLog = pgTable("ai_usage_log", {

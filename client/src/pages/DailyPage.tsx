@@ -116,28 +116,21 @@ export default function DailyPage() {
   const selectedLog = selectedDate ? recentLogs.find((l) => (l.log_date || "").toString().substring(0, 10) === selectedDate) : null;
   const allPhotos = recentLogs.flatMap((l) => l.photo_urls || []);
 
-  if (recentLogs.length === 0) {
-    return (
-      <AppLayout>
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("daily.title")}</h1>
-          <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white">
-            <CardContent className="pt-6">
-              <EmptyState
-                message={t("daily.empty")}
-                hint={t("daily.emptyHint")}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </AppLayout>
-    );
-  }
-
+  // Show full page even when no logs: heatmap (all grey), today card, stats, empty activity
   return (
     <AppLayout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("daily.title")}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-0">{t("daily.title")}</h1>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 bg-slate-200 text-slate-700 hover:bg-slate-300 text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
 
         {/* Today's status */}
         <Card className="dark:border-zinc-700 dark:bg-[#1e2235] border-slate-200 bg-white mb-6">

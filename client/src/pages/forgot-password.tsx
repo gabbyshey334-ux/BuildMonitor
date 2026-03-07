@@ -24,10 +24,12 @@ export default function ForgotPassword() {
         body: JSON.stringify({ email }),
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get("content-type");
+      const isJson = contentType && contentType.includes("application/json");
+      const data = isJson ? await res.json() : { message: "Something went wrong. Please try again." };
 
       if (!res.ok) {
-        throw new Error(data.message || "Failed to send reset link");
+        throw new Error(data.message || data.error || "Failed to send reset link");
       }
 
       setIsSubmitted(true);

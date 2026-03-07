@@ -14,6 +14,7 @@ import {
   HelpCircle,
   LogOut,
   Menu,
+  Plus,
 } from "lucide-react";
 import {
   Tooltip,
@@ -118,6 +119,42 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
           </div>
         )}
         <nav className="flex-1 px-2 space-y-0.5">
+          <div className="mb-2">
+            {open ? (
+              <Link href="/projects">
+                <a
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200",
+                    "bg-[#00bcd4] text-black hover:bg-[#0097a7] dark:bg-[#00bcd4] dark:text-black dark:hover:bg-[#0097a7]",
+                    "border-l-4 border-transparent"
+                  )}
+                >
+                  <Plus className="h-5 w-5 shrink-0" />
+                  <span className="truncate">New Project</span>
+                </a>
+              </Link>
+            ) : (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href="/projects">
+                      <a
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                          "bg-[#00bcd4] text-black hover:bg-[#0097a7] dark:bg-[#00bcd4] dark:text-black"
+                        )}
+                      >
+                        <Plus className="h-5 w-5" />
+                      </a>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
+                    New Project
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+          </div>
           {MAIN_NAV.map((item) => {
             const active = isActive(item.href);
             const href = hrefWithProject(item.href);

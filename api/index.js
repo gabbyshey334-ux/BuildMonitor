@@ -548,32 +548,61 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const userId = req.userId || req.user?.id;
-    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    if (!userId) {
+      console.error('[POST expenses] No userId — not authenticated');
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[POST expenses] Supabase not configured');
       return res.status(500).json({ success: false, error: 'Server not configured' });
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
-    const { description, amount, expense_date } = req.body;
+    if (!projectRow) {
+      console.error('[POST expenses] Project not found:', projectId);
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const { description, amount, category, vendor, expense_date } = req.body;
     const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    const { error } = await supabase.from('expenses').insert({
+    const amountNum = parseFloat(String(amount ?? 0));
+    if (isNaN(amountNum) || amountNum < 0) {
+      return res.status(400).json({ success: false, error: 'Invalid amount' });
+    }
+    const insertPayload = {
       project_id: projectId,
       user_id: userId,
-      description: description || 'Expense',
-      amount: String(amount ?? 0),
+      description: (description && String(description).trim()) ? String(description).trim() : 'Expense',
+      amount: amountNum,
       expense_date: today,
       currency: 'UGX',
       source: 'dashboard',
-    });
-    if (error) throw error;
-    return res.status(201).json({ success: true });
+    };
+    if (category !== undefined) insertPayload.category = category || 'Other';
+    if (vendor !== undefined) insertPayload.vendor = vendor && String(vendor).trim() ? String(vendor).trim() : null;
+
+    const { data: expense, error } = await supabase
+      .from('expenses')
+      .insert(insertPayload)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[POST expenses] Supabase insert error:', error.message, error.details || '');
+      return res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to log expense',
+      });
+    }
+    return res.status(201).json({ success: true, expense: expense || {} });
   } catch (err) {
-    console.error('[POST expenses]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to log expense' });
+    console.error('[POST expenses] Unexpected error:', err?.message || err, err?.stack || '');
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to log expense',
+    });
   }
 });
 
@@ -649,41 +678,83 @@ app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => 
   }
 });
 
-// POST /api/projects/:projectId/daily/photo — Add photo to today's daily log
+// POST /api/projects/:projectId/daily/photo — Add photo to today's daily log (upload to Storage, save URL)
 app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
     const userId = req.userId || req.user?.id;
-    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    if (!userId) {
+      console.error('[POST daily/photo] No userId');
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('[POST daily/photo] Supabase not configured');
       return res.status(500).json({ success: false, error: 'Server not configured' });
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
-    const { photoUrl } = req.body;
+    if (!projectRow) {
+      console.error('[POST daily/photo] Project not found:', projectId);
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const { photoUrl, photo } = req.body;
+    const base64Input = photo || photoUrl;
+    if (!base64Input || typeof base64Input !== 'string') {
+      return res.status(400).json({ success: false, error: 'photo or photoUrl is required' });
+    }
+
+    let publicUrl = base64Input;
+    const isDataUrl = /^data:image\/\w+;base64,/.test(base64Input);
+    if (isDataUrl) {
+      const base64Data = base64Input.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      const ext = (base64Input.match(/^data:image\/(\w+);/) || [])[1] || 'jpg';
+      const filename = `${projectId}/${Date.now()}.${ext}`;
+      const contentType = `image/${ext}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('site-photos')
+        .upload(filename, buffer, { contentType, upsert: false });
+      if (uploadError) {
+        console.error('[POST daily/photo] Storage upload error:', uploadError.message, uploadError);
+        return res.status(500).json({
+          success: false,
+          error: uploadError.message || 'Upload failed. Ensure bucket "site-photos" exists and is public.',
+        });
+      }
+      const { data: urlData } = supabase.storage.from('site-photos').getPublicUrl(filename);
+      publicUrl = urlData?.publicUrl || filename;
+    }
+
     const today = new Date().toISOString().split('T')[0];
     const { data: existing } = await supabase.from('daily_logs').select('id, photo_urls').eq('project_id', projectId).eq('log_date', today).maybeSingle();
-    const newUrls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, photoUrl] : (existing?.photo_urls ? [existing.photo_urls, photoUrl] : [photoUrl]);
+    const newUrls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, publicUrl] : (existing?.photo_urls ? [existing.photo_urls, publicUrl] : [publicUrl]);
     if (existing) {
-      await supabase.from('daily_logs').update({ photo_urls: newUrls }).eq('id', existing.id);
+      const { error: updateErr } = await supabase.from('daily_logs').update({ photo_urls: newUrls }).eq('id', existing.id);
+      if (updateErr) {
+        console.error('[POST daily/photo] daily_logs update error:', updateErr.message);
+        return res.status(500).json({ success: false, error: updateErr.message || 'Failed to save photo URL' });
+      }
     } else {
-      await supabase.from('daily_logs').insert({
+      const { error: insertErr } = await supabase.from('daily_logs').insert({
         project_id: projectId,
         log_date: today,
         worker_count: 0,
         notes: '',
-        photo_urls: [photoUrl],
+        photo_urls: [publicUrl],
         created_at: new Date().toISOString(),
       });
+      if (insertErr) {
+        console.error('[POST daily/photo] daily_logs insert error:', insertErr.message);
+        return res.status(500).json({ success: false, error: insertErr.message || 'Failed to save photo' });
+      }
     }
-    return res.status(201).json({ success: true });
+    return res.status(201).json({ success: true, url: publicUrl });
   } catch (err) {
-    console.error('[POST daily/photo]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to save photo' });
+    console.error('[POST daily/photo] Unexpected error:', err?.message || err, err?.stack || '');
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save photo' });
   }
 });
 
@@ -1487,6 +1558,55 @@ app.post('/api/auth/logout', (req, res) => {
     success: true,
     message: 'Logged out successfully. Please clear token on frontend.',
   });
+});
+
+// POST /api/auth/forgot-password - Send password reset email (Supabase Auth)
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required',
+        message: 'Email is required',
+      });
+    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[forgot-password] Supabase URL or ANON_KEY not set');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Server configuration error',
+      });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
+    const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/reset-password` : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: redirectTo || undefined,
+    });
+    if (error) {
+      console.error('[forgot-password] Supabase error:', error.message);
+      return res.status(400).json({
+        success: false,
+        error: error.message,
+        message: error.message,
+      });
+    }
+    return res.json({
+      success: true,
+      message: 'Reset link sent',
+    });
+  } catch (err) {
+    console.error('[forgot-password] Unexpected error:', err?.message || err, err?.stack || '');
+    return res.status(500).json({
+      success: false,
+      error: 'Server error',
+      message: err?.message || 'Server error',
+    });
+  }
 });
 
 // POST /api/auth/change-password - Change password (Supabase Auth)

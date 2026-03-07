@@ -19,9 +19,9 @@ function formatShortBudget(n: number): string {
   return n.toString();
 }
 
-/** Format relative time as "Updated Xh ago" or "Updated Xd ago" */
+/** Format relative time as "Updated Xh ago" or "No recent activity" */
 function formatRelativeTime(lastActivityAt?: string): string {
-  if (!lastActivityAt) return "Updated 2h ago";
+  if (!lastActivityAt) return "No recent activity";
   try {
     const d = new Date(lastActivityAt);
     const now = new Date();

@@ -20,6 +20,7 @@ import {
   expenseCategories,
   materialsInventory,
   dailyLogs,
+  issues,
   InsertExpense,
   InsertTask,
   InsertImage,
@@ -1463,6 +1464,28 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
     const overdueCount = delayedTasks.length;
     const criticalOverdue = delayedTasks.filter((t) => t.priority === 'high').length;
 
+    // Active issues from issues table (Report Issue flow)
+    let issuesTableTotal = 0;
+    let issuesTableCritical = 0;
+    try {
+      const [openRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(issues)
+        .where(and(eq(issues.projectId, projectId), eq(issues.status, 'open')));
+      issuesTableTotal = Number(openRow?.count ?? 0);
+      const [criticalRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(issues)
+        .where(and(
+          eq(issues.projectId, projectId),
+          eq(issues.status, 'open'),
+          sql`${issues.severity} IN ('high', 'critical')`
+        ));
+      issuesTableCritical = Number(criticalRow?.count ?? 0);
+    } catch {
+      // issues table may not exist yet; use 0
+    }
+
     // Schedule status: On Track | At Risk | Delayed
     let scheduleStatus: 'On Track' | 'At Risk' | 'Delayed' = 'On Track';
     if (percentage >= 90 || overdueCount >= 2) scheduleStatus = 'Delayed';
@@ -1716,7 +1739,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         phases: progressPhasesForApi,
         milestones: progressMilestonesForApi,
       },
-      issues: { total: overdueCount, critical: criticalOverdue },
+      issues: { total: issuesTableTotal, critical: issuesTableCritical },
       insights: {
         topDelayCause,
         mostUsedMaterial,
@@ -1728,7 +1751,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         overallProgress,
         onTimeStatus: { isDelayed: schedule.status === 'Delayed', daysDelayed: schedule.daysBehind, scheduleStatus: schedule.status, daysAhead: schedule.daysAhead },
         budgetHealth: { percent: percentage, remaining },
-        activeIssues: { total: overdueCount, critical: criticalOverdue },
+        activeIssues: { total: issuesTableTotal, critical: issuesTableCritical },
       },
       budgetSection: {
         breakdown,
@@ -1874,19 +1897,126 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
       .select()
       .from(materialsInventory)
       .where(eq(materialsInventory.projectId, projectId));
+    const inventory = materials.map((r) => ({
+      id: r.id,
+      material_name: r.materialName,
+      quantity: parseFloat(r.quantity?.toString() || '0'),
+      unit: r.unit ?? '',
+      last_updated: r.lastUpdated ? new Date(r.lastUpdated).toISOString() : null,
+    }));
+    const lowStock = inventory.filter((m) => m.quantity < 10);
+    const lastUpdated = materials.length
+      ? materials.reduce((latest, r) => {
+          const t = r.lastUpdated ? new Date(r.lastUpdated).getTime() : 0;
+          return t > latest ? t : latest;
+        }, 0)
+      : null;
     res.json({
       success: true,
-      materials: materials.map((r) => ({
-        id: r.id,
-        material_name: r.materialName,
-        quantity: parseFloat(r.quantity?.toString() || '0'),
-        unit: r.unit,
-        last_updated: r.lastUpdated,
-      })),
+      inventory,
+      lowStock: lowStock.map((m) => ({ material_name: m.material_name, quantity: m.quantity, unit: m.unit })),
+      summary: {
+        totalItems: inventory.length,
+        lowStockCount: lowStock.length,
+        lastUpdated: lastUpdated ? new Date(lastUpdated).toISOString() : null,
+      },
     });
   } catch (error) {
     console.error('[Project Materials] Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch materials' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/daily
+ * Daily Accountability page: heatmap, recentLogs, stats, today (same shape as Vercel api/index.js)
+ */
+router.get('/projects/:projectId/daily', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const logs = await db
+      .select()
+      .from(dailyLogs)
+      .where(eq(dailyLogs.projectId, projectId))
+      .orderBy(desc(dailyLogs.logDate))
+      .limit(70);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayLog = logs.find((l) => (l.logDate || '').toString().substring(0, 10) === todayStr);
+    const last60Dates: string[] = [];
+    for (let i = 59; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      last60Dates.push(d.toISOString().split('T')[0]);
+    }
+    const logByDate: Record<string, typeof logs[0]> = {};
+    for (const l of logs) {
+      const d = (l.logDate || '').toString().substring(0, 10);
+      if (d) logByDate[d] = l;
+    }
+    const heatmap = last60Dates.map((date) => {
+      const log = logByDate[date];
+      return {
+        date,
+        active: !!log,
+        workerCount: log ? (log.workerCount ?? 0) : 0,
+        hasNotes: !!(log && log.notes),
+      };
+    });
+    const recentLogs = logs.slice(0, 10).map((l) => ({
+      id: l.id,
+      log_date: l.logDate,
+      worker_count: l.workerCount,
+      notes: l.notes,
+      weather_condition: l.weatherCondition,
+      photo_urls: Array.isArray(l.photoUrls) ? l.photoUrls : l.photoUrls ? [l.photoUrls] : [],
+      created_at: l.createdAt ? new Date(l.createdAt).toISOString() : null,
+    }));
+    const totalPhotos = logs.reduce((sum, l) => {
+      const urls = Array.isArray(l.photoUrls) ? l.photoUrls : l.photoUrls ? [l.photoUrls] : [];
+      return sum + urls.length;
+    }, 0);
+    const workerCounts = logs.filter((l) => l.workerCount != null && l.workerCount > 0).map((l) => l.workerCount!);
+    const avgWorkerCount = workerCounts.length > 0 ? workerCounts.reduce((a, b) => a + b, 0) / workerCounts.length : 0;
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const thisWeekActive = logs.filter((l) => {
+      const d = new Date((l.logDate || '') + 'T12:00:00');
+      return d >= startOfWeek;
+    }).length;
+    const sortedDates = [...new Set(logs.map((l) => (l.logDate || '').toString().substring(0, 10)))].sort().reverse();
+    let currentStreak = 0;
+    for (let i = 0; i < sortedDates.length; i++) {
+      const expected = new Date();
+      expected.setDate(expected.getDate() - i);
+      const expectedStr = expected.toISOString().split('T')[0];
+      if (sortedDates[i] === expectedStr) currentStreak++;
+      else break;
+    }
+    const stats = {
+      totalActiveDays: logs.length,
+      currentStreak,
+      avgWorkerCount: Math.round(avgWorkerCount * 10) / 10,
+      totalPhotos,
+      thisWeekActive,
+    };
+    const today = {
+      active: !!todayLog,
+      workerCount: todayLog ? (todayLog.workerCount ?? 0) : 0,
+      notes: todayLog ? (todayLog.notes || '') : '',
+      photos: todayLog
+        ? (Array.isArray(todayLog.photoUrls) ? todayLog.photoUrls : todayLog.photoUrls ? [todayLog.photoUrls] : [])
+        : [],
+    };
+    res.json({ success: true, heatmap, recentLogs, stats, today });
+  } catch (error) {
+    console.error('[Project Daily] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch daily logs' });
   }
 });
 
@@ -1931,6 +2061,366 @@ router.get('/projects/:projectId/daily-logs', requireAuth, async (req: Request, 
   } catch (error) {
     console.error('[Project Daily Logs] Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily logs' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/tasks
+ * Tasks for the project (Dashboard and Daily page use this)
+ */
+router.get('/projects/:projectId/tasks', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const taskList = await db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        completedAt: tasks.completedAt,
+        createdAt: tasks.createdAt,
+      })
+      .from(tasks)
+      .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))
+      .orderBy(desc(tasks.createdAt));
+    const list = taskList.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      completed_at: t.completedAt ? new Date(t.completedAt).toISOString() : null,
+      created_at: t.createdAt ? new Date(t.createdAt).toISOString() : null,
+    }));
+    res.json(list);
+  } catch (error) {
+    console.error('[Project Tasks] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch tasks' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/trends
+ * Trends & Insights page: spending, workers, materials, alerts, predictions
+ */
+router.get('/projects/:projectId/trends', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const budget = parseFloat(project.budgetAmount || '0');
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const expenseRows = await db
+      .select({
+        amount: expenses.amount,
+        expenseDate: expenses.expenseDate,
+        createdAt: expenses.createdAt,
+      })
+      .from(expenses)
+      .where(and(
+        eq(expenses.projectId, projectId),
+        eq(expenses.userId, userId),
+        isNull(expenses.deletedAt),
+        gte(expenses.expenseDate, thirtyDaysAgo.toISOString().slice(0, 10))
+      ))
+      .orderBy(expenses.expenseDate);
+    const byMonthMap: Record<string, number> = {};
+    const byWeekMap: Record<string, number> = {};
+    for (const row of expenseRows) {
+      const d = new Date((row.expenseDate || row.createdAt) as string);
+      const monthKey = d.toLocaleString('default', { month: 'short', year: 'numeric' });
+      byMonthMap[monthKey] = (byMonthMap[monthKey] || 0) + parseFloat(String(row.amount || 0));
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const weekKey = weekStart.toISOString().slice(0, 10);
+      byWeekMap[weekKey] = (byWeekMap[weekKey] || 0) + parseFloat(String(row.amount || 0));
+    }
+    const totalSpent = expenseRows.reduce((s, r) => s + parseFloat(String(r.amount || 0)), 0);
+    const spending = {
+      byMonth: Object.entries(byMonthMap).map(([month, amount]) => ({ month, amount })),
+      byWeek: Object.entries(byWeekMap).map(([week, amount]) => ({ week, amount })),
+      trend: 'stable' as const,
+      projectedCompletion: null as string | null,
+    };
+    const logRows = await db
+      .select({ logDate: dailyLogs.logDate, workerCount: dailyLogs.workerCount })
+      .from(dailyLogs)
+      .where(eq(dailyLogs.projectId, projectId))
+      .orderBy(dailyLogs.logDate);
+    const byDay = logRows.map((l) => ({
+      date: (l.logDate || '').toString().substring(0, 10),
+      count: l.workerCount ?? 0,
+    }));
+    const workerCounts = logRows.map((l) => l.workerCount ?? 0).filter((n) => n > 0);
+    const workers = {
+      byDay,
+      average: workerCounts.length ? Math.round((workerCounts.reduce((a, b) => a + b, 0) / workerCounts.length) * 10) / 10 : 0,
+      peak: workerCounts.length ? Math.max(...workerCounts) : 0,
+      trend: 'stable' as const,
+    };
+    const materialsRows = await db
+      .select({ materialName: materialsInventory.materialName, quantity: materialsInventory.quantity, unit: materialsInventory.unit })
+      .from(materialsInventory)
+      .where(eq(materialsInventory.projectId, projectId));
+    const materials = {
+      mostUsed: materialsRows
+        .map((r) => ({ name: r.materialName, quantity: parseFloat(String(r.quantity || 0)), unit: r.unit ?? '' }))
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 10),
+      topVendors: [] as { name: string; total: number }[],
+    };
+    const alerts: Array<{ type: string; message: string; severity: string; date: string }> = [];
+    if (budget > 0 && totalSpent > budget) {
+      alerts.push({ type: 'budget_warning', message: 'Over budget', severity: 'high', date: new Date().toISOString().slice(0, 10) });
+    }
+    const weeklyBurn = totalSpent / 4.3;
+    const remaining = Math.max(0, budget - totalSpent);
+    const predictions = {
+      estimatedCompletion: null as string | null,
+      budgetRunout: weeklyBurn > 0 && remaining > 0 ? null : null,
+      weeklyBurnRate: Math.round(weeklyBurn * 100) / 100,
+    };
+    res.json({
+      success: true,
+      spending,
+      workers,
+      materials,
+      alerts,
+      predictions,
+    });
+  } catch (error) {
+    console.error('[Project Trends] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch trends' });
+  }
+});
+
+/**
+ * GET /api/projects/:projectId/settings
+ * Settings page: project + profile for current user
+ */
+router.get('/projects/:projectId/settings', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const [profile] = await db
+      .select({
+        fullName: profiles.fullName,
+        whatsappNumber: profiles.whatsappNumber,
+        defaultCurrency: profiles.defaultCurrency,
+        preferredLanguage: profiles.preferredLanguage,
+      })
+      .from(profiles)
+      .where(eq(profiles.id, userId))
+      .limit(1);
+    const budgetNum = parseFloat(project.budgetAmount || '0');
+    res.json({
+      success: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        description: project.description || '',
+        budget: budgetNum,
+        status: project.status || 'active',
+        channel_type: project.channelType || 'direct',
+        created_at: project.createdAt ? new Date(project.createdAt).toISOString() : null,
+      },
+      profile: profile ? {
+        full_name: profile.fullName || '',
+        whatsapp_number: profile.whatsappNumber || '',
+        default_currency: profile.defaultCurrency || 'UGX',
+        preferred_language: profile.preferredLanguage || 'en',
+      } : { full_name: '', whatsapp_number: '', default_currency: 'UGX', preferred_language: 'en' },
+    });
+  } catch (error) {
+    console.error('[Settings GET] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load settings' });
+  }
+});
+
+/**
+ * PATCH /api/projects/:projectId/settings
+ * Update project and/or profile fields
+ */
+router.patch('/projects/:projectId/settings', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const { name, description, budget, status, channel_type, whatsapp_number, full_name } = req.body;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const projectUpdates: Record<string, unknown> = {};
+    if (name !== undefined) projectUpdates.name = String(name).trim();
+    if (description !== undefined) projectUpdates.description = (description && String(description).trim()) || null;
+    if (budget !== undefined) {
+      const b = parseFloat(budget);
+      if (!isNaN(b) && b >= 0) projectUpdates.budgetAmount = b.toFixed(2);
+    }
+    if (status !== undefined && ['active', 'completed', 'paused', 'on_hold'].includes(String(status))) {
+      projectUpdates.status = status === 'on_hold' ? 'paused' : status;
+    }
+    if (channel_type !== undefined && ['direct', 'group'].includes(String(channel_type))) {
+      projectUpdates.channelType = channel_type;
+    }
+    if (Object.keys(projectUpdates).length > 0) {
+      projectUpdates.updatedAt = new Date();
+      await db.update(projects).set(projectUpdates as any).where(eq(projects.id, projectId));
+    }
+    const profileUpdates: Record<string, unknown> = {};
+    if (whatsapp_number !== undefined) profileUpdates.whatsappNumber = String(whatsapp_number).trim();
+    if (full_name !== undefined) profileUpdates.fullName = String(full_name).trim();
+    if (Object.keys(profileUpdates).length > 0) {
+      profileUpdates.updatedAt = new Date();
+      await db.update(profiles).set(profileUpdates as any).where(eq(profiles.id, userId));
+    }
+    const [updated] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
+    const budgetNum = updated ? parseFloat(updated.budgetAmount || '0') : 0;
+    res.json({
+      success: true,
+      project: updated ? {
+        id: updated.id,
+        name: updated.name,
+        description: updated.description || '',
+        budget: budgetNum,
+        status: updated.status || 'active',
+        channel_type: updated.channelType || 'direct',
+        created_at: updated.createdAt ? new Date(updated.createdAt).toISOString() : null,
+      } : null,
+    });
+  } catch (error) {
+    console.error('[Settings PATCH] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save settings' });
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/issues
+ * Report issue (insert into issues table)
+ */
+router.post('/projects/:projectId/issues', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const { title, description, severity, type, priority } = req.body;
+    const severityVal = (severity && ['low', 'medium', 'high', 'critical'].includes(String(severity)))
+      ? severity
+      : (priority && ['low', 'medium', 'high', 'critical'].includes(String(priority)))
+        ? priority
+        : 'medium';
+    const [issue] = await db.insert(issues).values({
+      projectId,
+      title: title && String(title).trim() ? String(title).trim() : 'Untitled issue',
+      description: (description && String(description).trim()) || null,
+      severity: severityVal,
+      type: (type && String(type).trim()) ? String(type).trim() : 'general',
+      status: 'open',
+    }).returning();
+    res.status(201).json({ success: true, issue: issue ? { id: issue.id, title: issue.title, status: issue.status } : {} });
+  } catch (error) {
+    console.error('[POST issues] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to report issue' });
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/daily/log
+ * Upsert today's daily log (worker_count, notes)
+ */
+router.post('/projects/:projectId/daily/log', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const { worker_count, notes, log_date } = req.body;
+    const todayStr = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    const existing = await db
+      .select({ id: dailyLogs.id, notes: dailyLogs.notes, workerCount: dailyLogs.workerCount })
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.projectId, projectId), eq(dailyLogs.logDate, todayStr)))
+      .limit(1);
+    if (existing.length > 0) {
+      const row = existing[0];
+      const updatedNotes = notes != null && String(notes).trim() !== ''
+        ? (row.notes ? `${row.notes}\n${notes}` : notes)
+        : row.notes;
+      await db
+        .update(dailyLogs)
+        .set({
+          workerCount: worker_count !== undefined && worker_count !== null ? Number(worker_count) : row.workerCount,
+          notes: updatedNotes ?? null,
+        })
+        .where(eq(dailyLogs.id, row.id));
+    } else {
+      await db.insert(dailyLogs).values({
+        projectId,
+        logDate: todayStr,
+        workerCount: worker_count != null ? Number(worker_count) : 0,
+        notes: (notes && String(notes).trim()) || null,
+      });
+    }
+    res.status(201).json({ success: true });
+  } catch (error) {
+    console.error('[POST daily/log] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save daily log' });
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/daily/photo
+ * Append photo URL to today's daily log
+ */
+router.post('/projects/:projectId/daily/photo', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const { photoUrl } = req.body;
+    if (!photoUrl || typeof photoUrl !== 'string') {
+      return res.status(400).json({ success: false, error: 'photoUrl is required' });
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const existing = await db
+      .select({ id: dailyLogs.id, photoUrls: dailyLogs.photoUrls })
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.projectId, projectId), eq(dailyLogs.logDate, todayStr)))
+      .limit(1);
+    const newUrls = existing.length > 0
+      ? (Array.isArray(existing[0].photoUrls) ? [...(existing[0].photoUrls as string[]), photoUrl] : (existing[0].photoUrls ? [existing[0].photoUrls, photoUrl] : [photoUrl]))
+      : [photoUrl];
+    if (existing.length > 0) {
+      await db.update(dailyLogs).set({ photoUrls: newUrls }).where(eq(dailyLogs.id, existing[0].id));
+    } else {
+      await db.insert(dailyLogs).values({
+        projectId,
+        logDate: todayStr,
+        photoUrls: newUrls,
+      });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[POST daily/photo] Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to add photo' });
   }
 });
 
