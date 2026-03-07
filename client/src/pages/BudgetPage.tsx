@@ -18,14 +18,13 @@ import {
 } from "recharts";
 import {
   RefreshCw,
-  ChevronRight,
-  MoreHorizontal,
   AlertTriangle,
   Zap,
   PackageOpen,
+  MoreHorizontal,
 } from "lucide-react";
 
-// ─── Design tokens (dark theme per spec) ─────────────────────────────────────
+// ─── Design tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
   teal: "#00bcd4",
   green: "#22c55e",
@@ -33,43 +32,36 @@ const COLORS = {
   red: "#ef4444",
   orange: "#f97316",
   yellow: "#eab308",
-  pageBg: "#0f1117",
-  cardBg: "#1a1d27",
-  cardBorder: "#2a2d38",
-  textPrimary: "#ffffff",
-  textSecondary: "#94a3b8",
 };
 
-const PROJECT_COLORS = [COLORS.teal, "#22c55e", "#3b82f6", COLORS.orange, "#ec4899"];
+const PROJECT_COLORS = [
+  "#00bcd4", "#22c55e", "#3b82f6", "#f97316", "#ec4899",
+];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatUgx(value: number): string {
   const num = Number(value) || 0;
   if (num >= 1_000_000_000) {
-    const billions = num / 1_000_000_000;
-    const decimals = billions % 1 === 0 ? 0 : billions < 10 ? 3 : 1;
-    return `UGX ${billions.toFixed(decimals)}B`;
+    const b = num / 1_000_000_000;
+    // Show enough decimals to distinguish values close to a round billion
+    const decimals = b % 1 === 0 ? 0 : b < 10 ? 3 : 2;
+    return `UGX ${b.toFixed(decimals)}B`;
   }
   if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
   return `UGX ${num.toLocaleString()}`;
 }
 
-function formatUgxFull(amount: unknown): string {
-  const n = Number(amount) ?? 0;
-  if (!Number.isFinite(n)) return "UGX 0";
-  return `UGX ${Math.round(n).toLocaleString()}`;
-}
-
 function pct(numerator: number, denominator: number): number {
   if (!denominator || denominator <= 0) return 0;
   const raw = (numerator / denominator) * 100;
-  if (raw < 1 && raw > 0) return parseFloat(raw.toFixed(2));
-  return Math.min(100, parseFloat(raw.toFixed(1)));
+  if (raw < 1 && raw > 0) return parseFloat(raw.toFixed(4));
+  return Math.min(100, parseFloat(raw.toFixed(2)));
 }
 
 function yAxisTickFormatter(v: unknown): string {
   const n = parseFloat(String(v));
+  if (n >= 1_000_000_000) return `UGX ${(n / 1_000_000_000).toFixed(1)}B`;
   if (n >= 1_000_000) return `UGX ${(n / 1_000_000).toFixed(0)}M`;
   if (n >= 1_000) return `UGX ${(n / 1_000).toFixed(0)}K`;
   return `UGX ${n}`;
@@ -83,7 +75,10 @@ function getWeekNumber(date: Date): number {
   return (
     1 +
     Math.round(
-      ((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+      ((d.getTime() - week1.getTime()) / 86400000 -
+        3 +
+        ((week1.getDay() + 6) % 7)) /
+        7
     )
   );
 }
@@ -98,6 +93,30 @@ function timeAgo(date: Date): string {
   if (d === 1) return "Yesterday";
   if (d < 7) return `${d} days ago`;
   return d < 30 ? "Last week" : "Detected earlier";
+}
+
+const CATEGORY_KEYWORDS: Record<string, string[]> = {
+  Materials: [
+    "cement", "sand", "stone", "tiles", "brick", "steel", "rod", "iron",
+    "timber", "wood", "paint", "wire", "pipe", "block", "material", "receipt",
+    "gravel", "aggregate", "rebar", "nails", "screws", "glass", "plaster",
+  ],
+  Labor: [
+    "labor", "labour", "worker", "casual", "wage", "plumber", "electrician",
+    "mason", "carpenter", "painter", "driver", "foreman",
+  ],
+  Equipment: [
+    "equipment", "tool", "machine", "rental", "hire", "generator", "pump", "mixer",
+  ],
+  Logistics: ["transport", "delivery", "fuel", "logistics", "truck"],
+};
+
+function categorise(description: string): string {
+  const desc = description.toLowerCase();
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (keywords.some((kw) => desc.includes(kw))) return cat;
+  }
+  return "Other";
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -118,7 +137,7 @@ function BudgetSkeleton() {
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
+// ─── Stat Card ─────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -126,8 +145,6 @@ function StatCard({
   extraSub,
   valueClassName,
   dotColor,
-  showViewAll,
-  viewAllHref,
 }: {
   label: string;
   value: string;
@@ -135,13 +152,11 @@ function StatCard({
   extraSub?: React.ReactNode;
   valueClassName?: string;
   dotColor?: string;
-  showViewAll?: boolean;
-  viewAllHref?: string;
 }) {
   return (
     <div className="rounded-xl p-4 flex flex-col justify-between min-h-[88px] border border-border bg-card">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <div className="flex items-end justify-between mt-2 gap-2">
+      <div className="mt-2">
         <div className="flex items-center gap-2">
           {dotColor && (
             <span
@@ -149,34 +164,18 @@ function StatCard({
               style={{ backgroundColor: dotColor }}
             />
           )}
-          <div>
-            <p
-              className={`text-lg font-bold leading-tight ${valueClassName ?? "text-foreground"}`}
-            >
-              {value}
-            </p>
-            {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-            {extraSub && (
-              <div className="text-[11px] text-muted-foreground mt-1">
-                {extraSub}
-              </div>
-            )}
-          </div>
+          <p className={`text-lg font-bold leading-tight ${valueClassName ?? "text-foreground"}`}>
+            {value}
+          </p>
         </div>
-        {showViewAll && viewAllHref && (
-          <Link
-            href={viewAllHref}
-            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted text-[#00bcd4] hover:bg-muted/80 transition-colors shrink-0"
-          >
-            View All <ChevronRight className="w-4 h-4" />
-          </Link>
-        )}
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+        {extraSub && <div className="text-[11px] text-muted-foreground mt-1">{extraSub}</div>}
       </div>
     </div>
   );
 }
 
-// ─── Budget Comparison bars ───────────────────────────────────────────────────
+// ─── Budget Comparison ────────────────────────────────────────────────────────
 function BudgetComparisonSection({
   categoryTotals,
   totalSpent,
@@ -203,34 +202,26 @@ function BudgetComparisonSection({
 
   const progressPct = tasksPct ?? expenseProxyPct;
 
+  // budgetUsedPct from real parsed numbers
   const budgetUsedPct =
-    budget > 0 ? parseFloat(((totalSpent / budget) * 100).toFixed(4)) : 0;
+    budget > 0 ? parseFloat(((totalSpent / budget) * 100).toFixed(6)) : 0;
 
   const gap = budgetUsedPct - progressPct;
   const footerText =
     gap > 5
-      ? `⚠️ Spending is ${gap.toFixed(1)}% ahead of recorded progress`
+      ? `⚠️ Spending is ${gap.toFixed(2)}% ahead of recorded progress`
       : gap < -5
-        ? `✅ Progress is ahead of spending by ${Math.abs(gap).toFixed(1)}%`
-        : `✅ Spending and progress are aligned`;
-
-  const barData = useMemo(() => {
-    const sorted = [...categoryTotals].sort((a, b) => b.amount - a.amount);
-    return sorted.map((c) => ({
-      name: c.name,
-      amount: parseFloat(String(c.amount)),
-      pctOfSpend: totalSpent > 0 ? pct(c.amount, totalSpent) : 0,
-      pctOfBudget: budget > 0 ? pct(c.amount, budget) : 0,
-    }));
-  }, [categoryTotals, totalSpent, budget]);
+      ? `✅ Progress is ahead of spending by ${Math.abs(gap).toFixed(2)}%`
+      : `✅ Spending and progress are aligned`;
 
   return (
-    <div className="rounded-xl p-6 border border-border bg-card">
-      <div className="mb-4">
+    <div className="rounded-xl p-6 border border-border bg-card h-full">
+      {/* No "View All" button */}
+      <div className="mb-5">
         <h3 className="text-lg font-semibold text-foreground">Budget Comparison</h3>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5">
         <p className="text-sm text-muted-foreground mb-2">Progress vs. Expenditure</p>
         <select
           className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
@@ -241,83 +232,81 @@ function BudgetComparisonSection({
         </select>
       </div>
 
-      {(barData.length > 0 || tasks.length > 0 || expenses.length > 0) ? (
-        <div className="space-y-6">
-          <div>
-            <p className="text-xs text-muted-foreground mb-2">Project Progress</p>
+      <div className="space-y-6">
+        {/* Project Progress bar */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Project Progress</p>
+          <div
+            className="rounded-lg overflow-hidden"
+            style={{ height: "12px", background: "hsl(var(--muted))" }}
+          >
             <div
-              className="rounded-lg overflow-hidden"
-              style={{ height: "12px", background: "#1e2333" }}
-            >
-              <div
-                style={{
-                  width: `${Math.max(progressPct, 2)}%`,
-                  height: "100%",
-                  background: "linear-gradient(90deg, #00bcd4, #0097a7)",
-                  borderRadius: "6px",
-                  transition: "width 0.6s ease",
-                }}
-              />
-            </div>
-            <div className="text-right text-xs text-muted-foreground mt-1">
-              {tasksPct !== null
-                ? `${progressPct}%`
-                : `~${progressPct}% (estimated from ${expenses?.length ?? 0} logged expenses)`}
-            </div>
+              style={{
+                width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%`,
+                height: "100%",
+                background: "linear-gradient(90deg, #00bcd4, #0097a7)",
+                borderRadius: "6px",
+                transition: "width 0.6s ease",
+              }}
+            />
           </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground mb-2">Budget Used</p>
-            <div
-              className="rounded-lg overflow-hidden"
-              style={{ height: "12px", background: "#1e2333" }}
-            >
-              <div
-                style={{
-                  width: `${Math.max(budgetUsedPct, budgetUsedPct > 0 ? 0.5 : 0)}%`,
-                  height: "100%",
-                  background:
-                    budgetUsedPct > 80
-                      ? "linear-gradient(90deg, #ef4444, #dc2626)"
-                      : budgetUsedPct > 60
-                        ? "linear-gradient(90deg, #f59e0b, #d97706)"
-                        : "linear-gradient(90deg, #22c55e, #16a34a)",
-                  borderRadius: "6px",
-                  transition: "width 0.6s ease",
-                }}
-              />
-            </div>
-            <div className="text-right text-xs text-muted-foreground mt-1">
-              {budgetUsedPct < 0.01
-                ? `${formatUgx(totalSpent)} of ${formatUgx(budget)} used`
-                : `${budgetUsedPct.toFixed(3)}%`}
-            </div>
+          <div className="text-right text-xs text-muted-foreground mt-1">
+            {tasksPct !== null
+              ? `${progressPct}%`
+              : expenses.length > 0
+              ? `~${progressPct}% (estimated from ${expenses.length} expenses)`
+              : "0% — no tasks logged yet"}
           </div>
-
-          {barData.length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {barData.map((d, i) => (
-                <div key={d.name} className="flex items-center gap-2">
-                  <span
-                    className="w-3 h-3 rounded-sm"
-                    style={{
-                      backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">{d.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground py-6 text-center">
-          No expense data yet to compare.
-        </p>
-      )}
+
+        {/* Budget Used bar */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Budget Used</p>
+          <div
+            className="rounded-lg overflow-hidden"
+            style={{ height: "12px", background: "hsl(var(--muted))" }}
+          >
+            <div
+              style={{
+                // Visual minimum so bar is visible even at 0.006%
+                width: `${budgetUsedPct > 0 ? Math.max(budgetUsedPct, 0.4) : 0}%`,
+                height: "100%",
+                background:
+                  budgetUsedPct > 80
+                    ? "linear-gradient(90deg, #ef4444, #dc2626)"
+                    : budgetUsedPct > 60
+                    ? "linear-gradient(90deg, #f59e0b, #d97706)"
+                    : "linear-gradient(90deg, #22c55e, #16a34a)",
+                borderRadius: "6px",
+                transition: "width 0.6s ease",
+              }}
+            />
+          </div>
+          <div className="text-right text-xs text-muted-foreground mt-1">
+            {/* Always show real amounts so tiny % are meaningful */}
+            {formatUgx(totalSpent)} of {formatUgx(budget)} used
+            {budgetUsedPct >= 0.01 && ` (${budgetUsedPct.toFixed(3)}%)`}
+          </div>
+        </div>
+
+        {/* Category legend */}
+        {categoryTotals.length > 0 && (
+          <div className="flex flex-wrap gap-3 pt-1">
+            {categoryTotals.map((d, i) => (
+              <div key={d.name} className="flex items-center gap-2">
+                <span
+                  className="w-3 h-3 rounded-sm"
+                  style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }}
+                />
+                <span className="text-xs text-muted-foreground">{d.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div
-        className="text-[13px] mt-4"
+        className="text-[13px] mt-5 font-medium"
         style={{ color: gap > 5 ? "#f59e0b" : "#00bcd4" }}
       >
         {footerText}
@@ -326,7 +315,7 @@ function BudgetComparisonSection({
   );
 }
 
-// ─── Alerts Card ───────────────────────────────────────────────────────────────
+// ─── Alerts ───────────────────────────────────────────────────────────────────
 function AlertsSection({
   alerts,
 }: {
@@ -344,12 +333,10 @@ function AlertsSection({
   ).length;
 
   return (
-    <div className="rounded-xl p-6 border border-border bg-card">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-xl p-6 border border-border bg-card h-full">
+      {/* No "View All" button */}
+      <div className="mb-4">
         <h3 className="text-lg font-semibold text-foreground">Alerts</h3>
-        <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted text-[#00bcd4] hover:bg-muted/80 transition-colors">
-          View All <ChevronRight className="w-4 h-4" />
-        </button>
       </div>
 
       <div className="flex items-center justify-between mb-4">
@@ -367,9 +354,7 @@ function AlertsSection({
             No alerts at this time.
           </p>
         ) : (
-          alerts.map((a, i) => (
-            <AlertRow key={i} {...a} />
-          ))
+          alerts.map((a, i) => <AlertRow key={i} {...a} />)
         )}
       </div>
     </div>
@@ -398,7 +383,9 @@ function AlertRow({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-foreground leading-relaxed">{title}</p>
-        <p className="text-xs mt-1" style={{ color: COLORS.teal }}>{subtitle}</p>
+        <p className="text-xs mt-1" style={{ color: COLORS.teal }}>
+          {subtitle}
+        </p>
         {timestamp && (
           <p className="text-xs mt-0.5 text-muted-foreground">{timestamp}</p>
         )}
@@ -411,20 +398,37 @@ function AlertRow({
   );
 }
 
-// ─── Cost Trend Chart ─────────────────────────────────────────────────────────
+// ─── Cost Trend ───────────────────────────────────────────────────────────────
 function CostTrendChart({
-  data,
+  allData,
+  period,
   lastWeekSpend,
   lastWeekKey,
 }: {
-  data: Array<{ week: string; total: number }>;
+  allData: Array<{ week: string; total: number; date: Date }>;
+  period: "1w" | "1m" | "3m" | "all";
   lastWeekSpend: number;
   lastWeekKey?: string;
 }) {
-  if (data.length === 0) {
+  const filteredData = useMemo(() => {
+    const now = Date.now();
+    const cutoff =
+      period === "1w"
+        ? now - 7 * 86400000
+        : period === "1m"
+        ? now - 30 * 86400000
+        : period === "3m"
+        ? now - 91 * 86400000
+        : 0;
+    return allData
+      .filter((d) => d.date.getTime() >= cutoff)
+      .map(({ week, total }) => ({ week, total }));
+  }, [allData, period]);
+
+  if (filteredData.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm rounded-xl border border-border bg-card">
-        No expense history yet to chart.
+      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+        No expense history for this period.
       </div>
     );
   }
@@ -433,7 +437,10 @@ function CostTrendChart({
     <div>
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <ComposedChart
+            data={filteredData}
+            margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+          >
             <XAxis
               dataKey="week"
               axisLine={false}
@@ -446,13 +453,14 @@ function CostTrendChart({
               domain={[0, "auto"]}
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
               tickFormatter={yAxisTickFormatter}
-              width={55}
+              width={75}
             />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--card))",
                 border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
+                fontSize: "13px",
               }}
               labelStyle={{ color: "hsl(var(--muted-foreground))" }}
               formatter={(value: number) => [formatUgx(value), "Spent"]}
@@ -461,32 +469,41 @@ function CostTrendChart({
               type="monotone"
               dataKey="total"
               stroke={COLORS.teal}
-              strokeWidth={2}
-              dot={{ r: 3 }}
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: COLORS.teal }}
               activeDot={{ r: 5 }}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+
+      {/* Styled "spent last week" footer */}
       <div
-        className="flex items-center gap-2 mt-4 py-2.5 px-4 rounded-r-md"
+        className="flex items-center gap-3 mt-5 py-3 px-4 rounded-r-lg"
         style={{
           background: "rgba(0, 188, 212, 0.08)",
           borderLeft: "3px solid #00bcd4",
         }}
       >
-        <span style={{ color: "#00bcd4", fontSize: "18px", fontWeight: 700 }}>
+        <span
+          style={{
+            color: "#00bcd4",
+            fontSize: "20px",
+            fontWeight: 700,
+            letterSpacing: "-0.5px",
+          }}
+        >
           {formatUgx(lastWeekSpend)}
         </span>
-        <span className="text-muted-foreground text-[13px]">
-          spent last week ({lastWeekKey ?? "this week"})
+        <span className="text-muted-foreground text-sm">
+          spent last week{lastWeekKey ? ` · ${lastWeekKey}` : ""}
         </span>
       </div>
     </div>
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function BudgetPage() {
   const { t } = useLanguage();
   const { currentProject } = useProject();
@@ -507,8 +524,8 @@ export default function BudgetPage() {
   const [costTrendPeriod, setCostTrendPeriod] = useState<"1w" | "1m" | "3m" | "all">("1m");
 
   const tasks = useMemo(() => {
-    const t = (tasksData as any)?.tasks ?? tasksData;
-    return Array.isArray(t) ? t : [];
+    const raw = (tasksData as any)?.tasks ?? tasksData;
+    return Array.isArray(raw) ? raw : [];
   }, [tasksData]);
 
   const isProjectSwitch = projectId != null && data === undefined && !isError;
@@ -520,6 +537,8 @@ export default function BudgetPage() {
         ? (data as any).expenses
         : Array.isArray((data as any)?.recent)
         ? (data as any).recent
+        : Array.isArray(data)
+        ? (data as any[])
         : [],
     [data]
   );
@@ -528,125 +547,108 @@ export default function BudgetPage() {
     () =>
       Array.isArray((materialsData as any)?.inventory)
         ? (materialsData as any).inventory
+        : Array.isArray(materialsData)
+        ? (materialsData as any[])
         : [],
     [materialsData]
   );
 
+  // ── Core financial values ────────────────────────────────────────────────────
+  // FIX 1: Always parse budget as plain float — handles string "30000000000"
   const budget = useMemo(() => {
-    const raw = currentProject?.totalBudget ?? (currentProject as any)?.budget ?? 0;
+    const raw =
+      (currentProject as any)?.budget ??
+      (currentProject as any)?.totalBudget ??
+      0;
     const parsed = parseFloat(String(raw).replace(/,/g, ""));
     return isNaN(parsed) ? 0 : parsed;
   }, [currentProject]);
 
-  const totalSpent = useMemo(() => {
-    return (expenses ?? []).reduce(
-      (sum, e) => sum + parseFloat(String(e.amount ?? 0).replace(/,/g, "")),
-      0
-    );
-  }, [expenses]);
-
-  const balance = budget - totalSpent;
-  const percentSpent = useMemo(() => {
-    if (!budget || budget <= 0) return 0;
-    return parseFloat(((totalSpent / budget) * 100).toFixed(4));
-  }, [budget, totalSpent]);
-  const overBudget = budget > 0 && totalSpent > budget;
-
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-  const recentSpend = useMemo(
+  // FIX 2: Parse every expense amount as float — avoids string concat bug
+  const totalSpent = useMemo(
     () =>
-      expenses
-        .filter((e) => new Date(e.expense_date || e.created_at).getTime() >= thirtyDaysAgo)
-        .reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0),
+      expenses.reduce(
+        (sum, e) =>
+          sum + (parseFloat(String(e.amount ?? 0).replace(/,/g, "")) || 0),
+        0
+      ),
     [expenses]
   );
 
+  // FIX 3: Arithmetic on two Numbers — guaranteed correct
+  const balance = budget - totalSpent;
+
+  const percentSpent = useMemo(() => pct(totalSpent, budget), [totalSpent, budget]);
+  const overBudget = budget > 0 && totalSpent > budget;
+
+  const recentSpend = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return expenses
+      .filter((e) => new Date(e.expense_date || e.created_at).getTime() >= cutoff)
+      .reduce((s, e) => s + (parseFloat(String(e.amount || 0)) || 0), 0);
+  }, [expenses]);
+
   const weeklyBurn = recentSpend / 4.3;
   const weeksRemaining =
-    weeklyBurn > 0 ? Math.min(999, Math.max(0, Math.round(balance / weeklyBurn))) : null;
+    weeklyBurn > 0
+      ? Math.min(999, Math.max(0, Math.round(balance / weeklyBurn)))
+      : null;
 
-  const CATEGORY_KEYWORDS: Record<string, string[]> = {
-    Materials: ["cement", "sand", "stone", "tiles", "brick", "steel", "rod", "iron", "timber", "wood", "paint", "wire", "pipe", "block", "material", "receipt"],
-    Labor: ["labor", "labour", "worker", "casual", "wage", "plumber", "electrician", "mason", "carpenter", "painter", "driver"],
-    Equipment: ["equipment", "tool", "machine", "rental", "hire", "generator", "pump", "mixer"],
-    Logistics: ["transport", "delivery", "fuel", "logistics", "truck"],
-  };
-
+  // ── Category totals ──────────────────────────────────────────────────────────
   const categoryTotals = useMemo(() => {
     const totals: Record<string, number> = {};
     expenses.forEach((e) => {
-      const desc = String(e.description || "").toLowerCase();
-      let matched = false;
-      for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (keywords.some((kw) => desc.includes(kw))) {
-          totals[cat] = (totals[cat] || 0) + parseFloat(String(e.amount || 0));
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) {
-        totals["Other"] = (totals["Other"] || 0) + parseFloat(String(e.amount || 0));
-      }
+      const cat = categorise(String(e.description || ""));
+      totals[cat] = (totals[cat] || 0) + (parseFloat(String(e.amount || 0)) || 0);
     });
     return Object.entries(totals)
       .map(([name, amount]) => ({ name, amount }))
       .sort((a, b) => b.amount - a.amount);
   }, [expenses]);
 
-  const byCategory = useMemo(() => {
-    const acc: Record<string, number> = {};
+  // ── Cost trend ───────────────────────────────────────────────────────────────
+  // FIX 4: Include the raw Date so CostTrendChart can filter by period correctly
+  const costTrendDataRaw = useMemo(() => {
+    const weeklyMap: Record<string, { total: number; date: Date }> = {};
     expenses.forEach((e) => {
-      const desc = String(e.description || "").toLowerCase();
-      let cat = "Other";
-      for (const [c, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (keywords.some((kw) => desc.includes(kw))) {
-          cat = c;
-          break;
-        }
-      }
-      acc[cat] = (acc[cat] || 0) + parseFloat(String(e.amount || 0));
-    });
-    return acc;
-  }, [expenses]);
-
-  const costTrendData = useMemo(() => {
-    const weeklyTotals: Record<string, number> = {};
-    (expenses ?? []).forEach((e) => {
-      const date = new Date((e as any).created_at || (e as any).expense_date || Date.now());
-      const year = date.getFullYear();
+      const date = new Date(
+        (e as any).created_at || (e as any).expense_date || Date.now()
+      );
       const week = getWeekNumber(date);
       const monthShort = date.toLocaleString("default", { month: "short" });
       const key = `W${week} ${monthShort}`;
-      const amt = parseFloat(String((e as any).amount ?? 0).replace(/,/g, "")) || 0;
-      weeklyTotals[key] = (weeklyTotals[key] || 0) + amt;
+      const amt =
+        parseFloat(String((e as any).amount ?? 0).replace(/,/g, "")) || 0;
+      if (!weeklyMap[key]) weeklyMap[key] = { total: 0, date };
+      weeklyMap[key].total += amt;
     });
-    const weeklyData = Object.entries(weeklyTotals)
+    return Object.entries(weeklyMap)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([week, total]) => ({ week, total }));
-    return weeklyData;
+      .map(([week, { total, date }]) => ({ week, total, date }));
   }, [expenses]);
 
-  const lastWeekEntry = costTrendData[costTrendData.length - 1];
+  const lastWeekEntry = costTrendDataRaw[costTrendDataRaw.length - 1];
   const lastWeekSpent = lastWeekEntry?.total ?? 0;
-  const lastWeekKey = lastWeekEntry?.week ?? "this week";
+  const lastWeekKey = lastWeekEntry?.week;
 
+  // ── Average per category (price spike detection) ─────────────────────────────
   const avgByCategory = useMemo(() => {
-    const n = expenses.length;
-    if (n === 0) return {} as Record<string, number>;
+    const sums: Record<string, number> = {};
+    const counts: Record<string, number> = {};
+    expenses.forEach((e) => {
+      const cat = categorise(String(e.description || ""));
+      const amt = parseFloat(String(e.amount || 0)) || 0;
+      sums[cat] = (sums[cat] || 0) + amt;
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
     const avg: Record<string, number> = {};
-    Object.entries(byCategory).forEach(([cat, total]) => {
-      const count = expenses.filter((e) => {
-        const desc = String(e.description || "").toLowerCase();
-        for (const [c, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-          if (keywords.some((kw) => desc.includes(kw)) && c === cat) return true;
-        }
-        return cat === "Other";
-      }).length;
-      avg[cat] = count > 0 ? total / count : 0;
+    Object.keys(sums).forEach((cat) => {
+      avg[cat] = sums[cat] / (counts[cat] || 1);
     });
     return avg;
-  }, [expenses, byCategory]);
+  }, [expenses]);
 
+  // ── Alerts ───────────────────────────────────────────────────────────────────
   const alerts = useMemo(() => {
     const result: Array<{
       icon: React.ElementType;
@@ -657,16 +659,27 @@ export default function BudgetPage() {
       timestamp?: string;
     }> = [];
 
-    const perCategoryBudget = budget > 0 && categoryTotals.length > 0 ? budget / categoryTotals.length : 0;
-    const threshold = perCategoryBudget * 1.5;
+    if (overBudget) {
+      result.push({
+        icon: AlertTriangle,
+        iconColor: COLORS.red,
+        title: `Total spend is ${formatUgx(totalSpent - budget)} over budget!`,
+        subtitle: "Budget Overrun",
+        dotColor: COLORS.red,
+        timestamp: "Now",
+      });
+    }
 
+    const perCatBudget =
+      budget > 0 && categoryTotals.length > 0
+        ? budget / categoryTotals.length
+        : 0;
     categoryTotals.forEach((c) => {
-      if (threshold > 0 && c.amount > threshold) {
-        const over = c.amount - perCategoryBudget;
+      if (perCatBudget > 0 && c.amount > perCatBudget * 1.5) {
         result.push({
           icon: AlertTriangle,
           iconColor: COLORS.yellow,
-          title: `${c.name} are ${formatUgx(over)} over their allocated budget.`,
+          title: `${c.name} is ${formatUgx(c.amount - perCatBudget)} over its allocated share.`,
           subtitle: "Budget Overrun",
           dotColor: COLORS.yellow,
           timestamp: "Detected Yesterday",
@@ -675,21 +688,14 @@ export default function BudgetPage() {
     });
 
     expenses.forEach((e) => {
-      const desc = String(e.description || "").toLowerCase();
-      let cat = "Other";
-      for (const [c, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (keywords.some((kw) => desc.includes(kw))) {
-          cat = c;
-          break;
-        }
-      }
-      const amt = parseFloat(String(e.amount || 0));
+      const cat = categorise(String(e.description || ""));
+      const amt = parseFloat(String(e.amount || 0)) || 0;
       const avg = avgByCategory[cat] || 0;
       if (avg > 0 && amt > avg * 2) {
         result.push({
           icon: Zap,
           iconColor: COLORS.red,
-          title: `${String(e.description || "Expense")} — ${formatUgx(amt)} is 2× above average.`,
+          title: `${String(e.description || "Expense")} (${formatUgx(amt)}) is 2× above average.`,
           subtitle: "Price Spike",
           dotColor: COLORS.red,
           timestamp: timeAgo(new Date(e.expense_date || e.created_at)),
@@ -703,28 +709,19 @@ export default function BudgetPage() {
         result.push({
           icon: PackageOpen,
           iconColor: COLORS.yellow,
-          title: `${m.material_name} stock is low: only ${m.quantity} ${m.unit || "units"} remaining.`,
+          title: `${m.material_name} is low: ${m.quantity} ${m.unit || "units"} remaining.`,
           subtitle: "Low Stock",
           dotColor: COLORS.yellow,
-          timestamp: "2h ago",
+          timestamp: "Now",
         });
       }
     });
 
-    if (overBudget) {
-      result.unshift({
-        icon: AlertTriangle,
-        iconColor: COLORS.red,
-        title: `Total spend is ${formatUgx(totalSpent - budget)} over budget!`,
-        subtitle: "Budget Overrun",
-        dotColor: COLORS.red,
-        timestamp: "2h ago",
-      });
-    } else if (percentSpent >= 80 && result.length === 0) {
+    if (!overBudget && percentSpent >= 80 && result.length === 0) {
       result.push({
         icon: AlertTriangle,
         iconColor: COLORS.amber,
-        title: `${percentSpent}% of budget used. Only ${formatUgx(balance)} remaining.`,
+        title: `${percentSpent}% of budget used. ${formatUgx(balance)} remaining.`,
         subtitle: "High Budget Usage",
         dotColor: COLORS.amber,
       });
@@ -742,20 +739,14 @@ export default function BudgetPage() {
 
     return result;
   }, [
-    overBudget,
-    percentSpent,
-    balance,
-    totalSpent,
-    budget,
-    categoryTotals,
-    expenses,
-    materials,
-    avgByCategory,
+    overBudget, percentSpent, balance, totalSpent, budget,
+    categoryTotals, expenses, materials, avgByCategory,
   ]);
 
   const budgetUsedDotColor =
     percentSpent < 60 ? COLORS.green : percentSpent < 80 ? COLORS.amber : COLORS.red;
 
+  // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
       <AppLayout>
@@ -802,9 +793,11 @@ export default function BudgetPage() {
     );
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <div className="min-h-screen p-6 bg-background">
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-foreground">Budgets & Costs</h1>
           <button
@@ -816,35 +809,45 @@ export default function BudgetPage() {
           </button>
         </div>
 
-        {/* TOP ROW — 5 Stat Cards */}
+        {/* TOP ROW — 5 stat cards, no "View All" buttons anywhere */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <StatCard label="Total Budget" value={formatUgx(budget)} sub={budget === 0 ? "Not set" : undefined} />
+          <StatCard
+            label="Total Budget"
+            value={formatUgx(budget)}
+            sub={budget === 0 ? "Not set" : undefined}
+          />
           <StatCard
             label="Total Expenditure"
             value={formatUgx(totalSpent)}
-            sub={`${expenses.length} transactions`}
+            sub={`${expenses.length} transaction${expenses.length !== 1 ? "s" : ""}`}
           />
+          {/* Balance: shows UGX 29.998B (not 30.0B) with spent sub-line */}
           <StatCard
             label="Balance"
             value={formatUgx(balance)}
-            sub={balance < 0 ? "Over budget" : undefined}
-            extraSub={<>{formatUgx(totalSpent)} spent</>}
             valueClassName={balance < 0 ? "text-red-400" : "text-foreground"}
+            sub={balance < 0 ? "Over budget" : undefined}
+            extraSub={totalSpent > 0 ? <>{formatUgx(totalSpent)} spent</> : undefined}
           />
           <StatCard
             label="Budget Used"
             value={`${percentSpent}%`}
             dotColor={budgetUsedDotColor}
+            sub={
+              weeksRemaining != null && weeksRemaining < 200
+                ? `~${weeksRemaining} wk remaining`
+                : undefined
+            }
           />
+          {/* Percentage Spent — no View All */}
           <StatCard
             label="Percentage Spent"
             value={`${percentSpent}% spent`}
             dotColor={budgetUsedDotColor}
-            sub={weeksRemaining != null && weeksRemaining < 200 ? `~${weeksRemaining} wk remaining` : undefined}
           />
         </div>
 
-        {/* MIDDLE ROW — Budget Comparison + Alerts */}
+        {/* MIDDLE ROW */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <div className="lg:col-span-2">
             <BudgetComparisonSection
@@ -866,7 +869,9 @@ export default function BudgetPage() {
             <h3 className="text-lg font-semibold text-foreground">Cost Trend</h3>
             <select
               value={costTrendPeriod}
-              onChange={(e) => setCostTrendPeriod(e.target.value as "1w" | "1m" | "3m" | "all")}
+              onChange={(e) =>
+                setCostTrendPeriod(e.target.value as "1w" | "1m" | "3m" | "all")
+              }
               className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
             >
               <option value="1w">1 Week</option>
@@ -875,9 +880,9 @@ export default function BudgetPage() {
               <option value="all">All Time</option>
             </select>
           </div>
-
           <CostTrendChart
-            data={costTrendData}
+            allData={costTrendDataRaw}
+            period={costTrendPeriod}
             lastWeekSpend={lastWeekSpent}
             lastWeekKey={lastWeekKey}
           />
