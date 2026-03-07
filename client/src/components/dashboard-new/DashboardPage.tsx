@@ -106,6 +106,45 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     return 'Behind Schedule';
   }, [tasks]);
 
+  const issuesSectionData = useMemo(() => {
+    const list = issuesList as Array<{ id: string; title: string; description: string | null; severity?: string; type?: string; status: string; created_at: string; resolved_at?: string | null }>;
+    const mapOne = (i: (typeof list)[0]) => ({
+      id: i.id,
+      title: i.title,
+      description: i.description ?? '',
+      status: (i.status === 'resolved' || i.resolved_at ? 'resolved' : i.status === 'in_progress' ? 'inProgress' : 'todo') as 'todo' | 'inProgress' | 'resolved',
+      priority: (i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : i.severity === 'low' ? 'low' : 'medium') as 'low' | 'medium' | 'high' | 'critical',
+      reportedBy: 'Dashboard',
+      reportedDate: new Date(i.created_at),
+      type: i.type ?? 'general',
+    });
+    const todo = list.filter((i) => i.status !== 'resolved' && !i.resolved_at && i.status !== 'in_progress').map(mapOne);
+    const inProgress = list.filter((i) => i.status === 'in_progress').map(mapOne);
+    const resolved = list.filter((i) => i.status === 'resolved' || i.resolved_at).map(mapOne);
+    const criticalCount = list.filter((i) => i.severity === 'critical').length;
+    const highCount = list.filter((i) => i.severity === 'high').length;
+    const openCount = list.filter((i) => i.status !== 'resolved' && !i.resolved_at).length;
+    const weekAgo = Date.now() - 7 * 86400000;
+    const resolvedThisWeek = list.filter((i) => (i.status === 'resolved' || i.resolved_at) && new Date(i.resolved_at || i.created_at).getTime() > weekAgo).length;
+    const typeCounts: Record<string, number> = {};
+    list.forEach((i) => { typeCounts[i.type ?? 'general'] = (typeCounts[i.type ?? 'general'] || 0) + 1; });
+    const types = Object.entries(typeCounts).map(([type, count]) => ({
+      type,
+      count,
+      percentage: list.length > 0 ? Math.round((count / list.length) * 100) : 0,
+    }));
+    return {
+      todo,
+      inProgress,
+      resolved,
+      criticalIssues: criticalCount,
+      highIssues: highCount,
+      openIssues: openCount,
+      resolvedThisWeek,
+      types,
+    };
+  }, [issuesList]);
+
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
@@ -310,45 +349,6 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     schedule: { ...summary.schedule, status: scheduleStatusFromTasks as 'On Track' | 'At Risk' | 'Delayed' | 'Slight Delay' | 'Behind Schedule' },
     onActiveIssuesClick: () => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' }),
   };
-
-  const issuesSectionData = useMemo(() => {
-    const list = issuesList as Array<{ id: string; title: string; description: string | null; severity?: string; type?: string; status: string; created_at: string; resolved_at?: string | null }>;
-    const mapOne = (i: (typeof list)[0]) => ({
-      id: i.id,
-      title: i.title,
-      description: i.description ?? '',
-      status: (i.status === 'resolved' || i.resolved_at ? 'resolved' : i.status === 'in_progress' ? 'inProgress' : 'todo') as 'todo' | 'inProgress' | 'resolved',
-      priority: (i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : i.severity === 'low' ? 'low' : 'medium') as 'low' | 'medium' | 'high' | 'critical',
-      reportedBy: 'Dashboard',
-      reportedDate: new Date(i.created_at),
-      type: i.type ?? 'general',
-    });
-    const todo = list.filter((i) => i.status !== 'resolved' && !i.resolved_at && i.status !== 'in_progress').map(mapOne);
-    const inProgress = list.filter((i) => i.status === 'in_progress').map(mapOne);
-    const resolved = list.filter((i) => i.status === 'resolved' || i.resolved_at).map(mapOne);
-    const criticalCount = list.filter((i) => i.severity === 'critical').length;
-    const highCount = list.filter((i) => i.severity === 'high').length;
-    const openCount = list.filter((i) => i.status !== 'resolved' && !i.resolved_at).length;
-    const weekAgo = Date.now() - 7 * 86400000;
-    const resolvedThisWeek = list.filter((i) => (i.status === 'resolved' || i.resolved_at) && new Date(i.resolved_at || i.created_at).getTime() > weekAgo).length;
-    const typeCounts: Record<string, number> = {};
-    list.forEach((i) => { typeCounts[i.type ?? 'general'] = (typeCounts[i.type ?? 'general'] || 0) + 1; });
-    const types = Object.entries(typeCounts).map(([type, count]) => ({
-      type,
-      count,
-      percentage: list.length > 0 ? Math.round((count / list.length) * 100) : 0,
-    }));
-    return {
-      todo,
-      inProgress,
-      resolved,
-      criticalIssues: criticalCount,
-      highIssues: highCount,
-      openIssues: openCount,
-      resolvedThisWeek,
-      types,
-    };
-  }, [issuesList]);
 
   // Map API progress.phases (status "not-started") to UI "pending" for ProgressScheduleSection
   const progressSectionData = summary.progressSection
