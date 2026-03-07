@@ -43,9 +43,8 @@ function formatUgx(value: number): string {
   const num = Number(value) || 0;
   if (num >= 1_000_000_000) {
     const b = num / 1_000_000_000;
-    // Show enough decimals to distinguish values close to a round billion
-    const decimals = b % 1 === 0 ? 0 : b < 10 ? 3 : 2;
-    return `UGX ${b.toFixed(decimals)}B`;
+    // Always 3 decimal places for billions so 29.998B ≠ 30.000B
+    return `UGX ${b.toFixed(3)}B`;
   }
   if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
   if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
@@ -268,8 +267,7 @@ function BudgetComparisonSection({
           >
             <div
               style={{
-                // Visual minimum so bar is visible even at 0.006%
-                width: `${budgetUsedPct > 0 ? Math.max(budgetUsedPct, 0.4) : 0}%`,
+                width: `${budgetUsedPct > 0 ? Math.max(budgetUsedPct, 2) : 0}%`,
                 height: "100%",
                 background:
                   budgetUsedPct > 80
@@ -283,10 +281,14 @@ function BudgetComparisonSection({
             />
           </div>
           <div className="text-right text-xs text-muted-foreground mt-1">
-            {/* Always show real amounts so tiny % are meaningful */}
             {formatUgx(totalSpent)} of {formatUgx(budget)} used
             {budgetUsedPct >= 0.01 && ` (${budgetUsedPct.toFixed(3)}%)`}
           </div>
+          {budgetUsedPct < 1 && budgetUsedPct > 0 && (
+            <div className="text-[11px] text-muted-foreground mt-1 text-right italic">
+              Bar scaled for visibility — actual usage is {budgetUsedPct.toFixed(4)}%
+            </div>
+          )}
         </div>
 
         {/* Category legend */}
@@ -821,13 +823,18 @@ export default function BudgetPage() {
             value={formatUgx(totalSpent)}
             sub={`${expenses.length} transaction${expenses.length !== 1 ? "s" : ""}`}
           />
-          {/* Balance: shows UGX 29.998B (not 30.0B) with spent sub-line */}
           <StatCard
             label="Balance"
             value={formatUgx(balance)}
             valueClassName={balance < 0 ? "text-red-400" : "text-foreground"}
-            sub={balance < 0 ? "Over budget" : undefined}
-            extraSub={totalSpent > 0 ? <>{formatUgx(totalSpent)} spent</> : undefined}
+            sub={balance < 0 ? "Over budget" : `${formatUgx(budget - balance)} spent`}
+            extraSub={
+              budget > 0 && totalSpent > 0 ? (
+                <span style={{ color: "#00bcd4" }}>
+                  {formatUgx(balance)} remaining
+                </span>
+              ) : undefined
+            }
           />
           <StatCard
             label="Budget Used"
