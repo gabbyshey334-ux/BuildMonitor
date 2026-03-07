@@ -4,7 +4,5 @@
 ALTER TABLE expenses
   ADD COLUMN IF NOT EXISTS vendor text,
   ADD COLUMN IF NOT EXISTS category text DEFAULT 'Other',
-  ADD COLUMN IF NOT EXISTS expense_date date;
-
--- If expense_date already exists as the main date column, ensure it has a default for inserts
--- (no change needed if column exists)
+  ADD COLUMN IF NOT EXISTS expense_date date DEFAULT CURRENT_DATE,
+  ADD COLUMN IF NOT EXISTS notes text;

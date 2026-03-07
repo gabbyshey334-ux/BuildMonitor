@@ -565,17 +565,21 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
       console.error('[POST expenses] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
-    const { description, amount, category, vendor, expense_date } = req.body;
-    const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    const amountNum = parseFloat(String(amount ?? 0));
-    if (isNaN(amountNum) || amountNum < 0) {
+    const body = req.body || {};
+    const { description, category, vendor, expense_date } = body;
+    const rawAmount = body.amount ?? body.Amount ?? 0;
+    const amount = parseFloat(
+      String(rawAmount).replace(/,/g, '').replace(/[^0-9.]/g, '')
+    );
+    if (isNaN(amount) || amount <= 0) {
       return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
+    const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
     const insertPayload = {
       project_id: projectId,
       user_id: userId,
       description: (description && String(description).trim()) ? String(description).trim() : 'Expense',
-      amount: amountNum,
+      amount,
       expense_date: today,
       currency: 'UGX',
       source: 'dashboard',
@@ -598,15 +602,15 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
     }
     return res.status(201).json({ success: true, expense: expense || {} });
   } catch (err) {
-    console.error('[POST expenses] Unexpected error:', err?.message || err, err?.stack || '');
+    console.error('[POST expenses] Unexpected error:', err?.message, err?.stack || '');
     return res.status(500).json({
       success: false,
-      error: err?.message || 'Failed to log expense',
+      error: err?.message || 'Server error',
     });
   }
 });
 
-// POST /api/projects/:projectId/issues — Report issue (tasks table)
+// POST /api/projects/:projectId/issues — Report issue (issues table)
 app.post('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
@@ -621,23 +625,54 @@ app.post('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
     if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
-    const { title, description, priority, status, reported_date } = req.body;
-    const dueDate = (reported_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    const { error } = await supabase.from('tasks').insert({
+    const { title, description, severity, type, status, priority } = req.body || {};
+    const { error } = await supabase.from('issues').insert({
       project_id: projectId,
-      user_id: userId,
-      title: title || 'Untitled issue',
-      description: description || '',
-      priority: priority || 'medium',
+      title: title && String(title).trim() ? String(title).trim() : 'Untitled issue',
+      description: description != null ? String(description) : '',
+      severity: severity || priority || 'medium',
+      type: type || 'general',
       status: status || 'open',
-      due_date: dueDate,
-      created_at: new Date().toISOString(),
     });
-    if (error) throw error;
+    if (error) {
+      console.error('[POST issues]', error.message, error);
+      return res.status(500).json({ success: false, error: error.message || 'Failed to report issue' });
+    }
     return res.status(201).json({ success: true });
   } catch (err) {
-    console.error('[POST issues]', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to report issue' });
+    console.error('[POST issues] Unexpected error:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to report issue' });
+  }
+});
+
+// GET /api/projects/:projectId/tasks — List tasks for project (Vercel)
+app.get('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, tasks: [], error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, tasks: [], error: 'Project not found' });
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[GET tasks]', error.message);
+      return res.status(500).json({ success: false, tasks: [], error: error.message });
+    }
+    return res.json({ success: true, tasks: data ?? [] });
+  } catch (err) {
+    console.error('[GET tasks] Unexpected error:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, tasks: [], error: err?.message || 'Server error' });
   }
 });
 
@@ -678,7 +713,7 @@ app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => 
   }
 });
 
-// POST /api/projects/:projectId/daily/photo — Add photo to today's daily log (upload to Storage, save URL)
+// POST /api/projects/:projectId/daily/photo — Register photo URL in daily log (client uploads to Storage first)
 app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
@@ -700,39 +735,26 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
       console.error('[POST daily/photo] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
-    const { photoUrl, photo } = req.body;
-    const base64Input = photo || photoUrl;
-    if (!base64Input || typeof base64Input !== 'string') {
-      return res.status(400).json({ success: false, error: 'photo or photoUrl is required' });
-    }
-
-    let publicUrl = base64Input;
-    const isDataUrl = /^data:image\/\w+;base64,/.test(base64Input);
-    if (isDataUrl) {
-      const base64Data = base64Input.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      const ext = (base64Input.match(/^data:image\/(\w+);/) || [])[1] || 'jpg';
-      const filename = `${projectId}/${Date.now()}.${ext}`;
-      const contentType = `image/${ext}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('site-photos')
-        .upload(filename, buffer, { contentType, upsert: false });
-      if (uploadError) {
-        console.error('[POST daily/photo] Storage upload error:', uploadError.message, uploadError);
-        return res.status(500).json({
-          success: false,
-          error: uploadError.message || 'Upload failed. Ensure bucket "site-photos" exists and is public.',
-        });
-      }
-      const { data: urlData } = supabase.storage.from('site-photos').getPublicUrl(filename);
-      publicUrl = urlData?.publicUrl || filename;
+    const { photoUrl } = req.body || {};
+    if (!photoUrl || typeof photoUrl !== 'string' || !photoUrl.startsWith('http')) {
+      return res.status(400).json({ success: false, error: 'Valid photoUrl required' });
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const { data: existing } = await supabase.from('daily_logs').select('id, photo_urls').eq('project_id', projectId).eq('log_date', today).maybeSingle();
-    const newUrls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, publicUrl] : (existing?.photo_urls ? [existing.photo_urls, publicUrl] : [publicUrl]);
+    const { data: existing } = await supabase
+      .from('daily_logs')
+      .select('id, photo_urls')
+      .eq('project_id', projectId)
+      .eq('log_date', today)
+      .maybeSingle();
+
+    const urls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, photoUrl] : [photoUrl];
+
     if (existing) {
-      const { error: updateErr } = await supabase.from('daily_logs').update({ photo_urls: newUrls }).eq('id', existing.id);
+      const { error: updateErr } = await supabase
+        .from('daily_logs')
+        .update({ photo_urls: urls })
+        .eq('id', existing.id);
       if (updateErr) {
         console.error('[POST daily/photo] daily_logs update error:', updateErr.message);
         return res.status(500).json({ success: false, error: updateErr.message || 'Failed to save photo URL' });
@@ -743,7 +765,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
         log_date: today,
         worker_count: 0,
         notes: '',
-        photo_urls: [publicUrl],
+        photo_urls: urls,
         created_at: new Date().toISOString(),
       });
       if (insertErr) {
@@ -751,7 +773,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
         return res.status(500).json({ success: false, error: insertErr.message || 'Failed to save photo' });
       }
     }
-    return res.status(201).json({ success: true, url: publicUrl });
+    return res.status(201).json({ success: true, url: photoUrl });
   } catch (err) {
     console.error('[POST daily/photo] Unexpected error:', err?.message || err, err?.stack || '');
     return res.status(500).json({ success: false, error: err?.message || 'Failed to save photo' });

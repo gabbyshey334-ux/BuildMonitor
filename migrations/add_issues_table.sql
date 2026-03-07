@@ -1,5 +1,4 @@
--- Run this in Supabase SQL Editor to create the issues table for Report Issue and Active Issues count.
--- JengaTrack: POST /api/projects/:projectId/issues and GET summary issues count.
+-- Run in Supabase SQL Editor. Creates issues table for Report Issue feature.
 
 CREATE TABLE IF NOT EXISTS issues (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -12,6 +11,5 @@ CREATE TABLE IF NOT EXISTS issues (
   created_at timestamptz DEFAULT now(),
   resolved_at timestamptz
 );
-
 CREATE INDEX IF NOT EXISTS issues_project_id_idx ON issues(project_id);
 CREATE INDEX IF NOT EXISTS issues_status_idx ON issues(status);

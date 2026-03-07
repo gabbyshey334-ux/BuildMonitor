@@ -9,6 +9,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
 import { getToken } from '@/lib/authToken';
 import { useToast } from '@/hooks/use-toast';
+import { uploadPhotoDirectly } from '@/lib/uploadPhoto';
 
 import { ProjectHealthSummary } from './ProjectHealthSummary';
 import { ProgressScheduleSection } from './ProgressScheduleSection';
@@ -90,6 +91,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [showDailyModal, setShowDailyModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [expenseForm, setExpenseForm] = useState({ description: '', amount: '' });
   const [issueForm, setIssueForm] = useState({ title: '', description: '', priority: 'medium' });
   const [dailyForm, setDailyForm] = useState({ workerCount: '', notes: '' });
@@ -181,25 +183,26 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     input.capture = 'environment';
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
-        try {
-          const res = await fetch(`/api/projects/${effectiveProjectId}/daily/photo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-            credentials: 'include',
-            body: JSON.stringify({ photoUrl: dataUrl }),
-          });
-          if (!res.ok) throw new Error('Upload failed');
-          queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
-          toast({ title: 'Photo saved to daily log! 📸' });
-        } catch {
-          toast({ title: 'Upload failed', variant: 'destructive' });
-        }
-      };
-      reader.readAsDataURL(file);
+      if (!file || !effectiveProjectId) return;
+      try {
+        setUploading(true);
+        const photoUrl = await uploadPhotoDirectly(file, effectiveProjectId);
+        const res = await fetch(`/api/projects/${effectiveProjectId}/daily/photo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          credentials: 'include',
+          body: JSON.stringify({ photoUrl }),
+        });
+        if (!res.ok) throw new Error('Failed to save photo record');
+        queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+        queryClient.invalidateQueries({ queryKey: ['project-daily', effectiveProjectId] });
+        toast({ title: 'Photo uploaded successfully!' });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        toast({ title: 'Upload failed', description: message, variant: 'destructive' });
+      } finally {
+        setUploading(false);
+      }
     };
     input.click();
   };
@@ -383,9 +386,10 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                 className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
                 variant="outline"
                 onClick={handleUploadPhoto}
+                disabled={uploading}
               >
                 <Upload className="w-4 h-4 mr-2" />
-                Upload Photo
+                {uploading ? 'Uploading…' : 'Upload Photo'}
               </Button>
               <Button
                 className="w-full justify-start dark:text-white dark:border-white/20 dark:hover:bg-white/10 text-slate-800 border-slate-200 hover:bg-slate-100"
