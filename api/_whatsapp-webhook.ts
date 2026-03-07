@@ -1224,6 +1224,10 @@ What you can do:
 - Analyse spending patterns and vendor history
 - Understand voice notes and receipt photos
 
+If the user asks what you can do, explain your capabilities naturally in 3-4 lines: Log expenses, materials, workers, and progress via chat; answer questions about their project budget and spending; scan receipts and transcribe voice notes; understand English, Luganda, and Swahili.
+
+If the user asks a general construction question (how to mix concrete, best practices etc), answer it helpfully and briefly from your construction expertise. You are a knowledgeable site supervisor, not just a data entry bot.
+
 If user wants to log something, confirm naturally and tell them you're saving it. If they ask a question, answer it directly.`;
 
   let reply: string | null = null;
@@ -1611,11 +1615,6 @@ async function handleMaterialQuery(from: string, projectId: string): Promise<voi
 // ─── SMART_QUERY: free-form questions over historical data ─────────────────────
 
 async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
-  await sendMessage(from, await ai(
-    'Tell the user you are looking up their data. One short line.',
-    'Looking up your data…'
-  ));
-
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
   const fromDate = twoYearsAgo.toISOString().split('T')[0];
@@ -1684,7 +1683,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     })),
   };
 
-  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using ONLY the provided project data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
+  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using the provided project data where relevant. If the question is about general construction knowledge, techniques, materials, or best practices, answer from your own expertise as a construction professional. Only say you cannot find information if the question requires specific project data (like exact amounts or dates) that is not in the provided data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
@@ -2217,6 +2216,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (pendingData.vendor && pendingData.amount) {
           await upsertVendor(pendingData.project_id, pendingData.vendor, pendingData.amount);
         }
+
+        // Auto-update materials inventory if this looks like a material
+        const MATERIAL_KEYWORDS = [
+          'cement', 'sand', 'gravel', 'aggregate', 'stone', 'bricks',
+          'blocks', 'iron', 'rebar', 'steel', 'rods', 'timber', 'wood',
+          'planks', 'nails', 'screws', 'bolts', 'paint', 'tiles',
+          'roofing', 'sheets', 'pipes', 'wire', 'cable', 'glass',
+          'plaster', 'gypsum', 'hardcore', 'ballast', 'murram', 'soil',
+          'concrete', 'bitumen', 'waterproofing', 'insulation', 'foam',
+        ];
+        const descLower = (pendingData.description || '').toLowerCase();
+        const isMaterial = MATERIAL_KEYWORDS.some((k) => descLower.includes(k));
+        const materialName = (pendingData.item || pendingData.description || '').trim();
+
+        if (isMaterial && materialName && pendingData.quantity && pendingData.quantity > 0) {
+          try {
+            const { data: existing } = await supabase
+              .from('materials_inventory')
+              .select('*')
+              .eq('project_id', pendingData.project_id)
+              .ilike('material_name', `%${materialName}%`)
+              .maybeSingle();
+
+            if (existing) {
+              const newQty = parseFloat(String(existing.quantity || 0)) + pendingData.quantity;
+              await supabase
+                .from('materials_inventory')
+                .update({
+                  quantity: newQty,
+                  unit: pendingData.unit || existing.unit,
+                  last_updated: new Date().toISOString(),
+                })
+                .eq('id', existing.id);
+              console.log(`[Materials] Updated ${existing.material_name}: +${pendingData.quantity} → ${newQty}`);
+            } else {
+              await supabase
+                .from('materials_inventory')
+                .insert({
+                  project_id: pendingData.project_id,
+                  material_name: materialName,
+                  quantity: pendingData.quantity,
+                  unit: pendingData.unit || 'units',
+                  last_updated: new Date().toISOString(),
+                });
+              console.log(`[Materials] Created ${materialName}: ${pendingData.quantity} ${pendingData.unit || 'units'}`);
+            }
+          } catch (matErr: any) {
+            console.error('[Materials] Inventory update failed:', matErr?.message);
+          }
+        } else if (isMaterial && materialName && !pendingData.quantity) {
+          try {
+            const { data: existing } = await supabase
+              .from('materials_inventory')
+              .select('*')
+              .eq('project_id', pendingData.project_id)
+              .ilike('material_name', `%${materialName}%`)
+              .maybeSingle();
+
+            if (!existing) {
+              await supabase
+                .from('materials_inventory')
+                .insert({
+                  project_id: pendingData.project_id,
+                  material_name: materialName,
+                  quantity: 1,
+                  unit: 'units',
+                  last_updated: new Date().toISOString(),
+                });
+              console.log(`[Materials] Created ${materialName} with quantity 1 (no quantity parsed)`);
+            }
+          } catch (matErr: any) {
+            console.error('[Materials] Inventory insert failed:', matErr?.message);
+          }
+        }
+
         await updateExpenseState(userId, null, {});
         const msg = await ai(
           `Tell the user their expense was saved successfully: ${pendingData.description} — ${fmt(pendingData.amount!)} UGX. Tell them their dashboard and budget have been updated. Keep it short and friendly. Tell them to check Budgets & Costs page.`,
@@ -2416,12 +2490,15 @@ async function routeIntent(
       await handleListProjects(from, userId);
       break;
     case 'GREETING':
-    default:
-      if (rawMessage.trim().length > 15 && project) {
+    default: {
+      const isDataQuery = /how much|how many|what did|when did|which vendor|show me|list|total|spent|remaining|balance|last week|last month|compare|breakdown|history|analyze|analyse/i.test(rawMessage);
+      const isCapabilityQuestion = /what can|help me|how do|how does|what do you|can you|what is|what are|how to|how should|best way|explain|tell me about/i.test(rawMessage);
+      if (isDataQuery && !isCapabilityQuestion && project) {
         await handleSmartQuery(from, project.id, rawMessage);
       } else {
         await handleGreeting(from, profile, project, projects, rawMessage);
       }
       break;
+    }
   }
 }
