@@ -6,10 +6,11 @@ import { Plus, Upload, AlertCircle, FileText, X, RefreshCw } from 'lucide-react'
 import { useProjectSummary, useProjectTasks, useProjectExpenses, DASHBOARD_SUMMARY_QUERY_KEY } from '@/hooks/useDashboard';
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjects } from '@/hooks/useProjects';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { getToken } from '@/lib/authToken';
 import { useToast } from '@/hooks/use-toast';
 import { uploadPhotoDirectly } from '@/lib/uploadPhoto';
+import { apiRequest } from '@/lib/queryClient';
 
 import { ProjectHealthSummary } from './ProjectHealthSummary';
 import { ProgressScheduleSection } from './ProgressScheduleSection';
@@ -64,28 +65,46 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
   const { data: tasksData } = useProjectTasks(effectiveProjectId);
   const { data: expensesData } = useProjectExpenses(effectiveProjectId);
+  const { data: issuesData } = useQuery({
+    queryKey: ['issues', effectiveProjectId],
+    queryFn: async () => {
+      const res = await apiRequest('GET', `/api/projects/${effectiveProjectId}/issues`);
+      return res.json();
+    },
+    enabled: !!effectiveProjectId,
+    refetchInterval: 30000,
+  });
   const tasks = Array.isArray(tasksData) ? tasksData : (tasksData as any)?.tasks ?? [];
   const expenses = (expensesData as any)?.recent ?? (expensesData as any)?.expenses ?? [];
+  const issuesList = issuesData?.issues ?? [];
 
   const budgetHealth = useMemo(() => {
-    const budget = parseFloat(String(currentProject?.budget ?? (summaryData as any)?.budget?.total ?? 0));
-    const spent = expenses?.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0) || 0;
+    const budget = parseFloat(String((summaryData as any)?.budget?.total ?? currentProject?.budget ?? 0));
+    const spent = expenses?.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0) ?? (summaryData as any)?.budget?.spent ?? 0;
     if (!budget) return { pct: 0, remaining: 0 };
     return {
-      pct: Math.min(100, Math.round((spent / budget) * 100)),
+      pct: parseFloat(((spent / budget) * 100).toFixed(2)),
       remaining: Math.max(0, budget - spent),
     };
   }, [currentProject, summaryData, expenses]);
 
   const progressPct = useMemo(() => {
-    if (tasks && tasks.length > 0) {
-      const completed = tasks.filter((t: any) => t.status === 'completed').length;
-      return Math.round((completed / tasks.length) * 100);
-    }
-    const dailyLogs = (summaryData as any)?.activity?.recentUpdates ?? [];
-    if (dailyLogs.length > 0) return Math.min(95, dailyLogs.length * 2);
+    const completedTasks = tasks?.filter((t: any) => t.status === 'completed').length ?? 0;
+    const totalTasks = tasks?.length ?? 0;
+    if (totalTasks > 0) return Math.round((completedTasks / totalTasks) * 100);
+    if (expenses?.length > 0) return Math.min(Math.round((expenses.length / 20) * 100), 95);
     return 0;
-  }, [tasks, summaryData]);
+  }, [tasks, expenses]);
+
+  const scheduleStatusFromTasks = useMemo((): 'On Track' | 'Slight Delay' | 'Behind Schedule' => {
+    if (!tasks || tasks.length === 0) return 'On Track';
+    const overdue = tasks.filter((t: any) =>
+      t.status !== 'completed' && t.due_date && new Date(t.due_date) < new Date()
+    ).length;
+    if (overdue === 0) return 'On Track';
+    if (overdue <= 2) return 'Slight Delay';
+    return 'Behind Schedule';
+  }, [tasks]);
 
   const [lastSyncLabel, setLastSyncLabel] = useState<string>('');
   const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -146,7 +165,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       if (!res.ok) throw new Error('Failed to report issue');
       setShowIssueModal(false);
       setIssueForm({ title: '', description: '', priority: 'medium' });
-      queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+      queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['issues', effectiveProjectId] });
       toast({ title: 'Issue reported! 🚩' });
     } catch {
       toast({ title: 'Failed to report issue', variant: 'destructive' });
@@ -187,14 +207,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       try {
         setUploading(true);
         const photoUrl = await uploadPhotoDirectly(file, effectiveProjectId);
-        const res = await fetch(`/api/projects/${effectiveProjectId}/daily/photo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          credentials: 'include',
-          body: JSON.stringify({ photoUrl }),
-        });
-        if (!res.ok) throw new Error('Failed to save photo record');
-        queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
+        await apiRequest('POST', `/api/projects/${effectiveProjectId}/daily/photo`, { photoUrl });
+        queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId] });
         queryClient.invalidateQueries({ queryKey: ['project-daily', effectiveProjectId] });
         toast({ title: 'Photo uploaded successfully!' });
       } catch (err: unknown) {
@@ -271,24 +285,70 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   }
 
   const summary = summaryData!;
+  const totalTasks = tasks?.length ?? 0;
   const summaryHealth = {
     overallProgress: progressPct ?? summary.progress?.overallPercentage ?? summary.summaryHealth?.overallProgress ?? 0,
+    progressDescription: totalTasks === 0 && (expenses?.length ?? 0) > 0
+      ? `Estimated from ${expenses?.length ?? 0} logged expenses`
+      : totalTasks === 0 && (expenses?.length ?? 0) === 0
+        ? 'Just getting started!'
+        : undefined,
     onTimeStatus: {
-      isDelayed: summary.schedule?.status === 'Delayed',
+      isDelayed: summary.schedule?.status === 'Delayed' || scheduleStatusFromTasks !== 'On Track',
       daysDelayed: summary.schedule?.daysBehind ?? summary.summaryHealth?.onTimeStatus?.daysDelayed ?? 0,
-      scheduleStatus: summary.schedule?.status,
+      scheduleStatus: scheduleStatusFromTasks as 'On Track' | 'At Risk' | 'Delayed' | 'Slight Delay' | 'Behind Schedule',
       daysAhead: summary.schedule?.daysAhead,
     },
     budgetHealth: {
-      percent: (budgetHealth.pct || summary.budget?.percentage) ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
+      percent: budgetHealth.pct ?? summary.budget?.percentage ?? summary.summaryHealth?.budgetHealth?.percent ?? 0,
       remaining: budgetHealth.remaining ?? summary.budget?.remaining ?? summary.summaryHealth?.budgetHealth?.remaining ?? 0,
     },
     activeIssues: {
       total: summary.issues?.total ?? summary.summaryHealth?.activeIssues?.total ?? 0,
       critical: summary.issues?.critical ?? summary.summaryHealth?.activeIssues?.critical ?? 0,
     },
-    schedule: summary.schedule,
+    schedule: { ...summary.schedule, status: scheduleStatusFromTasks as 'On Track' | 'At Risk' | 'Delayed' | 'Slight Delay' | 'Behind Schedule' },
+    onActiveIssuesClick: () => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' }),
   };
+
+  const issuesSectionData = useMemo(() => {
+    const list = issuesList as Array<{ id: string; title: string; description: string | null; severity?: string; type?: string; status: string; created_at: string; resolved_at?: string | null }>;
+    const mapOne = (i: (typeof list)[0]) => ({
+      id: i.id,
+      title: i.title,
+      description: i.description ?? '',
+      status: (i.status === 'resolved' || i.resolved_at ? 'resolved' : i.status === 'in_progress' ? 'inProgress' : 'todo') as 'todo' | 'inProgress' | 'resolved',
+      priority: (i.severity === 'critical' ? 'critical' : i.severity === 'high' ? 'high' : i.severity === 'low' ? 'low' : 'medium') as 'low' | 'medium' | 'high' | 'critical',
+      reportedBy: 'Dashboard',
+      reportedDate: new Date(i.created_at),
+      type: i.type ?? 'general',
+    });
+    const todo = list.filter((i) => i.status !== 'resolved' && !i.resolved_at && i.status !== 'in_progress').map(mapOne);
+    const inProgress = list.filter((i) => i.status === 'in_progress').map(mapOne);
+    const resolved = list.filter((i) => i.status === 'resolved' || i.resolved_at).map(mapOne);
+    const criticalCount = list.filter((i) => i.severity === 'critical').length;
+    const highCount = list.filter((i) => i.severity === 'high').length;
+    const openCount = list.filter((i) => i.status !== 'resolved' && !i.resolved_at).length;
+    const weekAgo = Date.now() - 7 * 86400000;
+    const resolvedThisWeek = list.filter((i) => (i.status === 'resolved' || i.resolved_at) && new Date(i.resolved_at || i.created_at).getTime() > weekAgo).length;
+    const typeCounts: Record<string, number> = {};
+    list.forEach((i) => { typeCounts[i.type ?? 'general'] = (typeCounts[i.type ?? 'general'] || 0) + 1; });
+    const types = Object.entries(typeCounts).map(([type, count]) => ({
+      type,
+      count,
+      percentage: list.length > 0 ? Math.round((count / list.length) * 100) : 0,
+    }));
+    return {
+      todo,
+      inProgress,
+      resolved,
+      criticalIssues: criticalCount,
+      highIssues: highCount,
+      openIssues: openCount,
+      resolvedThisWeek,
+      types,
+    };
+  }, [issuesList]);
 
   // Map API progress.phases (status "not-started") to UI "pending" for ProgressScheduleSection
   const progressSectionData = summary.progressSection
@@ -339,6 +399,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                 refetch();
                 queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY] });
                 queryClient.invalidateQueries({ queryKey: ['tasks'] });
+                queryClient.invalidateQueries({ queryKey: ['issues', effectiveProjectId] });
                 queryClient.invalidateQueries({ queryKey: ['project-expenses'] });
                 queryClient.invalidateQueries({ queryKey: ['project-daily'] });
                 queryClient.invalidateQueries({ queryKey: ['project-materials'] });
@@ -363,7 +424,9 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           <ProgressScheduleSection data={progressSectionData} />
           <BudgetCostsSection data={summary.budgetSection} />
           <MaterialsInventorySection data={summary.inventorySection} />
-          <IssuesRisksSection data={summary.issuesSection} />
+          <div id="issues-section">
+            <IssuesRisksSection data={issuesSectionData} />
+          </div>
           <SiteReportsMediaSection data={summary.mediaSection} />
         </div>
 

@@ -26,8 +26,8 @@ const app = express();
 // MIDDLEWARE
 // ============================================================================
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // CORS - allow credentials for same-origin; JWT sent via Authorization header
 app.use((req, res, next) => {
@@ -181,6 +181,24 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
             .eq('project_id', projectId);
           if (materialsError) console.error('[Summary] Supabase materials_inventory error:', materialsError);
           materialsRows = materialsData || [];
+        }
+
+        let openIssuesCount = 0;
+        let criticalIssuesCount = 0;
+        if (projectRow) {
+          const { count: openCount } = await supabase
+            .from('issues')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .eq('status', 'open');
+          openIssuesCount = openCount ?? 0;
+          const { count: criticalCount } = await supabase
+            .from('issues')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .eq('status', 'open')
+            .in('severity', ['high', 'critical']);
+          criticalIssuesCount = criticalCount ?? 0;
         }
 
         console.log('[Summary Debug]', {
@@ -339,7 +357,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           daysAhead: 0,
           daysBehind: 0,
         },
-        issues: { total: 0, critical: 0 },
+        issues: { total: openIssuesCount ?? 0, critical: criticalIssuesCount ?? 0 },
         insights: {
           topDelayCause: null,
           mostUsedMaterial: null,
@@ -582,7 +600,7 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
       amount,
       expense_date: today,
       currency: 'UGX',
-      source: 'dashboard',
+      source: body.source || 'dashboard',
     };
     if (category !== undefined) insertPayload.category = category || 'Other';
     if (vendor !== undefined) insertPayload.vendor = vendor && String(vendor).trim() ? String(vendor).trim() : null;
@@ -673,6 +691,37 @@ app.get('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[GET tasks] Unexpected error:', err?.message, err?.stack);
     return res.status(500).json({ success: false, tasks: [], error: err?.message || 'Server error' });
+  }
+});
+
+// GET /api/projects/:projectId/issues — List issues for Issues & Risks section
+app.get('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, issues: [], error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, issues: [], error: 'Project not found' });
+    const { data, error } = await supabase
+      .from('issues')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('[GET issues]', error.message);
+      return res.status(500).json({ success: false, issues: [], error: error.message });
+    }
+    return res.json({ success: true, issues: data ?? [] });
+  } catch (err) {
+    console.error('[GET issues] Unexpected error:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, issues: [], error: err?.message || 'Server error' });
   }
 });
 
