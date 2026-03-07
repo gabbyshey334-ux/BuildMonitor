@@ -5,7 +5,7 @@ import { Link } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
-import { useProjectExpenses, useProjectMaterials } from "@/hooks/useDashboard";
+import { useProjectExpenses, useProjectMaterials, useProjectTasks } from "@/hooks/useDashboard";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,6 +71,19 @@ function yAxisTickFormatter(v: unknown): string {
   return `UGX ${n}`;
 }
 
+function getWeekNumber(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+    )
+  );
+}
+
 function timeAgo(date: Date): string {
   const ms = Date.now() - date.getTime();
   const min = Math.floor(ms / 60000);
@@ -89,14 +102,14 @@ function BudgetSkeleton() {
     <div className="space-y-6 animate-pulse">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-24 rounded-xl bg-[#1a1d27] border border-[#2a2d38]" />
+          <div key={i} className="h-24 rounded-xl bg-card border border-border" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-80 rounded-xl bg-[#1a1d27] border border-[#2a2d38]" />
-        <div className="h-80 rounded-xl bg-[#1a1d27] border border-[#2a2d38]" />
+        <div className="lg:col-span-2 h-80 rounded-xl bg-card border border-border" />
+        <div className="h-80 rounded-xl bg-card border border-border" />
       </div>
-      <div className="h-80 rounded-xl bg-[#1a1d27] border border-[#2a2d38]" />
+      <div className="h-80 rounded-xl bg-card border border-border" />
     </div>
   );
 }
@@ -120,11 +133,8 @@ function StatCard({
   viewAllHref?: string;
 }) {
   return (
-    <div
-      className="rounded-xl p-4 flex flex-col justify-between min-h-[88px] border border-[#2a2d38]"
-      style={{ backgroundColor: COLORS.cardBg }}
-    >
-      <p className="text-sm text-[#94a3b8]">{label}</p>
+    <div className="rounded-xl p-4 flex flex-col justify-between min-h-[88px] border border-border bg-card">
+      <p className="text-sm text-muted-foreground">{label}</p>
       <div className="flex items-end justify-between mt-2 gap-2">
         <div className="flex items-center gap-2">
           {dotColor && (
@@ -135,17 +145,17 @@ function StatCard({
           )}
           <div>
             <p
-              className={`text-lg font-bold leading-tight ${valueClassName ?? "text-white"}`}
+              className={`text-lg font-bold leading-tight ${valueClassName ?? "text-foreground"}`}
             >
               {value}
             </p>
-            {sub && <p className="text-xs text-[#64748b] mt-0.5">{sub}</p>}
+            {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
           </div>
         </div>
         {showViewAll && viewAllHref && (
           <Link
             href={viewAllHref}
-            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#2a2d38] text-[#00bcd4] hover:bg-[#353945] transition-colors shrink-0"
+            className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted text-[#00bcd4] hover:bg-muted/80 transition-colors shrink-0"
           >
             View All <ChevronRight className="w-4 h-4" />
           </Link>
@@ -160,17 +170,25 @@ function BudgetComparisonSection({
   categoryTotals,
   totalSpent,
   budget,
+  tasks,
 }: {
   categoryTotals: Array<{ name: string; amount: number }>;
   totalSpent: number;
   budget: number;
+  tasks: Array<{ status?: string }>;
 }) {
+  const progressPct = useMemo(() => {
+    if (!tasks || tasks.length === 0) return 0;
+    const completed = tasks.filter((t) => t.status === "completed").length;
+    return Math.round((completed / tasks.length) * 100);
+  }, [tasks]);
+
   const barData = useMemo(() => {
     const sorted = [...categoryTotals].sort((a, b) => b.amount - a.amount);
     return sorted.map((c) => ({
       name: c.name,
       amount: parseFloat(String(c.amount)),
-      pctOfSpend: budget > 0 ? pct(c.amount, totalSpent) : 0,
+      pctOfSpend: totalSpent > 0 ? pct(c.amount, totalSpent) : 0,
       pctOfBudget: budget > 0 ? pct(c.amount, budget) : 0,
     }));
   }, [categoryTotals, totalSpent, budget]);
@@ -181,21 +199,15 @@ function BudgetComparisonSection({
       : 0;
 
   return (
-    <div
-      className="rounded-xl p-6 border border-[#2a2d38]"
-      style={{ backgroundColor: COLORS.cardBg }}
-    >
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Budget Comparison</h3>
-        <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#2a2d38] text-[#00bcd4] hover:bg-[#353945] transition-colors">
-          View All <ChevronRight className="w-4 h-4" />
-        </button>
+    <div className="rounded-xl p-6 border border-border bg-card">
+      <div className="mb-4">
+        <h3 className="text-lg font-semibold text-foreground">Budget Comparison</h3>
       </div>
 
       <div className="mb-4">
-        <p className="text-sm text-[#94a3b8] mb-2">Progress vs. Expenditure</p>
+        <p className="text-sm text-muted-foreground mb-2">Progress vs. Expenditure</p>
         <select
-          className="text-sm bg-[#0f1117] border border-[#2a2d38] rounded-lg px-3 py-2 text-white"
+          className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
           defaultValue="desc"
         >
           <option value="desc">Budget (Descending)</option>
@@ -203,31 +215,27 @@ function BudgetComparisonSection({
         </select>
       </div>
 
-      {barData.length > 0 ? (
+      {barData.length > 0 || tasks.length > 0 ? (
         <div className="space-y-6">
           <div>
-            <p className="text-xs text-[#64748b] mb-2">Project Progress</p>
-            <div className="h-6 rounded-full overflow-hidden bg-[#0f1117] flex">
-              {barData.map((d, i) => (
-                <div
-                  key={d.name}
-                  className="h-full transition-all"
-                  style={{
-                    width: `${d.pctOfSpend}%`,
-                    backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
-                  }}
-                  title={`${d.name}: ${d.pctOfSpend.toFixed(1)}%`}
-                />
-              ))}
+            <p className="text-xs text-muted-foreground mb-2">Project Progress</p>
+            <div className="h-6 rounded-full overflow-hidden bg-muted flex">
+              <div
+                className="h-full transition-all rounded-full"
+                style={{
+                  width: `${progressPct}%`,
+                  backgroundColor: COLORS.teal,
+                }}
+              />
             </div>
-            <p className="text-xs text-right mt-1 text-[#94a3b8]">
-              {pct(totalSpent, budget).toFixed(0)}%
+            <p className="text-xs text-right mt-1 text-muted-foreground">
+              {progressPct}%{tasks.length === 0 ? " — no tasks logged yet" : ""}
             </p>
           </div>
 
           <div>
-            <p className="text-xs text-[#64748b] mb-2">Budget Used</p>
-            <div className="h-6 rounded-full overflow-hidden bg-[#0f1117] flex">
+            <p className="text-xs text-muted-foreground mb-2">Budget Used</p>
+            <div className="h-6 rounded-full overflow-hidden bg-muted flex">
               {barData.map((d, i) => (
                 <div
                   key={d.name}
@@ -240,7 +248,7 @@ function BudgetComparisonSection({
                 />
               ))}
             </div>
-            <p className="text-xs text-right mt-1 text-[#94a3b8]">
+            <p className="text-xs text-right mt-1 text-muted-foreground">
               {pct(totalSpent, budget).toFixed(0)}%
             </p>
           </div>
@@ -254,13 +262,13 @@ function BudgetComparisonSection({
                     backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length],
                   }}
                 />
-                <span className="text-xs text-[#94a3b8]">{d.name}</span>
+                <span className="text-xs text-muted-foreground">{d.name}</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <p className="text-sm text-[#64748b] py-6 text-center">
+        <p className="text-sm text-muted-foreground py-6 text-center">
           No expense data yet to compare.
         </p>
       )}
@@ -292,29 +300,26 @@ function AlertsSection({
   ).length;
 
   return (
-    <div
-      className="rounded-xl p-6 border border-[#2a2d38]"
-      style={{ backgroundColor: COLORS.cardBg }}
-    >
+    <div className="rounded-xl p-6 border border-border bg-card">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Alerts</h3>
-        <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#2a2d38] text-[#00bcd4] hover:bg-[#353945] transition-colors">
+        <h3 className="text-lg font-semibold text-foreground">Alerts</h3>
+        <button className="text-xs flex items-center gap-1 px-3 py-1.5 rounded-md bg-muted text-[#00bcd4] hover:bg-muted/80 transition-colors">
           View All <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
       <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-[#94a3b8]">
+        <span className="text-sm text-muted-foreground">
           Over Budget Items: {overBudgetCount}
         </span>
-        <button className="text-[#64748b] hover:text-white transition-colors">
+        <button className="text-muted-foreground hover:text-foreground transition-colors">
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>
 
       <div>
         {alerts.length === 0 ? (
-          <p className="text-sm text-[#64748b] py-4 text-center">
+          <p className="text-sm text-muted-foreground py-4 text-center">
             No alerts at this time.
           </p>
         ) : (
@@ -343,15 +348,15 @@ function AlertRow({
   timestamp?: string;
 }) {
   return (
-    <div className="flex items-start gap-3 py-3 border-b border-[#2a2d38] last:border-0">
+    <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
       <div className="mt-0.5 shrink-0">
         <Icon className="w-5 h-5" style={{ color: iconColor }} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white leading-relaxed">{title}</p>
+        <p className="text-sm font-medium text-foreground leading-relaxed">{title}</p>
         <p className="text-xs mt-1" style={{ color: COLORS.teal }}>{subtitle}</p>
         {timestamp && (
-          <p className="text-xs mt-0.5 text-[#64748b]">{timestamp}</p>
+          <p className="text-xs mt-0.5 text-muted-foreground">{timestamp}</p>
         )}
       </div>
       <div
@@ -365,81 +370,74 @@ function AlertRow({
 // ─── Cost Trend Chart ─────────────────────────────────────────────────────────
 function CostTrendChart({
   data,
-  categories,
-  lastWeekSpent,
+  lastWeekSpend,
+  lastWeekKey,
 }: {
-  data: Array<{ week: string; [key: string]: string | number }>;
-  categories: string[];
-  lastWeekSpent: number;
+  data: Array<{ week: string; total: number }>;
+  lastWeekSpend: number;
+  lastWeekKey?: string;
 }) {
   if (data.length === 0) {
     return (
-      <div
-        className="h-64 flex items-center justify-center text-[#64748b] text-sm rounded-xl border border-[#2a2d38]"
-        style={{ backgroundColor: COLORS.cardBg }}
-      >
+      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm rounded-xl border border-border bg-card">
         No expense history yet to chart.
       </div>
     );
   }
 
   return (
-    <div className="h-64">
-      <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <defs>
-            {categories.map((_, i) => (
-              <linearGradient
-                key={i}
-                id={`gradLine${i}`}
-                x1="0"
-                y1="0"
-                x2="1"
-                y2="0"
-              >
-                <stop offset="0%" stopColor={PROJECT_COLORS[i % PROJECT_COLORS.length]} stopOpacity={1} />
-                <stop offset="100%" stopColor={PROJECT_COLORS[i % PROJECT_COLORS.length]} stopOpacity={0.3} />
-              </linearGradient>
-            ))}
-          </defs>
-          <XAxis
-            dataKey="week"
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: COLORS.textSecondary, fontSize: 11 }}
-          />
-          <YAxis
-            axisLine={false}
-            tickLine={false}
-            tick={{ fill: COLORS.textSecondary, fontSize: 11 }}
-            tickFormatter={yAxisTickFormatter}
-            width={55}
-          />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: COLORS.cardBg,
-              border: `1px solid ${COLORS.cardBorder}`,
-              borderRadius: "8px",
-            }}
-            labelStyle={{ color: COLORS.textSecondary }}
-            formatter={(value: number) => [formatUgx(value), "Spent"]}
-          />
-          {categories.map((cat, i) => (
+    <div>
+      <div className="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <XAxis
+              dataKey="week"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+            />
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              domain={[0, "auto"]}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+              tickFormatter={yAxisTickFormatter}
+              width={55}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px",
+              }}
+              labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+              formatter={(value: number) => [formatUgx(value), "Spent"]}
+            />
             <Line
-              key={cat}
               type="monotone"
-              dataKey={cat}
-              stroke={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+              dataKey="total"
+              stroke={COLORS.teal}
               strokeWidth={2}
               dot={{ r: 3 }}
               activeDot={{ r: 5 }}
             />
-          ))}
-        </ComposedChart>
-      </ResponsiveContainer>
-      <p className="text-xs mt-4 text-[#64748b]">
-        {formatUgx(lastWeekSpent)} spent last week
-      </p>
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div
+        className="flex items-center gap-2 mt-4 py-2.5 px-4 rounded-r-md"
+        style={{
+          background: "rgba(0, 188, 212, 0.08)",
+          borderLeft: "3px solid #00bcd4",
+        }}
+      >
+        <span style={{ color: "#00bcd4", fontSize: "18px", fontWeight: 700 }}>
+          {formatUgx(lastWeekSpend)}
+        </span>
+        <span className="text-muted-foreground text-[13px]">
+          spent last week ({lastWeekKey ?? "this week"})
+        </span>
+      </div>
     </div>
   );
 }
@@ -460,8 +458,14 @@ export default function BudgetPage() {
 
   const { data, isLoading, isError, error, refetch } = useProjectExpenses(projectId);
   const { data: materialsData } = useProjectMaterials(projectId);
+  const { data: tasksData } = useProjectTasks(projectId);
 
   const [costTrendPeriod, setCostTrendPeriod] = useState<"1w" | "1m" | "3m" | "all">("1m");
+
+  const tasks = useMemo(() => {
+    const t = (tasksData as any)?.tasks ?? tasksData;
+    return Array.isArray(t) ? t : [];
+  }, [tasksData]);
 
   const isProjectSwitch = projectId != null && data === undefined && !isError;
   const showLoading = isLoading || isProjectSwitch;
@@ -485,21 +489,23 @@ export default function BudgetPage() {
   );
 
   const budget = useMemo(() => {
-    const raw = currentProject?.totalBudget ?? (currentProject as any)?.budget;
-    if (!raw) return 0;
+    const raw = currentProject?.totalBudget ?? (currentProject as any)?.budget ?? 0;
     const parsed = parseFloat(String(raw).replace(/,/g, ""));
     return isNaN(parsed) ? 0 : parsed;
   }, [currentProject]);
 
   const totalSpent = useMemo(() => {
-    return expenses.reduce((sum, e) => {
-      const amt = parseFloat(String(e.amount ?? "0").replace(/,/g, ""));
-      return sum + (isNaN(amt) ? 0 : amt);
-    }, 0);
+    return (expenses ?? []).reduce(
+      (sum, e) => sum + parseFloat(String(e.amount ?? 0).replace(/,/g, "")),
+      0
+    );
   }, [expenses]);
 
   const balance = budget - totalSpent;
-  const percentSpent = pct(totalSpent, budget);
+  const percentSpent = useMemo(() => {
+    if (!budget || budget <= 0) return 0;
+    return parseFloat(((totalSpent / budget) * 100).toFixed(4));
+  }, [budget, totalSpent]);
   const overBudget = budget > 0 && totalSpent > budget;
 
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -560,59 +566,25 @@ export default function BudgetPage() {
   }, [expenses]);
 
   const costTrendData = useMemo(() => {
-    const weeks = costTrendPeriod === "1w" ? 4 : costTrendPeriod === "3m" ? 12 : costTrendPeriod === "all" ? 24 : 8;
-    const now = new Date();
-    const result: Array<{ week: string; amount?: number } & Record<string, number>> = [];
-    const cats = categoryTotals.length > 0 ? categoryTotals.map((c) => c.name) : ["Spent"];
+    const weeklyTotals: Record<string, number> = {};
+    (expenses ?? []).forEach((e) => {
+      const date = new Date((e as any).created_at || (e as any).expense_date || Date.now());
+      const year = date.getFullYear();
+      const week = getWeekNumber(date);
+      const monthShort = date.toLocaleString("default", { month: "short" });
+      const key = `W${week} ${monthShort}`;
+      const amt = parseFloat(String((e as any).amount ?? 0).replace(/,/g, "")) || 0;
+      weeklyTotals[key] = (weeklyTotals[key] || 0) + amt;
+    });
+    const weeklyData = Object.entries(weeklyTotals)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, total]) => ({ week, total }));
+    return weeklyData;
+  }, [expenses]);
 
-    for (let i = weeks - 1; i >= 0; i--) {
-      const weekStart = new Date(now);
-      weekStart.setDate(weekStart.getDate() - (i + 1) * 7);
-      weekStart.setHours(0, 0, 0, 0);
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekEnd.getDate() + 6);
-      weekEnd.setHours(23, 59, 59, 999);
-      const weekNum = Math.ceil(weekStart.getDate() / 7);
-      const monthShort = weekStart.toLocaleString("default", { month: "short" });
-      const label = `W${weekNum} ${monthShort}`;
-
-      const row: { week: string; amount?: number } & Record<string, number> = { week: label };
-      cats.forEach((cat) => {
-        row[cat] = 0;
-      });
-
-      expenses.forEach((e) => {
-        const d = new Date(e.expense_date || e.created_at);
-        const amt = parseFloat(String(e.amount ?? "0").replace(/,/g, "")) || 0;
-        if (d >= weekStart && d <= weekEnd) {
-          if (cats.length === 1 && cats[0] === "Spent") {
-            row.Spent = (row.Spent || 0) + amt;
-          } else {
-            const desc = String(e.description || "").toLowerCase();
-            let matched = false;
-            for (const [c, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-              if (keywords.some((kw) => desc.includes(kw))) {
-                row[c] = (row[c] || 0) + amt;
-                matched = true;
-                break;
-              }
-            }
-            if (!matched) row["Other"] = (row["Other"] || 0) + amt;
-          }
-        }
-      });
-      result.push(row);
-    }
-    return result;
-  }, [expenses, categoryTotals, costTrendPeriod]);
-
-  const lastWeekSpent = useMemo(() => {
-    if (costTrendData.length < 2) return 0;
-    const last = costTrendData[costTrendData.length - 1];
-    return Object.entries(last)
-      .filter(([k]) => k !== "week")
-      .reduce((s, [, v]) => s + (Number(v) || 0), 0);
-  }, [costTrendData]);
+  const lastWeekEntry = costTrendData[costTrendData.length - 1];
+  const lastWeekSpent = lastWeekEntry?.total ?? 0;
+  const lastWeekKey = lastWeekEntry?.week ?? "this week";
 
   const avgByCategory = useMemo(() => {
     const n = expenses.length;
@@ -743,12 +715,9 @@ export default function BudgetPage() {
   if (!projectId) {
     return (
       <AppLayout>
-        <div
-          className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-screen"
-          style={{ backgroundColor: COLORS.pageBg }}
-        >
-          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
-          <p className="max-w-md mx-auto mb-6 text-[#94a3b8]">
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-screen bg-background">
+          <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
+          <p className="max-w-md mx-auto mb-6 text-muted-foreground">
             {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
           </p>
           <Button asChild variant="outline">
@@ -764,8 +733,8 @@ export default function BudgetPage() {
   if (showLoading) {
     return (
       <AppLayout>
-        <div className="min-h-screen p-6" style={{ backgroundColor: COLORS.pageBg }}>
-          <h1 className="text-2xl font-bold mb-6 text-white">Budgets & Costs</h1>
+        <div className="min-h-screen p-6 bg-background">
+          <h1 className="text-2xl font-bold mb-6 text-foreground">Budgets & Costs</h1>
           <BudgetSkeleton />
         </div>
       </AppLayout>
@@ -775,12 +744,9 @@ export default function BudgetPage() {
   if (isError) {
     return (
       <AppLayout>
-        <div
-          className="py-16 px-4 text-center min-h-screen"
-          style={{ backgroundColor: COLORS.pageBg }}
-        >
-          <h1 className="text-2xl font-bold mb-2 text-white">{t("budget.title")}</h1>
-          <p className="mb-4 text-[#94a3b8]">
+        <div className="py-16 px-4 text-center min-h-screen bg-background">
+          <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
+          <p className="mb-4 text-muted-foreground">
             {error instanceof Error ? error.message : t("common.error")}
           </p>
           <Button onClick={() => refetch()}>
@@ -794,15 +760,12 @@ export default function BudgetPage() {
 
   return (
     <AppLayout>
-      <div
-        className="min-h-screen p-6"
-        style={{ backgroundColor: COLORS.pageBg }}
-      >
+      <div className="min-h-screen p-6 bg-background">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-white">Budgets & Costs</h1>
+          <h1 className="text-2xl font-bold text-foreground">Budgets & Costs</h1>
           <button
             onClick={() => refetch()}
-            className="p-2 rounded-lg bg-[#1a1d27] border border-[#2a2d38] text-[#00bcd4] hover:bg-[#2a2d38] transition-colors"
+            className="p-2 rounded-lg bg-card border border-border text-[#00bcd4] hover:bg-muted transition-colors"
             title="Refresh"
           >
             <RefreshCw className="w-4 h-4" />
@@ -819,9 +782,9 @@ export default function BudgetPage() {
           />
           <StatCard
             label="Balance"
-            value={formatUgx(Math.abs(balance))}
+            value={formatUgx(balance)}
             sub={balance < 0 ? "Over budget" : undefined}
-            valueClassName={balance < 0 ? "text-red-400" : undefined}
+            valueClassName={balance < 0 ? "text-red-400" : "text-foreground"}
           />
           <StatCard
             label="Budget Used"
@@ -833,8 +796,6 @@ export default function BudgetPage() {
             value={`${percentSpent}% spent`}
             dotColor={budgetUsedDotColor}
             sub={weeksRemaining != null && weeksRemaining < 200 ? `~${weeksRemaining} wk remaining` : undefined}
-            showViewAll
-            viewAllHref={projectId ? `/budget?project=${projectId}` : "/budget"}
           />
         </div>
 
@@ -845,6 +806,7 @@ export default function BudgetPage() {
               categoryTotals={categoryTotals}
               totalSpent={totalSpent}
               budget={budget}
+              tasks={tasks}
             />
           </div>
           <div>
@@ -853,16 +815,13 @@ export default function BudgetPage() {
         </div>
 
         {/* BOTTOM ROW — Cost Trend */}
-        <div
-          className="rounded-xl p-6 border border-[#2a2d38]"
-          style={{ backgroundColor: COLORS.cardBg }}
-        >
+        <div className="rounded-xl p-6 border border-border bg-card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Cost Trend</h3>
+            <h3 className="text-lg font-semibold text-foreground">Cost Trend</h3>
             <select
               value={costTrendPeriod}
               onChange={(e) => setCostTrendPeriod(e.target.value as "1w" | "1m" | "3m" | "all")}
-              className="text-sm bg-[#0f1117] border border-[#2a2d38] rounded-lg px-3 py-2 text-white"
+              className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
             >
               <option value="1w">1 Week</option>
               <option value="1m">1 Month</option>
@@ -873,8 +832,8 @@ export default function BudgetPage() {
 
           <CostTrendChart
             data={costTrendData}
-            categories={categoryTotals.length > 0 ? categoryTotals.map((c) => c.name) : ["Spent"]}
-            lastWeekSpent={lastWeekSpent}
+            lastWeekSpend={lastWeekSpent}
+            lastWeekKey={lastWeekKey}
           />
         </div>
       </div>
