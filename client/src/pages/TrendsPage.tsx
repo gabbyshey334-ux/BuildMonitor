@@ -2,13 +2,10 @@
 
 import React from "react";
 import { useLocation } from "wouter";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectTrends } from "@/hooks/useDashboard";
-import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveContainer,
@@ -20,10 +17,13 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
-  ReferenceLine,
 } from "recharts";
-import { RefreshCw, ArrowLeft, TrendingUp, TrendingDown, Minus, AlertTriangle } from "lucide-react";
+import { 
+  RefreshCw, ArrowLeft, TrendingUp, TrendingDown, Minus, 
+  AlertTriangle, ShieldCheck, AlertCircle, Calendar, 
+  DollarSign, Users, Package, Activity 
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function formatUgx(n: number) {
   return `UGX ${Math.round(n).toLocaleString()}`;
@@ -38,53 +38,33 @@ function formatDate(s: string) {
 
 function TrendsSkeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
-      <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-48" />
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
-        <div className="h-80 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8 animate-pulse">
+      <div className="flex justify-between items-center">
+        <div className="h-8 w-48 bg-[#1e2230] rounded" />
+        <div className="h-10 w-10 bg-[#1e2230] rounded" />
       </div>
-      <div className="h-64 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
-      <div className="h-48 dark:bg-zinc-800/50 bg-slate-100 rounded-lg" />
+      <div className="h-32 bg-[#0f1219] border border-white/5 rounded-xl" />
+      <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+        <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+      </div>
     </div>
   );
 }
 
-function EmptyState({ message, hint }: { message: string; hint?: string }) {
+function EmptyState({ message, icon: Icon }: { message: string; icon?: any }) {
   return (
-    <div className="py-8 px-4 text-center">
-      <p className="dark:text-zinc-400 text-slate-600 text-sm font-medium">{message}</p>
-      {hint && <p className="dark:text-zinc-500 text-slate-500 text-xs mt-2 max-w-sm mx-auto">{hint}</p>}
+    <div className="h-full flex flex-col items-center justify-center p-8 text-center text-zinc-500">
+      {Icon && <Icon className="w-8 h-8 mb-3 opacity-50" />}
+      <p className="text-sm font-medium">{message}</p>
     </div>
-  );
-}
-
-function TrendBadge({ trend, t }: { trend: "increasing" | "decreasing" | "stable"; t: (k: string) => string }) {
-  if (trend === "increasing") {
-    return (
-      <span className="inline-flex items-center gap-1 text-sm text-[#22c55e]">
-        <TrendingUp className="w-4 h-4" /> {t("trends.increasing")}
-      </span>
-    );
-  }
-  if (trend === "decreasing") {
-    return (
-      <span className="inline-flex items-center gap-1 text-sm text-amber-500">
-        <TrendingDown className="w-4 h-4" /> {t("trends.decreasing")}
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-1 text-sm dark:text-zinc-300 text-slate-700">
-      <Minus className="w-4 h-4" /> {t("trends.stable")}
-    </span>
   );
 }
 
 export default function TrendsPage() {
   const { t } = useLanguage();
   const [, setLocation] = useLocation();
-  const { isDark } = useTheme();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];
@@ -94,291 +74,331 @@ export default function TrendsPage() {
 
   const { data, isLoading, isError, error, refetch } = useProjectTrends(projectId);
 
+  if (isLoading) return <TrendsSkeleton />;
+
   if (!projectId) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("trends.title")}</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">
-            {hasProjects ? t("trends.noProjectSelect") : t("trends.noProjectCreate")}
-          </p>
+      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6">
+        <div className="text-center max-w-md space-y-6">
+          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
+            <Activity className="w-10 h-10 text-[#00bcd4]" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-white">{t("trends.title")}</h1>
+            <p className="text-zinc-400">
+              {hasProjects ? t("trends.noProjectSelect") : t("trends.noProjectCreate")}
+            </p>
+          </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
+            className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
         </div>
-      </AppLayout>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <AppLayout>
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("trends.title")}</h1>
-          <TrendsSkeleton />
-        </div>
-      </AppLayout>
+      </div>
     );
   }
 
   if (isError) {
     return (
-      <AppLayout>
-        <div className="py-16 px-4 text-center">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-2">{t("trends.title")}</h1>
-          <p className="dark:text-zinc-400 text-slate-500 mb-4">{error instanceof Error ? error.message : t("common.error")}</p>
-          <Button
-            onClick={() => refetch()}
-            className="dark:border-zinc-700 dark:text-white dark:hover:bg-zinc-800/50 dark:hover:border-zinc-600 border-slate-300 text-slate-700 hover:bg-slate-100 bg-white"
-          >
+      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-xl font-bold text-white">{t("common.error")}</h1>
+          <p className="text-zinc-400">{error instanceof Error ? error.message : t("common.error")}</p>
+          <Button onClick={() => refetch()} variant="outline" className="border-zinc-700 text-zinc-300">
             <RefreshCw className="w-4 h-4 mr-2" />
             {t("common.retry")}
           </Button>
         </div>
-      </AppLayout>
+      </div>
     );
   }
 
   const { spending, workers, materials, alerts, predictions } = data!;
-  const hasData =
-    spending.byMonth.length > 0 || workers.byDay.length > 0 || materials.mostUsed.length > 0;
-
-  if (!hasData) {
-    return (
-      <AppLayout>
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("trends.title")}</h1>
-          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
-            <CardContent className="pt-6">
-              <EmptyState
-                message={t("trends.empty")}
-                hint="Send expenses, worker counts, and material updates to see trends."
-              />
-            </CardContent>
-          </Card>
+  const hasBudgetWarning = alerts.some(a => a.type === 'budget_warning');
+  
+  // Custom Tooltip for charts
+  const CustomTooltip = ({ active, payload, label, formatter }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-[#1e2235] border border-white/10 p-3 rounded-lg shadow-xl">
+          <p className="text-zinc-400 text-xs mb-1">{label}</p>
+          <p className="text-white font-bold text-sm">
+            {formatter ? formatter(payload[0].value) : payload[0].value}
+          </p>
         </div>
-      </AppLayout>
-    );
-  }
+      );
+    }
+    return null;
+  };
 
   return (
-    <AppLayout>
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold dark:text-white text-slate-900 mb-6">{t("trends.title")}</h1>
+    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* 1. Header Row */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Trends & Insights</h1>
+            <p className="text-zinc-400 mt-1">Analytics and predictive metrics for your project.</p>
+          </div>
+          <Button
+            onClick={() => refetch()}
+            variant="outline"
+            size="icon"
+            className="rounded-full w-10 h-10 bg-[#0f1219] border-zinc-800 text-zinc-400 hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+        </div>
 
-        {/* Alerts */}
-        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
-          <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.alertsAnomalies")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {alerts.length > 0 ? (
-              <div className="space-y-3">
-                {alerts.map((a, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 p-3 rounded-lg ${
-                      a.severity === "high"
-                        ? "bg-red-500/10 border border-red-500/20"
-                        : a.severity === "medium"
-                        ? "bg-amber-500/10 border border-amber-500/20"
-                        : "dark:bg-zinc-800/50 dark:border-zinc-700 bg-slate-100 border-slate-200"
-                    }`}
-                  >
-                    <AlertTriangle
-                      className={`w-4 h-4 shrink-0 mt-0.5 ${
-                        a.severity === "high"
-                          ? "text-red-500"
-                          : a.severity === "medium"
-                          ? "text-amber-500"
-                          : "dark:text-zinc-500 text-slate-500"
-                      }`}
-                    />
-                    <p className="text-sm dark:text-white text-slate-800">{a.message}</p>
-                  </div>
-                ))}
+        {/* 2. Prediction Banner */}
+        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-[#00bcd4] to-amber-500">
+          <div className="bg-[#0f1219] rounded-[11px] p-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              {hasBudgetWarning ? (
+                <AlertTriangle className="w-32 h-32 text-amber-500" />
+              ) : (
+                <ShieldCheck className="w-32 h-32 text-emerald-500" />
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
+              <div>
+                <div className="flex items-center gap-2 mb-2 text-[#00bcd4]">
+                  <Activity className="w-5 h-5" />
+                  <span className="text-sm font-bold uppercase tracking-wider">Weekly Burn Rate</span>
+                </div>
+                <p className="text-3xl font-bold text-white">{formatUgx(predictions.weeklyBurnRate)}</p>
+                <p className="text-zinc-500 text-xs mt-1">Average spent per week</p>
               </div>
-            ) : (
-              <p className="dark:text-zinc-400 text-slate-500 text-sm font-medium">{t("trends.noissues")}</p>
-            )}
-          </CardContent>
-        </Card>
 
-        {/* Predictions */}
-        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
-          <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.predictions")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.burnrate")}</p>
-                <p className="text-lg font-bold dark:text-white text-slate-900">{formatUgx(predictions.weeklyBurnRate)}</p>
-              </div>
-              <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.runout")}</p>
-                <p className="text-lg font-medium dark:text-white text-slate-900">
+                <div className="flex items-center gap-2 mb-2 text-amber-500">
+                  <Calendar className="w-5 h-5" />
+                  <span className="text-sm font-bold uppercase tracking-wider">Runout Date</span>
+                </div>
+                <p className="text-3xl font-bold text-white">
                   {predictions.budgetRunout ? formatDate(predictions.budgetRunout) : "—"}
                 </p>
+                <p className="text-zinc-500 text-xs mt-1">Estimated based on current rate</p>
               </div>
+
               <div>
-                <p className="text-xs dark:text-zinc-500 text-slate-600 mb-1">{t("trends.completion")}</p>
-                <p className="text-lg font-medium dark:text-white text-slate-900">
-                  {predictions.estimatedCompletion || "—"}
+                <div className="flex items-center gap-2 mb-2 text-zinc-400">
+                  <ShieldCheck className={cn("w-5 h-5", hasBudgetWarning ? "text-amber-500" : "text-emerald-500")} />
+                  <span className="text-sm font-bold uppercase tracking-wider">Budget Status</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={cn("text-2xl font-bold", hasBudgetWarning ? "text-amber-500" : "text-emerald-500")}>
+                    {hasBudgetWarning ? "Attention Needed" : "On Track"}
+                  </span>
+                </div>
+                <p className="text-zinc-500 text-xs mt-1">
+                  {predictions.estimatedCompletion ? `Est. completion: ${predictions.estimatedCompletion}` : "Sufficient funds projected"}
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Spending trend */}
-          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.spending")}</CardTitle>
-              <TrendBadge trend={spending.trend} t={t} />
-            </CardHeader>
-            <CardContent>
-              {spending.byMonth.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={spending.byMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
-                    <XAxis
-                      dataKey="month"
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
+        {/* 3. Spending by Month */}
+        <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-[#00bcd4]" />
+              Spending History
+            </h3>
+            {spending.trend === 'increasing' && <span className="text-xs text-red-400 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Increasing</span>}
+            {spending.trend === 'decreasing' && <span className="text-xs text-emerald-400 flex items-center gap-1"><TrendingDown className="w-3 h-3" /> Decreasing</span>}
+          </div>
+          <div className="h-[300px] w-full">
+            {spending.byMonth.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={spending.byMonth}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
+                  <XAxis 
+                    dataKey="month" 
+                    stroke="#52525b" 
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    dy={10}
+                  />
+                  <YAxis 
+                    stroke="#52525b" 
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
+                    dx={-10}
+                  />
+                  <Tooltip content={<CustomTooltip formatter={formatUgx} />} cursor={{ fill: '#ffffff05' }} />
+                  <Bar 
+                    dataKey="amount" 
+                    fill="#00bcd4" 
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={60}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <EmptyState message="No spending data available" icon={DollarSign} />
+            )}
+          </div>
+        </div>
+
+        {/* 4. Two Column Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Worker Trend */}
+          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6">
+             <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <Users className="w-5 h-5 text-amber-500" />
+                Worker Activity
+              </h3>
+              <div className="flex gap-3 text-xs text-zinc-500">
+                <span>Avg: <span className="text-white font-medium">{workers.average}</span></span>
+                <span>Peak: <span className="text-white font-medium">{workers.peak}</span></span>
+              </div>
+            </div>
+            <div className="h-[250px] w-full">
+              {workers.byDay.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={workers.byDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
+                    <XAxis 
+                      dataKey="date" 
+                      stroke="#52525b" 
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(d) => formatDate(d).split(',')[0]} // Short date
+                      dy={10}
                     />
-                    <YAxis
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
-                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                    <YAxis 
+                      stroke="#52525b" 
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      dx={-10}
+                      allowDecimals={false}
                     />
-                    <Tooltip
-                      formatter={(v: number) => formatUgx(v)}
-                      contentStyle={{
-                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
-                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
-                        borderRadius: '8px',
-                        color: isDark ? '#ffffff' : '#0f172a',
-                      }}
-                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke="#f59e0b" 
+                      strokeWidth={2}
+                      dot={{ fill: '#f59e0b', r: 3, strokeWidth: 0 }}
+                      activeDot={{ r: 6, strokeWidth: 0 }}
                     />
-                    <Line type="monotone" dataKey="amount" stroke="#22c55e" strokeWidth={2} name={t("budget.spent")} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <EmptyState message={t("trends.noSpendingData")} />
+                <EmptyState message="No worker data recorded" icon={Users} />
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
-          {/* Worker activity */}
-          <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.workers")}</CardTitle>
-              <TrendBadge trend={workers.trend} t={t} />
-            </CardHeader>
-            <CardContent>
-              {workers.byDay.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={workers.byDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
-                    <XAxis
-                      dataKey="date"
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
-                      tickFormatter={(v) => formatDate(v)}
-                    />
-                    <YAxis
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
-                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
-                        borderRadius: '8px',
-                        color: isDark ? '#ffffff' : '#0f172a',
-                      }}
-                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
-                    />
-                    <ReferenceLine y={workers.average} stroke="#14b8a6" strokeDasharray="3 3" name={t("trends.avg")} />
-                    <Bar dataKey="count" fill="#14b8a6" name={t("daily.workers")} />
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* Top Materials */}
+          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 flex flex-col">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-6">
+              <Package className="w-5 h-5 text-[#00bcd4]" />
+              Top Materials
+            </h3>
+            <div className="flex-1">
+              {materials.mostUsed.length > 0 ? (
+                <div className="space-y-4">
+                  {materials.mostUsed.slice(0, 5).map((m, i) => {
+                    // Calculate mock percentage for visual bar since we don't have max capacity
+                    const max = Math.max(...materials.mostUsed.map(x => x.quantity));
+                    const pct = (m.quantity / max) * 100;
+                    
+                    return (
+                      <div key={m.name} className="group">
+                        <div className="flex justify-between text-sm mb-1">
+                          <span className="text-zinc-200 font-medium group-hover:text-white transition-colors">{m.name}</span>
+                          <span className="text-zinc-500">
+                            <span className="text-white font-bold">{m.quantity.toLocaleString()}</span> {m.unit}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-[#00bcd4] rounded-full opacity-80 group-hover:opacity-100 transition-all duration-500" 
+                            style={{ width: `${pct}%` }} 
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                <EmptyState message={t("trends.noWorkerData")} />
+                <EmptyState message="No material data available" icon={Package} />
               )}
-              <div className="flex gap-4 mt-2 text-sm dark:text-zinc-400 text-slate-600">
-                <span>{t("trends.avg")}: {workers.average}</span>
-                <span>{t("trends.peak")}: {workers.peak}</span>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
 
-        {/* Materials usage */}
-        <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 mb-6">
-          <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 font-bold">{t("trends.materials")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {materials.mostUsed.length > 0 ? (
-              <div className="space-y-4">
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={materials.mostUsed} layout="vertical" margin={{ left: 80 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#374151' : '#e2e8f0'} />
-                    <XAxis
-                      type="number"
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="name"
-                      stroke={isDark ? '#94A3B8' : '#64748b'}
-                      width={80}
-                      tick={{ fill: isDark ? '#9ca3af' : '#64748b', fontSize: 12 }}
-                    />
-                    <Tooltip
-                      formatter={(v: number, name: string, props: { payload?: { unit?: string } }) =>
-                        `${(v as number).toLocaleString()} ${props?.payload?.unit || ""}`
-                      }
-                      contentStyle={{
-                        backgroundColor: isDark ? '#1e2235' : '#ffffff',
-                        border: `1px solid ${isDark ? '#374151' : '#e2e8f0'}`,
-                        borderRadius: '8px',
-                        color: isDark ? '#ffffff' : '#0f172a',
-                      }}
-                      labelStyle={{ color: isDark ? '#ffffff' : '#0f172a' }}
-                    />
-                    <Bar dataKey="quantity" fill="#22c55e" name="Quantity" />
-                  </BarChart>
-                </ResponsiveContainer>
-                {materials.topVendors.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium dark:text-zinc-400 text-slate-600 mb-2">{t("trends.topVendors")}</h4>
-                    <ul className="space-y-2">
-                      {materials.topVendors.map((v) => (
-                        <li key={v.name} className="flex justify-between text-sm">
-                          <span className="dark:text-white text-slate-800">{v.name}</span>
-                          <span className="dark:text-zinc-400 text-slate-600">{formatUgx(v.total)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <EmptyState message={t("trends.noMaterialsData")} />
+        {/* 5. Alerts List */}
+        <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              Alerts & Anomalies
+            </h3>
+            {alerts.length > 0 && (
+              <span className="px-2 py-1 rounded bg-red-500/10 text-red-500 text-xs font-bold border border-red-500/20">
+                {alerts.length} Issues
+              </span>
             )}
-          </CardContent>
-        </Card>
+          </div>
+          
+          {alerts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {alerts.map((alert, i) => (
+                <div 
+                  key={i}
+                  className={cn(
+                    "p-4 rounded-lg border flex items-start gap-3 transition-colors",
+                    alert.severity === 'high' || alert.type === 'budget_warning'
+                      ? "bg-red-500/5 border-red-500/20 hover:bg-red-500/10" 
+                      : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10"
+                  )}
+                >
+                  <div className={cn(
+                    "p-2 rounded-full shrink-0",
+                    alert.severity === 'high' || alert.type === 'budget_warning' ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-500"
+                  )}>
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className={cn(
+                      "font-bold text-sm mb-0.5",
+                      alert.severity === 'high' || alert.type === 'budget_warning' ? "text-red-400" : "text-amber-400"
+                    )}>
+                      {alert.type === 'budget_warning' ? 'Budget Warning' : 'Attention Required'}
+                    </h4>
+                    <p className="text-zinc-300 text-sm leading-relaxed">{alert.message}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-lg bg-zinc-900/30">
+              <ShieldCheck className="w-12 h-12 mb-3 text-emerald-500/50" />
+              <p className="font-medium text-emerald-500/80">All systems operational</p>
+              <p className="text-xs">No alerts or anomalies detected.</p>
+            </div>
+          )}
+        </div>
+
       </div>
-    </AppLayout>
+    </div>
   );
 }
