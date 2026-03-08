@@ -14,14 +14,23 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  CartesianGrid
 } from "recharts";
 import {
   RefreshCw,
   AlertTriangle,
   Zap,
   PackageOpen,
-  MoreHorizontal,
+  DollarSign,
+  PieChart,
+  TrendingUp,
+  CreditCard,
+  Clock,
+  ArrowLeft,
+  CheckCircle,
+  AlertCircle
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
@@ -42,7 +51,6 @@ function formatUgx(value: number): string {
   const num = Number(value) || 0;
   if (num >= 1_000_000_000) {
     const b = num / 1_000_000_000;
-    // Always 3 decimal places for billions so 29.998B ≠ 30.000B
     return `UGX ${b.toFixed(3)}B`;
   }
   if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
@@ -59,10 +67,10 @@ function pct(numerator: number, denominator: number): number {
 
 function yAxisTickFormatter(v: unknown): string {
   const n = parseFloat(String(v));
-  if (n >= 1_000_000_000) return `UGX ${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `UGX ${(n / 1_000_000).toFixed(0)}M`;
-  if (n >= 1_000) return `UGX ${(n / 1_000).toFixed(0)}K`;
-  return `UGX ${n}`;
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(0)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return `${n}`;
 }
 
 function getWeekNumber(date: Date): number {
@@ -120,17 +128,21 @@ function categorise(description: string): string {
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
+    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8 animate-pulse">
+      <div className="flex justify-between items-center">
+        <div className="h-8 w-48 bg-[#1e2230] rounded" />
+        <div className="h-10 w-10 bg-[#1e2230] rounded" />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-24 rounded-xl bg-card border border-border" />
+          <div key={i} className="h-24 bg-[#0f1219] border border-white/5 rounded-xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-80 rounded-xl bg-card border border-border" />
-        <div className="h-80 rounded-xl bg-card border border-border" />
+        <div className="lg:col-span-2 h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+        <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
       </div>
-      <div className="h-80 rounded-xl bg-card border border-border" />
+      <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
     </div>
   );
 }
@@ -143,6 +155,7 @@ function StatCard({
   extraSub,
   valueClassName,
   dotColor,
+  icon: Icon
 }: {
   label: string;
   value: string;
@@ -150,24 +163,32 @@ function StatCard({
   extraSub?: React.ReactNode;
   valueClassName?: string;
   dotColor?: string;
+  icon?: any;
 }) {
   return (
-    <div className="rounded-xl p-4 flex flex-col justify-between min-h-[88px] border border-border bg-card">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <div className="mt-2">
-        <div className="flex items-center gap-2">
-          {dotColor && (
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: dotColor }}
-            />
-          )}
-          <p className={`text-lg font-bold leading-tight ${valueClassName ?? "text-foreground"}`}>
-            {value}
-          </p>
+    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-4 flex flex-col justify-between min-h-[100px] relative overflow-hidden group hover:border-white/10 transition-all">
+      {Icon && (
+        <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+          <Icon className="w-12 h-12" />
         </div>
-        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
-        {extraSub && <div className="text-[11px] text-muted-foreground mt-1">{extraSub}</div>}
+      )}
+      <div className="relative z-10">
+        <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{label}</p>
+        <div className="mt-2">
+          <div className="flex items-center gap-2">
+            {dotColor && (
+              <span
+                className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor]"
+                style={{ backgroundColor: dotColor, color: dotColor }}
+              />
+            )}
+            <p className={cn("text-xl font-bold leading-tight", valueClassName ?? "text-white")}>
+              {value}
+            </p>
+          </div>
+          {sub && <p className="text-xs text-zinc-500 mt-1">{sub}</p>}
+          {extraSub && <div className="text-[11px] text-zinc-500 mt-1">{extraSub}</div>}
+        </div>
       </div>
     </div>
   );
@@ -200,116 +221,95 @@ function BudgetComparisonSection({
 
   const progressPct = tasksPct ?? expenseProxyPct;
 
-  // budgetUsedPct from real parsed numbers
   const budgetUsedPct =
     budget > 0 ? parseFloat(((totalSpent / budget) * 100).toFixed(6)) : 0;
 
   const gap = budgetUsedPct - progressPct;
   const footerText =
     gap > 5
-      ? `⚠️ Spending is ${gap.toFixed(2)}% ahead of recorded progress`
+      ? `Spending is ${gap.toFixed(1)}% ahead of progress`
       : gap < -5
-      ? `✅ Progress is ahead of spending by ${Math.abs(gap).toFixed(2)}%`
-      : `✅ Spending and progress are aligned`;
+      ? `Progress is ahead of spending by ${Math.abs(gap).toFixed(1)}%`
+      : `Spending and progress are aligned`;
 
   return (
-    <div className="rounded-xl p-6 border border-border bg-card h-full">
-      {/* No "View All" button */}
-      <div className="mb-5">
-        <h3 className="text-lg font-semibold text-foreground">Budget Comparison</h3>
+    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <PieChart className="w-5 h-5 text-[#00bcd4]" />
+          Budget Comparison
+        </h3>
       </div>
 
-      <div className="mb-5">
-        <p className="text-sm text-muted-foreground mb-2">Progress vs. Expenditure</p>
-        <select
-          className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-          defaultValue="desc"
-        >
-          <option value="desc">Budget (Descending)</option>
-          <option value="asc">Budget (Ascending)</option>
-        </select>
-      </div>
-
-      <div className="space-y-6">
+      <div className="space-y-8 flex-1">
         {/* Project Progress bar */}
         <div>
-          <p className="text-xs text-muted-foreground mb-2">Project Progress</p>
-          <div
-            className="rounded-lg overflow-hidden"
-            style={{ height: "12px", background: "hsl(var(--muted))" }}
-          >
-            <div
-              style={{
-                width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%`,
-                height: "100%",
-                background: "linear-gradient(90deg, #00bcd4, #0097a7)",
-                borderRadius: "6px",
-                transition: "width 0.6s ease",
-              }}
-            />
+          <div className="flex justify-between text-xs mb-2">
+            <span className="text-zinc-400">Project Progress</span>
+            <span className="text-[#00bcd4] font-medium">
+              {tasksPct !== null
+                ? `${progressPct}%`
+                : expenses.length > 0
+                ? `~${progressPct}% (estimated)`
+                : "0%"}
+            </span>
           </div>
-          <div className="text-right text-xs text-muted-foreground mt-1">
-            {tasksPct !== null
-              ? `${progressPct}%`
-              : expenses.length > 0
-              ? `~${progressPct}% (estimated from ${expenses.length} expenses)`
-              : "0% — no tasks logged yet"}
+          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#00bcd4] to-[#0097a7] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
+              style={{ width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%` }}
+            />
           </div>
         </div>
 
         {/* Budget Used bar */}
         <div>
-          <p className="text-xs text-muted-foreground mb-2">Budget Used</p>
-          <div
-            className="rounded-lg overflow-hidden"
-            style={{ height: "12px", background: "hsl(var(--muted))" }}
-          >
+          <div className="flex justify-between text-xs mb-2">
+            <span className="text-zinc-400">Budget Used</span>
+            <span className={cn(
+              "font-medium",
+              budgetUsedPct > 80 ? "text-red-500" : budgetUsedPct > 60 ? "text-amber-500" : "text-emerald-500"
+            )}>
+              {formatUgx(totalSpent)} ({budgetUsedPct.toFixed(1)}%)
+            </span>
+          </div>
+          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
             <div
-              style={{
-                width: `${budgetUsedPct > 0 ? Math.max(budgetUsedPct, 2) : 0}%`,
-                height: "100%",
-                background:
-                  budgetUsedPct > 80
-                    ? "linear-gradient(90deg, #ef4444, #dc2626)"
-                    : budgetUsedPct > 60
-                    ? "linear-gradient(90deg, #f59e0b, #d97706)"
-                    : "linear-gradient(90deg, #22c55e, #16a34a)",
-                borderRadius: "6px",
-                transition: "width 0.6s ease",
-              }}
+              className={cn("h-full rounded-full transition-all duration-1000 ease-out", 
+                budgetUsedPct > 80 ? "bg-gradient-to-r from-red-500 to-red-600 shadow-[0_0_10px_rgba(239,68,68,0.3)]" :
+                budgetUsedPct > 60 ? "bg-gradient-to-r from-amber-500 to-amber-600 shadow-[0_0_10px_rgba(245,158,11,0.3)]" :
+                "bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+              )}
+              style={{ width: `${budgetUsedPct > 0 ? Math.max(budgetUsedPct, 2) : 0}%` }}
             />
           </div>
-          <div className="text-right text-xs text-muted-foreground mt-1">
-            {formatUgx(totalSpent)} of {formatUgx(budget)} used
-            {budgetUsedPct >= 0.01 && ` (${budgetUsedPct.toFixed(3)}%)`}
-          </div>
-          {budgetUsedPct < 1 && budgetUsedPct > 0 && (
-            <div className="text-[11px] text-muted-foreground mt-1 text-right italic">
-              Bar scaled for visibility — actual usage is {budgetUsedPct.toFixed(4)}%
-            </div>
-          )}
         </div>
 
         {/* Category legend */}
         {categoryTotals.length > 0 && (
-          <div className="flex flex-wrap gap-3 pt-1">
+          <div className="flex flex-wrap gap-x-6 gap-y-3 pt-4 border-t border-white/5">
             {categoryTotals.map((d, i) => (
               <div key={d.name} className="flex items-center gap-2">
                 <span
-                  className="w-3 h-3 rounded-sm"
+                  className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }}
                 />
-                <span className="text-xs text-muted-foreground">{d.name}</span>
+                <span className="text-xs text-zinc-400">
+                  {d.name} <span className="text-zinc-500">({formatUgx(d.amount)})</span>
+                </span>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <div
-        className="text-[13px] mt-5 font-medium"
-        style={{ color: gap > 5 ? "#f59e0b" : "#00bcd4" }}
-      >
+      <div className={cn(
+        "mt-6 py-3 px-4 rounded-lg text-xs font-medium flex items-center gap-2",
+        gap > 5 ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : 
+        gap < -5 ? "bg-[#00bcd4]/10 text-[#00bcd4] border border-[#00bcd4]/20" : 
+        "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+      )}>
+        {gap > 5 ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
         {footerText}
       </div>
     </div>
@@ -334,67 +334,71 @@ function AlertsSection({
   ).length;
 
   return (
-    <div className="rounded-xl p-6 border border-border bg-card h-full">
-      {/* No "View All" button */}
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-foreground">Alerts</h3>
+    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-amber-500" />
+          Alerts
+        </h3>
+        {overBudgetCount > 0 && (
+          <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-500 text-[10px] font-bold border border-red-500/20 uppercase">
+            {overBudgetCount} Critical
+          </span>
+        )}
       </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-sm text-muted-foreground">
-          Over Budget Items: {overBudgetCount}
-        </span>
-        <button className="text-muted-foreground hover:text-foreground transition-colors">
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div>
+      <div className="flex-1 overflow-y-auto pr-1 -mr-2 space-y-3 custom-scrollbar">
         {alerts.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">
-            No alerts at this time.
-          </p>
+          <div className="h-full flex flex-col items-center justify-center text-center p-4">
+            <CheckCircle className="w-12 h-12 text-emerald-500/20 mb-3" />
+            <p className="text-sm font-medium text-emerald-500">All Systems Normal</p>
+            <p className="text-xs text-zinc-500 mt-1">No budget alerts detected.</p>
+          </div>
         ) : (
-          alerts.map((a, i) => <AlertRow key={i} {...a} />)
+          alerts.map((a, i) => (
+            <div 
+              key={i} 
+              className={cn(
+                "p-3 rounded-lg border transition-colors flex items-start gap-3",
+                a.subtitle === "Budget Overrun" || a.subtitle === "Price Spike" 
+                  ? "bg-red-500/5 border-red-500/20 hover:bg-red-500/10"
+                  : a.subtitle === "Budget on track"
+                  ? "bg-emerald-500/5 border-emerald-500/20"
+                  : "bg-amber-500/5 border-amber-500/20 hover:bg-amber-500/10"
+              )}
+            >
+              <div className={cn(
+                "p-1.5 rounded-md shrink-0",
+                a.subtitle === "Budget Overrun" || a.subtitle === "Price Spike" 
+                  ? "bg-red-500/10 text-red-500"
+                  : a.subtitle === "Budget on track"
+                  ? "bg-emerald-500/10 text-emerald-500"
+                  : "bg-amber-500/10 text-amber-500"
+              )}>
+                <a.icon className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-medium text-zinc-200 leading-snug">{a.title}</h4>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={cn(
+                    "text-[10px] uppercase font-bold tracking-wide",
+                    a.subtitle === "Budget Overrun" || a.subtitle === "Price Spike" ? "text-red-400" :
+                    a.subtitle === "Budget on track" ? "text-emerald-400" : "text-[#00bcd4]"
+                  )}>
+                    {a.subtitle}
+                  </span>
+                  {a.timestamp && (
+                    <>
+                      <span className="text-zinc-600 text-[10px]">•</span>
+                      <span className="text-[10px] text-zinc-500">{a.timestamp}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
         )}
       </div>
-    </div>
-  );
-}
-
-function AlertRow({
-  icon: Icon,
-  iconColor,
-  title,
-  subtitle,
-  dotColor,
-  timestamp,
-}: {
-  icon: React.ElementType;
-  iconColor: string;
-  title: string;
-  subtitle: string;
-  dotColor: string;
-  timestamp?: string;
-}) {
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-border last:border-0">
-      <div className="mt-0.5 shrink-0">
-        <Icon className="w-5 h-5" style={{ color: iconColor }} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground leading-relaxed">{title}</p>
-        <p className="text-xs mt-1" style={{ color: COLORS.teal }}>
-          {subtitle}
-        </p>
-        {timestamp && (
-          <p className="text-xs mt-0.5 text-muted-foreground">{timestamp}</p>
-        )}
-      </div>
-      <div
-        className="w-2 h-2 rounded-full shrink-0 mt-1"
-        style={{ backgroundColor: dotColor }}
-      />
     </div>
   );
 }
@@ -405,11 +409,13 @@ function CostTrendChart({
   period,
   lastWeekSpend,
   lastWeekKey,
+  onPeriodChange
 }: {
   allData: Array<{ week: string; total: number; date: Date }>;
   period: "1w" | "1m" | "3m" | "all";
   lastWeekSpend: number;
   lastWeekKey?: string;
+  onPeriodChange: (p: "1w" | "1m" | "3m" | "all") => void;
 }) {
   const filteredData = useMemo(() => {
     const now = Date.now();
@@ -428,77 +434,99 @@ function CostTrendChart({
 
   if (filteredData.length === 0) {
     return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-        No expense history for this period.
+      <div className="h-64 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-lg bg-zinc-900/30">
+        <TrendingUp className="w-8 h-8 mb-2 opacity-50" />
+        <p className="text-sm">No expense history for this period.</p>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="h-64">
+    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-[#00bcd4]" />
+          Cost Trend
+        </h3>
+        <div className="flex bg-[#161b27] p-1 rounded-lg border border-white/5">
+          {(["1w", "1m", "3m", "all"] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => onPeriodChange(p)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-md transition-all",
+                period === p 
+                  ? "bg-[#00bcd4] text-black shadow-lg" 
+                  : "text-zinc-400 hover:text-white hover:bg-white/5"
+              )}
+            >
+              {p === "all" ? "All" : p.toUpperCase()}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="h-[300px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={filteredData}
-            margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-          >
+          <ComposedChart data={filteredData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
             <XAxis
               dataKey="week"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+              tick={{ fill: "#52525b", fontSize: 11 }}
+              dy={10}
             />
             <YAxis
               axisLine={false}
               tickLine={false}
               domain={[0, "auto"]}
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+              tick={{ fill: "#52525b", fontSize: 11 }}
               tickFormatter={yAxisTickFormatter}
-              width={75}
+              width={60}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
+                backgroundColor: "#1e2235",
+                border: "1px solid rgba(255,255,255,0.1)",
                 borderRadius: "8px",
                 fontSize: "13px",
+                color: "#fff",
+                boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)"
               }}
-              labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+              itemStyle={{ color: "#fff" }}
+              labelStyle={{ color: "#9ca3af", marginBottom: "4px" }}
               formatter={(value: number) => [formatUgx(value), "Spent"]}
+              cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
             />
             <Line
               type="monotone"
               dataKey="total"
-              stroke={COLORS.teal}
-              strokeWidth={2.5}
-              dot={{ r: 3, fill: COLORS.teal }}
-              activeDot={{ r: 5 }}
+              stroke="#00bcd4"
+              strokeWidth={3}
+              dot={{ r: 4, fill: "#0f1219", stroke: "#00bcd4", strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: "#00bcd4", stroke: "#fff", strokeWidth: 2 }}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Styled "spent last week" footer */}
-      <div
-        className="flex items-center gap-3 mt-5 py-3 px-4 rounded-r-lg"
-        style={{
-          background: "rgba(0, 188, 212, 0.08)",
-          borderLeft: "3px solid #00bcd4",
-        }}
-      >
-        <span
-          style={{
-            color: "#00bcd4",
-            fontSize: "20px",
-            fontWeight: 700,
-            letterSpacing: "-0.5px",
-          }}
-        >
-          {formatUgx(lastWeekSpend)}
-        </span>
-        <span className="text-muted-foreground text-sm">
-          spent last week{lastWeekKey ? ` · ${lastWeekKey}` : ""}
-        </span>
+      <div className="mt-4 flex items-center justify-between pt-4 border-t border-white/5">
+        <div className="flex items-center gap-3 pl-4 border-l-4 border-[#00bcd4]">
+          <div>
+            <span className="text-2xl font-bold text-white block leading-none">
+              {formatUgx(lastWeekSpend)}
+            </span>
+            <span className="text-xs text-zinc-500 mt-1 block">
+              spent last week {lastWeekKey ? `(${lastWeekKey})` : ""}
+            </span>
+          </div>
+        </div>
+        <div className="text-right">
+             <Button variant="ghost" size="sm" className="text-zinc-500 hover:text-[#00bcd4] hover:bg-[#00bcd4]/10">
+               View Full Report <ArrowLeft className="w-3 h-3 ml-1 rotate-180" />
+             </Button>
+        </div>
       </div>
     </div>
   );
@@ -557,7 +585,6 @@ export default function BudgetPage() {
   );
 
   // ── Core financial values ────────────────────────────────────────────────────
-  // FIX 1: Always parse budget as plain float — handles string "30000000000"
   const budget = useMemo(() => {
     const raw =
       (currentProject as any)?.budget ??
@@ -567,7 +594,6 @@ export default function BudgetPage() {
     return isNaN(parsed) ? 0 : parsed;
   }, [currentProject]);
 
-  // FIX 2: Parse every expense amount as float — avoids string concat bug
   const totalSpent = useMemo(
     () =>
       expenses.reduce(
@@ -578,9 +604,7 @@ export default function BudgetPage() {
     [expenses]
   );
 
-  // FIX 3: Arithmetic on two Numbers — guaranteed correct
   const balance = budget - totalSpent;
-
   const percentSpent = useMemo(() => pct(totalSpent, budget), [totalSpent, budget]);
   const overBudget = budget > 0 && totalSpent > budget;
 
@@ -610,7 +634,6 @@ export default function BudgetPage() {
   }, [expenses]);
 
   // ── Cost trend ───────────────────────────────────────────────────────────────
-  // FIX 4: Include the raw Date so CostTrendChart can filter by period correctly
   const costTrendDataRaw = useMemo(() => {
     const weeklyMap: Record<string, { total: number; date: Date }> = {};
     expenses.forEach((e) => {
@@ -732,7 +755,7 @@ export default function BudgetPage() {
 
     if (result.length === 0) {
       result.push({
-        icon: AlertTriangle,
+        icon: CheckCircle,
         iconColor: COLORS.green,
         title: "All good! No budget alerts at this time.",
         subtitle: "Budget on track",
@@ -752,104 +775,105 @@ export default function BudgetPage() {
   // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-screen bg-background">
-        <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
-        <p className="max-w-md mx-auto mb-6 text-muted-foreground">
-          {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
-        </p>
-        <Button asChild variant="outline">
-          <Link href="/projects">
-            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
-          </Link>
-        </Button>
+      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full space-y-6">
+          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
+            <DollarSign className="w-10 h-10 text-[#00bcd4]" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-white">{t("budget.title")}</h1>
+            <p className="text-zinc-400">
+              {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
+            </p>
+          </div>
+          <Button asChild className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold">
+            <Link href="/projects">
+              {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
+            </Link>
+          </Button>
+        </div>
       </div>
     );
   }
 
-  if (showLoading) {
-    return (
-      <div className="min-h-screen p-6 bg-background">
-        <h1 className="text-2xl font-bold mb-6 text-foreground">Budgets & Costs</h1>
-        <BudgetSkeleton />
-      </div>
-    );
-  }
+  if (showLoading) return <BudgetSkeleton />;
 
   if (isError) {
     return (
-      <div className="py-16 px-4 text-center min-h-screen bg-background">
-        <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
-        <p className="mb-4 text-muted-foreground">
-          {error instanceof Error ? error.message : t("common.error")}
-        </p>
-        <Button onClick={() => refetch()}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          {t("common.retry")}
-        </Button>
+      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h1 className="text-xl font-bold text-white">{t("budget.title")}</h1>
+          <p className="text-zinc-400">{error instanceof Error ? error.message : t("common.error")}</p>
+          <Button onClick={() => refetch()} variant="outline" className="border-zinc-700 text-zinc-300">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {t("common.retry")}
+          </Button>
+        </div>
       </div>
     );
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen p-6 bg-background">
+    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-foreground">Budgets & Costs</h1>
-          <button
+        <div className="flex items-center justify-between">
+          <div>
+             <h1 className="text-3xl font-bold text-white tracking-tight">Budgets & Costs</h1>
+             <p className="text-zinc-400 mt-1">Track expenditure, analyze costs, and manage budget health.</p>
+          </div>
+          <Button
             onClick={() => refetch()}
-            className="p-2 rounded-lg bg-card border border-border text-[#00bcd4] hover:bg-muted transition-colors"
-            title="Refresh"
+            variant="outline"
+            size="icon"
+            className="rounded-full w-10 h-10 bg-[#0f1219] border-zinc-800 text-zinc-400 hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
-        {/* TOP ROW — 5 stat cards, no "View All" buttons anywhere */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        {/* TOP ROW — 5 stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <StatCard
             label="Total Budget"
             value={formatUgx(budget)}
             sub={budget === 0 ? "Not set" : undefined}
+            icon={DollarSign}
           />
           <StatCard
             label="Total Expenditure"
             value={formatUgx(totalSpent)}
             sub={`${expenses.length} transaction${expenses.length !== 1 ? "s" : ""}`}
+            icon={CreditCard}
           />
           <StatCard
             label="Balance"
             value={formatUgx(balance)}
-            valueClassName={balance < 0 ? "text-red-400" : "text-foreground"}
+            valueClassName={balance < 0 ? "text-red-500" : "text-white"}
             sub={balance < 0 ? "Over budget" : `${formatUgx(budget - balance)} spent`}
-            extraSub={
-              budget > 0 && totalSpent > 0 ? (
-                <span style={{ color: "#00bcd4" }}>
-                  {formatUgx(balance)} remaining
-                </span>
-              ) : undefined
-            }
+            dotColor={balance < 0 ? COLORS.red : COLORS.teal}
           />
           <StatCard
             label="Budget Used"
             value={`${percentSpent}%`}
             dotColor={budgetUsedDotColor}
-            sub={
-              weeksRemaining != null && weeksRemaining < 200
-                ? `~${weeksRemaining} wk remaining`
-                : undefined
-            }
+            sub={percentSpent > 100 ? "Limit exceeded" : "of total budget"}
           />
-          {/* Percentage Spent — no View All */}
           <StatCard
-            label="Percentage Spent"
-            value={`${percentSpent}% spent`}
-            dotColor={budgetUsedDotColor}
+            label="Weeks Remaining"
+            value={weeksRemaining != null && weeksRemaining < 200 ? `~${weeksRemaining}` : "—"}
+            sub="Based on current burn rate"
+            icon={Clock}
           />
         </div>
 
         {/* MIDDLE ROW */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
             <BudgetComparisonSection
               categoryTotals={categoryTotals}
@@ -865,29 +889,14 @@ export default function BudgetPage() {
         </div>
 
         {/* BOTTOM ROW — Cost Trend */}
-        <div className="rounded-xl p-6 border border-border bg-card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">Cost Trend</h3>
-            <select
-              value={costTrendPeriod}
-              onChange={(e) =>
-                setCostTrendPeriod(e.target.value as "1w" | "1m" | "3m" | "all")
-              }
-              className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground"
-            >
-              <option value="1w">1 Week</option>
-              <option value="1m">1 Month</option>
-              <option value="3m">3 Months</option>
-              <option value="all">All Time</option>
-            </select>
-          </div>
-          <CostTrendChart
-            allData={costTrendDataRaw}
-            period={costTrendPeriod}
-            lastWeekSpend={lastWeekSpent}
-            lastWeekKey={lastWeekKey}
-          />
-        </div>
+        <CostTrendChart
+          allData={costTrendDataRaw}
+          period={costTrendPeriod}
+          lastWeekSpend={lastWeekSpent}
+          lastWeekKey={lastWeekKey}
+          onPeriodChange={setCostTrendPeriod}
+        />
       </div>
+    </div>
   );
 }
