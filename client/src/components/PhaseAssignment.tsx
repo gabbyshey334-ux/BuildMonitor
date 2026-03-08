@@ -169,13 +169,7 @@ export default function PhaseAssignment({ projectId, isOpen, onClose }: PhaseAss
     assignPhasesMutation.mutate(selectedPhaseAssignments);
   };
 
-  const formatCurrency = (amount: string) => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      minimumFractionDigits: 0,
-    }).format(parseFloat(amount));
-  };
+  const formatCurrency = (amount: string) => `UGX ${Number(parseFloat(amount)).toLocaleString()}`;
 
   if (unassignedExpenses.length === 0) {
     return (

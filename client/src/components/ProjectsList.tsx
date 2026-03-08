@@ -146,12 +146,8 @@ export default function ProjectsList() {
     );
   };
 
-  const formatCurrency = (amount: number, currency: string = 'UGX') => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'decimal',
-      minimumFractionDigits: 0
-    }).format(amount) + ' ' + currency;
-  };
+  const formatCurrency = (amount: number, currency: string = 'UGX') =>
+    `${Number(amount).toLocaleString()} ${currency === 'UGX' ? 'UGX' : currency}`;
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-UG', {

@@ -96,13 +96,7 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
     });
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => `UGX ${Number(amount).toLocaleString()}`;
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);

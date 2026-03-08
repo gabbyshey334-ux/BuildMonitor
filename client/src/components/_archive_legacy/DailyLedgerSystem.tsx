@@ -285,11 +285,7 @@ export default function DailyLedgerSystem({ projectId, userRole = "Manager" }: D
 
   const formatCurrency = (amount: string | number) => {
     const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      maximumFractionDigits: 0,
-    }).format(numAmount);
+    return `UGX ${Number(numAmount).toLocaleString()}`;
   };
 
   const getDayName = (dateValue: string | Date) => {

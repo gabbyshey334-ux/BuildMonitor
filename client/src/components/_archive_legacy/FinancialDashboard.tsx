@@ -153,13 +153,7 @@ export default function FinancialDashboard({ projectId, userRole = 'owner' }: Fi
     setBudgetAmount('');
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => `UGX ${Number(amount).toLocaleString()}`;
 
   const getCategoryColor = (category: string) => {
     switch (category.toLowerCase()) {

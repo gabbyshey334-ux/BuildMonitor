@@ -40,13 +40,7 @@ export default function PhaseProgressChart({ projectId }: PhaseProgressChartProp
   const phaseData = getPhaseExpenses();
   const totalExpenses = phaseData.reduce((sum, phase) => sum + phase.totalAmount, 0);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-UG', {
-      style: 'currency',
-      currency: 'UGX',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => `UGX ${Number(amount).toLocaleString()}`;
 
   const getProgressPercentage = (phaseAmount: number) => {
     if (totalExpenses === 0) return 0;

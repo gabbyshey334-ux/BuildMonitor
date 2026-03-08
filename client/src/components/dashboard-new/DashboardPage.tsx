@@ -23,14 +23,8 @@ import { uploadPhotoDirectly } from '@/lib/uploadPhoto';
 import { apiRequest } from '@/lib/queryClient';
 import { cn } from '@/lib/utils';
 
-// Helper for currency formatting
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-UG', {
-    style: 'currency',
-    currency: 'UGX',
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+// Helper for currency formatting (use explicit UGX; Intl can show wrong symbol in some locales)
+const formatCurrency = (amount: number) => `UGX ${Number(amount).toLocaleString()}`;
 
 // Helper for time ago — handles date-only (YYYY-MM-DD) and full ISO timestamps
 function timeAgo(dateStr: string): string {

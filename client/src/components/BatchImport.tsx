@@ -351,11 +351,7 @@ export default function BatchImport({
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-white">{item.description}</span>
                         <Badge className="bg-green-600 text-xs">
-                          {new Intl.NumberFormat('en-UG', {
-                            style: 'currency',
-                            currency: 'UGX',
-                            minimumFractionDigits: 0
-                          }).format(parseFloat(item.amount))}
+                          {`UGX ${Number(parseFloat(item.amount)).toLocaleString()}`}
                         </Badge>
                       </div>
                     </div>

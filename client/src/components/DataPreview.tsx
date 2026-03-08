@@ -104,11 +104,7 @@ export default function DataPreview({
       case 'amount':
         const numValue = parseFloat(strValue.replace(/[^\d.-]/g, ''));
         if (!isNaN(numValue)) {
-          return new Intl.NumberFormat('en-UG', {
-            style: 'currency',
-            currency: 'UGX',
-            minimumFractionDigits: 0
-          }).format(numValue);
+          return `UGX ${numValue.toLocaleString()}`;
         }
         return strValue;
       case 'date':
