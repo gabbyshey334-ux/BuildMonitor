@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
@@ -20,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, Loader2, FolderOpen } from "lucide-react";
+import { AlertTriangle, Loader2, Settings, User, Phone, Lock, Globe, Save, Trash2, Smartphone } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -170,6 +169,7 @@ export default function SettingsPage() {
         newPassword: "",
         confirmPassword: "",
       });
+      toast({ title: "Password changed successfully! 🔒" });
     } catch (err) {
       setPasswordError(err instanceof Error ? err.message : "Failed to change password");
     } finally {
@@ -291,387 +291,323 @@ export default function SettingsPage() {
 
   if (!projectId) {
     return (
-      <AppLayout>
-        <div className="max-w-2xl mx-auto">
-          <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("settings.title")}</h1>
-
-          <Card className="mb-6 dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200 border-emerald-500/30">
-            <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">📱 Link WhatsApp number</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="dark:text-zinc-400 text-slate-600 text-sm">
-                Created a project via WhatsApp? Link the same number here to see those projects in My Projects.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  value={linkPhone}
-                  onChange={(e) => setLinkPhone(e.target.value)}
-                  placeholder="+2349165631240"
-                  className="flex-1 min-w-[180px] dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                />
-                <Button
-                  type="button"
-                  onClick={handleLinkWhatsApp}
-                  disabled={linkingWhatsApp}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                >
-                  {linkingWhatsApp ? "Linking…" : "Link"}
-                </Button>
-              </div>
-              {linkError && <p className="text-red-500 text-sm">{linkError}</p>}
-              {linkSuccess && <p className="text-emerald-500 text-sm">✅ Linked. Go to My Projects to see them.</p>}
-            </CardContent>
-          </Card>
-
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
-            <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
+      <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 flex items-center justify-center">
+        <div className="max-w-md w-full text-center space-y-6">
+          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
+            <Settings className="w-10 h-10 text-[#00bcd4]" />
           </div>
-          <h2 className="font-heading text-xl font-semibold dark:text-white text-slate-800 mb-2">
-            {hasProjects ? "No project selected" : "Create your first project"}
-          </h2>
-          <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
-            {hasProjects
-              ? "Select a project from the list or create your first project to manage settings."
-              : "Get started by creating your first project."}
-          </p>
-          <Button asChild className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90">
-            <Link href="/projects">
-              <a>Create your first project</a>
-            </Link>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-white">{t("settings.title")}</h1>
+            <p className="text-zinc-400">
+              {hasProjects ? t("trends.noProjectSelect") : t("trends.noProjectCreate")}
+            </p>
+          </div>
+          <Button
+            onClick={() => setLocation("/projects")}
+            className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold"
+          >
+            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
-          </div>
         </div>
-      </AppLayout>
+      </div>
     );
   }
 
   if (loading) {
     return (
-      <AppLayout>
-        <div className="space-y-6 animate-pulse">
-          <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-48" />
-          <div className="grid gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-12 dark:bg-zinc-800/50 bg-slate-200 rounded-lg" />
-            ))}
-          </div>
+      <div className="min-h-screen bg-[#0a0c12] p-6 space-y-6 animate-pulse">
+        <div className="h-8 w-48 bg-[#1e2230] rounded" />
+        <div className="grid gap-6">
+          <div className="h-96 bg-[#0f1219] border border-white/5 rounded-xl" />
+          <div className="h-64 bg-[#0f1219] border border-white/5 rounded-xl" />
         </div>
-      </AppLayout>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-      <div className="max-w-2xl mx-auto">
-        <h1 className="font-heading text-2xl font-bold dark:text-white text-slate-800 mb-6">{t("settings.title")}</h1>
+    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+      <div className="max-w-4xl mx-auto space-y-8">
+        
+        {/* 1. Header */}
+        <div>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
+          <p className="text-zinc-400 mt-1">Manage your project configuration and profile details.</p>
+        </div>
 
-        {/* Link WhatsApp — show so WhatsApp-created projects appear in My Projects */}
-        <Card className="mb-6 dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200 border-emerald-500/30">
-          <CardHeader>
-            <CardTitle className="dark:text-white text-slate-800 text-lg flex items-center gap-2">
-              📱 Link WhatsApp number
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="dark:text-zinc-400 text-slate-600 text-sm">
-              Created a project via WhatsApp? Link the same number here to see those projects in My Projects.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Input
-                value={linkPhone}
-                onChange={(e) => setLinkPhone(e.target.value)}
-                placeholder="+2349165631240"
-                className="flex-1 min-w-[180px] dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-              />
-              <Button
-                type="button"
-                onClick={handleLinkWhatsApp}
-                disabled={linkingWhatsApp}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                {linkingWhatsApp ? "Linking…" : "Link"}
-              </Button>
-            </div>
-            {linkError && <p className="text-red-500 text-sm">{linkError}</p>}
-            {linkSuccess && <p className="text-emerald-500 text-sm">✅ Linked. Refresh My Projects to see WhatsApp projects.</p>}
-          </CardContent>
-        </Card>
-
-        {error && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm mb-6">
-            <AlertTriangle className="h-4 w-4 shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSave} className="space-y-6">
-          <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
-            <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.project")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="name" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  {t("settings.projectname")}
-                </Label>
+        {/* WhatsApp Link Utility (Preserved but styled) */}
+        <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 relative overflow-hidden">
+          <div className="flex flex-col md:flex-row gap-6 items-start">
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
+                <Smartphone className="w-5 h-5 text-[#22c55e]" />
+                Link WhatsApp
+              </h3>
+              <p className="text-zinc-400 text-sm mb-4">
+                Created a project via WhatsApp? Link your number to sync projects.
+              </p>
+              <div className="flex gap-3 max-w-md">
                 <Input
-                  id="name"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                  placeholder="My Project"
+                  value={linkPhone}
+                  onChange={(e) => setLinkPhone(e.target.value)}
+                  placeholder="+234..."
+                  className="bg-[#161b27] border-white/10 text-white focus:ring-[#22c55e] focus:border-[#22c55e]"
                 />
-              </div>
-              <div>
-                <Label htmlFor="description" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  {t("settings.location")}
-                </Label>
-                <Input
-                  id="description"
-                  value={form.description}
-                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                  placeholder="Site location or description"
-                />
-              </div>
-              <div>
-                <Label htmlFor="budget" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  {t("settings.budget")}
-                </Label>
-                <Input
-                  id="budget"
-                  type="number"
-                  min={0}
-                  step={1000}
-                  value={form.budget}
-                  onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
-                  className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                  placeholder="0"
-                />
-              </div>
-              <div>
-                <Label className="dark:text-zinc-400 text-slate-600 text-sm">{t("settings.status")}</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm((f) => ({ ...f, status: v }))}
+                <Button 
+                  onClick={handleLinkWhatsApp} 
+                  disabled={linkingWhatsApp}
+                  className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
                 >
-                  <SelectTrigger className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="dark:bg-zinc-900 dark:border-zinc-700 bg-white border-slate-200">
-                    <SelectItem value="active" className="dark:text-zinc-200 text-slate-800">
-                      {t("projects.active")}
-                    </SelectItem>
-                    <SelectItem value="completed" className="dark:text-zinc-200 text-slate-800">
-                      {t("projects.completed")}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  {linkingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Link"}
+                </Button>
               </div>
-              <div>
-                <Label className="dark:text-zinc-400 text-slate-600 text-sm">Channel Type</Label>
-                <Select
-                  value={form.channel_type}
-                  onValueChange={(v) => setForm((f) => ({ ...f, channel_type: v }))}
-                >
-                  <SelectTrigger className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="dark:bg-zinc-900 dark:border-zinc-700 bg-white border-slate-200">
-                    <SelectItem value="direct" className="dark:text-zinc-200 text-slate-800">
-                      Direct
-                    </SelectItem>
-                    <SelectItem value="group" className="dark:text-zinc-200 text-slate-800">
-                      Group
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
-            <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.profile")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="whatsapp_number" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  {t("settings.whatsapp")}
-                </Label>
-                <Input
-                  id="whatsapp_number"
-                  value={form.whatsapp_number}
-                  onChange={(e) => setForm((f) => ({ ...f, whatsapp_number: e.target.value }))}
-                  className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                  placeholder="+256700000000"
-                />
-              </div>
-              <div>
-                <Label htmlFor="full_name" className="dark:text-zinc-400 text-slate-600 text-sm">
-                  {t("settings.displayname")}
-                </Label>
-                <Input
-                  id="full_name"
-                  value={form.full_name}
-                  onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className="mt-1.5 dark:bg-zinc-800/50 dark:border-zinc-700 dark:text-white bg-white border-slate-300 text-slate-800"
-                  placeholder="Your name"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="dark:bg-zinc-800/50 bg-white dark:border-zinc-700 border-slate-200 border rounded-xl p-6">
-            <h3 className="dark:text-white text-slate-900 font-semibold text-lg mb-4">
-              🔒 Change Password
-            </h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
-                  Current Password
-                </label>
-                <input
-                  type="password"
-                  value={passwordForm.currentPassword}
-                  onChange={(e) =>
-                    setPasswordForm((p) => ({ ...p, currentPassword: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
-                  placeholder="Enter current password"
-                />
-              </div>
-
-              <div>
-                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
-                  New Password
-                </label>
-                <input
-                  type="password"
-                  value={passwordForm.newPassword}
-                  onChange={(e) =>
-                    setPasswordForm((p) => ({ ...p, newPassword: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
-                  placeholder="Min 8 characters"
-                />
-              </div>
-
-              <div>
-                <label className="dark:text-zinc-300 text-slate-700 text-sm font-medium block mb-1">
-                  Confirm New Password
-                </label>
-                <input
-                  type="password"
-                  value={passwordForm.confirmPassword}
-                  onChange={(e) =>
-                    setPasswordForm((p) => ({ ...p, confirmPassword: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 rounded-lg dark:bg-zinc-700 bg-slate-50 dark:border-zinc-600 border-slate-300 dark:text-white text-slate-900 border text-sm"
-                  placeholder="Repeat new password"
-                />
-              </div>
-
-              {passwordError && (
-                <p className="text-red-500 text-sm">{passwordError}</p>
-              )}
-
-              {passwordSuccess && (
-                <p className="text-green-500 text-sm">✅ Password changed successfully!</p>
-              )}
-
-              <button
-                type="button"
-                onClick={handlePasswordChange}
-                disabled={changingPassword}
-                className="w-full py-2 px-4 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium text-sm disabled:opacity-50 transition-colors"
-              >
-                {changingPassword ? "Changing…" : "Change Password"}
-              </button>
+              {linkSuccess && <p className="text-[#22c55e] text-sm mt-2">✅ Number linked successfully.</p>}
+              {linkError && <p className="text-red-500 text-sm mt-2">{linkError}</p>}
             </div>
           </div>
+        </div>
 
-          <Card className="dark:bg-zinc-900/80 dark:border-zinc-800/50 bg-white border-slate-200">
-            <CardHeader>
-              <CardTitle className="dark:text-white text-slate-800 text-lg">{t("settings.language")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div>
-                  <p className="dark:text-zinc-300 text-slate-700 text-sm">
-                    {t("settings.languageHint")}
-                  </p>
-                  <p className="dark:text-zinc-500 text-slate-400 text-xs mt-1">
-                    {t("settings.languageHintExtra")}
-                  </p>
+        {/* Main Settings Form */}
+        <form onSubmit={handleSave} className="space-y-8">
+          
+          {/* 2. Project Settings Card */}
+          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+              <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
+                <Settings className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Project Settings</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">Project Name</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                  />
                 </div>
-                <LanguageSwitcher variant="full" />
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">Budget (UGX)</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-zinc-500">UGX</span>
+                    <Input
+                      type="number"
+                      value={form.budget}
+                      onChange={(e) => setForm({ ...form, budget: e.target.value })}
+                      className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-12"
+                    />
+                  </div>
+                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          <Button
-            type="submit"
-            disabled={saving}
-            className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 w-full sm:w-auto"
-          >
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              t("settings.save")
-            )}
-          </Button>
+              <div className="space-y-2">
+                <Label className="text-zinc-400">Description</Label>
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  rows={3}
+                  className="w-full rounded-md bg-[#161b27] border border-white/10 text-white focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent p-3 text-sm placeholder:text-zinc-600 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">Status</Label>
+                  <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                    <SelectTrigger className="bg-[#161b27] border-white/10 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#161b27] border-white/10 text-white">
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="on_hold">On Hold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">Channel Type</Label>
+                  <Select value={form.channel_type} onValueChange={(v) => setForm({ ...form, channel_type: v })}>
+                    <SelectTrigger className="bg-[#161b27] border-white/10 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#161b27] border-white/10 text-white">
+                      <SelectItem value="direct">Direct Message</SelectItem>
+                      <SelectItem value="group">Group Chat</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4">
+                <Button 
+                  type="submit" 
+                  disabled={saving}
+                  className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold min-w-[120px]"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Profile Settings Card */}
+          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+              <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
+                <User className="w-6 h-6" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Profile Settings</h2>
+            </div>
+
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">Full Name</Label>
+                  <Input
+                    value={form.full_name}
+                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                    className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-zinc-400">WhatsApp Number</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+                    <Input
+                      value={form.whatsapp_number}
+                      onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                      className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+
+               <div className="space-y-2">
+                  <Label className="text-zinc-400">Language</Label>
+                  <div className="bg-[#161b27] border border-white/10 rounded-md p-2">
+                    <LanguageSwitcher variant="full" />
+                  </div>
+                </div>
+
+              <div className="flex justify-end pt-4">
+                <Button 
+                  type="submit" 
+                  disabled={saving}
+                  className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold min-w-[120px]"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                  Save Profile
+                </Button>
+              </div>
+            </div>
+          </div>
         </form>
 
-        <Card className="mt-8 border-red-500/50 bg-red-500/5">
-          <CardHeader>
-            <CardTitle className="text-red-400 text-lg">{t("settings.danger")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="dark:text-zinc-400 text-slate-600 text-sm mb-4">
-              {t("settings.complete")}. You won&apos;t be able to log new expenses or updates.
-            </p>
-            <AlertDialog open={confirmCompletedOpen} onOpenChange={setConfirmCompletedOpen}>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={saving || form.status === "completed"}
-                onClick={() => setConfirmCompletedOpen(true)}
-                className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+        {/* 4. Danger Zone */}
+        <div className="bg-[#0f1219] border border-red-500/20 rounded-xl p-6 md:p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50" />
+          <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+             <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+            <h2 className="text-xl font-bold text-red-500">Danger Zone</h2>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            {/* Change Password */}
+            <div className="space-y-4">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <Lock className="w-4 h-4 text-zinc-400" />
+                Change Password
+              </h3>
+              <div className="space-y-3">
+                <Input
+                  type="password"
+                  placeholder="Current Password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                />
+                <Input
+                  type="password"
+                  placeholder="New Password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                />
+                <Input
+                  type="password"
+                  placeholder="Confirm New Password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+              
+              {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
+              {passwordSuccess && <p className="text-[#22c55e] text-sm">Password updated successfully.</p>}
+              
+              <Button 
+                onClick={handlePasswordChange}
+                disabled={changingPassword}
+                variant="destructive"
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold"
               >
-                {t("settings.complete")}
+                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Change Password"}
               </Button>
-              <AlertDialogContent className="dark:bg-zinc-900 dark:border-zinc-700 bg-white border-slate-200">
-                <AlertDialogHeader>
-                  <AlertDialogTitle className="dark:text-white text-slate-800">{t("settings.completeConfirm")}</AlertDialogTitle>
-                  <AlertDialogDescription className="dark:text-zinc-400 text-slate-600">
-                    {t("settings.completeDescription")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel className="dark:border-zinc-600 dark:text-zinc-300">{t("common.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setConfirmCompletedOpen(false);
-                      handleMarkCompleted();
-                    }}
-                    className="bg-red-600 hover:bg-red-700 text-white"
-                  >
-                    {t("settings.completeConfirmButton")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </CardContent>
-        </Card>
+            </div>
+
+            {/* Complete Project */}
+             <div className="space-y-4">
+              <h3 className="text-white font-medium flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-zinc-400" />
+                Complete Project
+              </h3>
+              <p className="text-zinc-500 text-sm leading-relaxed">
+                Marking this project as completed will archive it. You won't be able to make further changes unless reactivated.
+              </p>
+              
+              <AlertDialog open={confirmCompletedOpen} onOpenChange={setConfirmCompletedOpen}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving || form.status === "completed"}
+                  onClick={() => setConfirmCompletedOpen(true)}
+                  className="w-full border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40"
+                >
+                  Mark as Completed
+                </Button>
+                <AlertDialogContent className="bg-[#1e2235] border border-white/10 text-white">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-white">Mark project as completed?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-zinc-400">
+                      This action will archive the project. You can reactivate it later from the project settings if needed.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="bg-transparent border-white/10 text-white hover:bg-white/5 hover:text-white">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setConfirmCompletedOpen(false);
+                        handleMarkCompleted();
+                      }}
+                      className="bg-red-500 hover:bg-red-600 text-white"
+                    >
+                      Mark Completed
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        </div>
+
       </div>
-    </AppLayout>
+    </div>
   );
 }
