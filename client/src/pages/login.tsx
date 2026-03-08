@@ -30,15 +30,15 @@ export default function Login() {
         <img 
           src="/construction-site.jpg" 
           alt="Construction site" 
-          className="w-full h-full object-cover" 
+          className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/30 to-black/70" />
         
         {/* Bottom Content */}
         <div className="absolute bottom-10 left-10 right-10 text-white z-10">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-cyan-500/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-cyan-500/30">
-              <span className="text-xl">🧱</span>
+            <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center border border-cyan-500/30 overflow-hidden shrink-0">
+              <img src="/favicon.png" alt="" className="w-7 h-7 object-contain" />
             </div>
             <span className="text-2xl font-bold tracking-tight">JengaTrack</span>
           </div>
@@ -52,7 +52,7 @@ export default function Login() {
 
           <div className="flex flex-wrap gap-2">
             {["500+ projects tracked", "Real-time updates", "Works on WhatsApp"].map((tag, i) => (
-              <span key={i} className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-xs font-medium border border-white/10">
+              <span key={i} className="px-3 py-1 rounded-full bg-white/20 text-xs font-medium border border-white/10">
                 {tag}
               </span>
             ))}
@@ -66,8 +66,8 @@ export default function Login() {
           {/* Logo & Header */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center">
-                <span className="text-lg">🧱</span>
+              <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+                <img src="/favicon.png" alt="" className="w-5 h-5 object-contain" />
               </div>
               <span className="font-bold text-foreground">JengaTrack</span>
             </div>
