@@ -6,6 +6,12 @@ import { MoreHorizontal } from "lucide-react";
 import type { Project } from "@/contexts/ProjectContext";
 import { useProject } from "@/contexts/ProjectContext";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ProjectCardProps {
   project: Project;
@@ -13,13 +19,13 @@ interface ProjectCardProps {
 
 /** Format budget as short form with M (e.g. 350M) */
 function formatShortBudget(n: number): string {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(0)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(0)}M`;
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
-  return n.toString();
+  return n.toLocaleString();
 }
 
-/** Format relative time as "Updated Xh ago" or "No recent activity" */
+/** Format relative time */
 function formatRelativeTime(lastActivityAt?: string): string {
   if (!lastActivityAt) return "No recent activity";
   try {
@@ -30,13 +36,13 @@ function formatRelativeTime(lastActivityAt?: string): string {
     const diffHours = Math.floor(diffMs / (60 * 60 * 1000));
     const diffDays = Math.floor(diffMs / (24 * 60 * 60 * 1000));
 
-    if (diffMins < 5) return "Updated just now";
-    if (diffMins < 60) return `Updated ${diffMins}m ago`;
-    if (diffHours < 24) return `Updated ${diffHours}h ago`;
-    if (diffDays === 1) return "Updated 1d ago";
-    return `Updated ${diffDays}d ago`;
+    if (diffMins < 5) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return "Yesterday";
+    return `${diffDays}d ago`;
   } catch {
-    return "Updated 2h ago";
+    return "Recently";
   }
 }
 
@@ -44,16 +50,17 @@ function formatRelativeTime(lastActivityAt?: string): string {
 function calculateHealthStatus(
   progress: number,
   budgetSpentPercent: number
-): { status: "On Track" | "At Risk" | "Critical"; color: string; dotColor: string } {
+): { status: "On Track" | "At Risk" | "Delayed"; color: string; dotColor: string } {
+  // Simple heuristic: if spending is significantly higher than progress
   const variance = budgetSpentPercent - progress;
 
-  if (variance > 25 || budgetSpentPercent > 90) {
-    return { status: "Critical", color: "text-red-400", dotColor: "bg-red-500" };
+  if (variance > 25 || budgetSpentPercent > 95) {
+    return { status: "Delayed", color: "text-red-500", dotColor: "bg-red-500" };
   }
-  if (variance > 10 || budgetSpentPercent > 75) {
-    return { status: "At Risk", color: "text-amber-400", dotColor: "bg-amber-500" };
+  if (variance > 10 || budgetSpentPercent > 80) {
+    return { status: "At Risk", color: "text-amber-500", dotColor: "bg-amber-500" };
   }
-  return { status: "On Track", color: "text-emerald-400", dotColor: "bg-emerald-500" };
+  return { status: "On Track", color: "text-emerald-500", dotColor: "bg-emerald-500" };
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
@@ -61,7 +68,8 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const total = project.totalBudget ?? 0;
   const spent = project.spentAmount ?? 0;
   const budgetSpentPct = total > 0 ? Math.min(100, (spent / total) * 100) : 0;
-  const progress = project.progress ?? Math.round(budgetSpentPct * 0.85);
+  // Fallback progress logic if not provided
+  const progress = project.progress ?? Math.round(Math.min(100, budgetSpentPct * 0.9)); 
 
   const health = calculateHealthStatus(progress, budgetSpentPct);
 
@@ -76,84 +84,124 @@ export function ProjectCard({ project }: ProjectCardProps) {
     }
   };
 
+  // Determine expenditure bar color
+  let expenditureBarColor = "bg-emerald-500";
+  if (budgetSpentPct > 80) expenditureBarColor = "bg-red-500";
+  else if (budgetSpentPct > 60) expenditureBarColor = "bg-amber-500";
+
+  // Status badge styling
+  const statusColors: Record<string, string> = {
+    active: "bg-[#00bcd4]/10 text-[#00bcd4] border-[#00bcd4]/20",
+    completed: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+    on_hold: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+    archived: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
+  };
+  const statusStyle = statusColors[project.status || "active"] || statusColors.active;
+  const statusLabel = (project.status || "Active").replace("_", " ");
+
   return (
-    <Link href={`/dashboard?project=${project.id}`}>
-      <a
-        onClick={handleClick}
-        className="block rounded-2xl dark:bg-[#1a1a1a] bg-white border dark:border-zinc-800/50 border-slate-200 p-5 hover:border-slate-300 dark:hover:border-zinc-700/50 transition-all duration-200 group cursor-pointer shadow-sm dark:shadow-none"
-      >
-        {/* Header: Project name and menu */}
-        <div className="flex items-start justify-between mb-3">
-          <h3 className="font-semibold dark:text-white text-slate-900 text-lg truncate pr-2">
-            {project.name}
-          </h3>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            className="p-1 rounded-full dark:hover:bg-zinc-800 hover:bg-slate-100 transition-colors"
-          >
-            <MoreHorizontal className="h-5 w-5 dark:text-zinc-500 text-slate-500" />
-          </button>
-        </div>
+    <div className="relative group">
+      {/* Clickable area for navigation */}
+      <Link href={`/dashboard?project=${project.id}`}>
+        <a
+          onClick={handleClick}
+          className="block h-full bg-[#0f1219] border border-white/5 rounded-xl p-5 hover:border-white/10 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden shadow-lg"
+        >
+          {/* Faint Glow */}
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#00bcd4] opacity-[0.02] blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.05] transition-opacity" />
 
-        {/* Completion Percentage */}
-        <div className="mb-4">
-          <span className="text-3xl font-bold dark:text-white text-slate-900">
-            {progress}%
-          </span>
-          <span className="text-sm dark:text-zinc-400 text-slate-600 ml-1">Complete</span>
-        </div>
-
-        {/* Dual Progress Bars: label inside each bar */}
-        <div className="space-y-3 mb-4">
-          {/* Progress bar */}
-          <div className="relative h-6 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full dark:from-[#22c55e] dark:to-[#14b8a6] from-emerald-500 to-teal-600 bg-gradient-to-r"
-              style={{ width: `${progress}%` }}
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
-              Progress
-            </span>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
-              {progress}%
+          {/* Header */}
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <h3 className="font-bold text-white text-lg truncate pr-2 flex-1">
+              {project.name}
+            </h3>
+            <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border", statusStyle)}>
+              {statusLabel}
             </span>
           </div>
-          {/* Expenditure bar */}
-          <div className="relative h-6 rounded-full dark:bg-zinc-800 bg-slate-200 overflow-hidden">
-            <div
-              className="absolute inset-y-0 left-0 rounded-full dark:from-[#0f766e] dark:to-[#0d9488] from-teal-600 to-cyan-600 bg-gradient-to-r"
-              style={{ width: `${budgetSpentPct}%` }}
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
-              Expenditure
-            </span>
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-white drop-shadow-[0_0_1px_rgba(0,0,0,0.8)] z-10">
-              {Math.round(budgetSpentPct)}%
+
+          {/* Progress Bars */}
+          <div className="space-y-3 mb-5 relative z-10">
+            {/* Progress */}
+            <div>
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="text-zinc-400 font-medium">Progress</span>
+                <span className="text-[#00bcd4] font-bold">{progress}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-[#00bcd4] rounded-full transition-all duration-500" 
+                  style={{ width: `${progress}%` }} 
+                />
+              </div>
+            </div>
+
+            {/* Expenditure */}
+            <div>
+              <div className="flex justify-between text-xs mb-1.5">
+                <span className="text-zinc-400 font-medium">Expenditure</span>
+                <span className={cn("font-bold", budgetSpentPct > 80 ? "text-red-500" : budgetSpentPct > 60 ? "text-amber-500" : "text-emerald-500")}>
+                  {Math.round(budgetSpentPct)}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                <div 
+                  className={cn("h-full rounded-full transition-all duration-500", expenditureBarColor)} 
+                  style={{ width: `${budgetSpentPct}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Budget Row */}
+          <div className="mb-4 pt-4 border-t border-white/5 relative z-10">
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-zinc-500">Budget Spent</span>
+              <span className="text-zinc-300 font-medium">
+                UGX {formatShortBudget(spent)} <span className="text-zinc-600">/ {formatShortBudget(total)}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between relative z-10">
+            <div className="flex items-center gap-2">
+              <div className={cn("w-2 h-2 rounded-full", health.dotColor)} />
+              <span className={cn("text-xs font-medium", health.color)}>
+                {health.status}
+              </span>
+            </div>
+            <span className="text-xs text-zinc-600 font-medium">
+              Updated {formatRelativeTime(project.lastActivityAt)}
             </span>
           </div>
-        </div>
+        </a>
+      </Link>
 
-        {/* Budget display */}
-        <div className="mb-4">
-          <p className="text-sm dark:text-zinc-300 text-slate-700 font-medium">
-            UGX {formatShortBudget(spent)} / {formatShortBudget(total)}
-          </p>
-        </div>
-
-        {/* Footer: Status badge and time */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={cn("h-2.5 w-2.5 rounded-full", health.dotColor)} />
-            <span className={cn("text-sm font-medium", health.color)}>{health.status}</span>
-          </div>
-          <span className="text-sm dark:text-zinc-500 text-slate-500">
-            {formatRelativeTime(project.lastActivityAt)}
-          </span>
-        </div>
-      </a>
-    </Link>
+      {/* Context Menu (Separate from main click area to avoid bubbling issues if handled correctly, but positioning absolute over the card works better for UX usually. 
+          Here we place it absolute top-right, z-20 to be clickable above the link) */}
+      <div className="absolute top-4 right-2 z-20">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1.5 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
+              <MoreHorizontal className="w-5 h-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-[#1e2235] border-white/10 text-zinc-200">
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard?project=${project.id}`}>
+                <a className="cursor-pointer hover:bg-white/5 hover:text-white focus:bg-white/5 focus:text-white w-full">View Dashboard</a>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={`/settings?project=${project.id}`}>
+                <a className="cursor-pointer hover:bg-white/5 hover:text-white focus:bg-white/5 focus:text-white w-full">Edit Project</a>
+              </Link>
+            </DropdownMenuItem>
+            {/* Add Delete logic if needed, or keep generic actions */}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
   );
 }

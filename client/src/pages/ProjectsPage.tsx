@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Plus, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, FolderOpen, ChevronLeft, ChevronRight, Smartphone, LayoutGrid, DollarSign, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { NewProjectModal, type NewProjectFormData } from "@/components/projects/NewProjectModal";
 import { useProject } from "@/contexts/ProjectContext";
@@ -13,29 +12,33 @@ import { parseBudget } from "@/lib/budgetUtils";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Project } from "@/contexts/ProjectContext";
+import { cn } from "@/lib/utils";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
-const PROJECTS_PER_PAGE = 8;
+const PROJECTS_PER_PAGE = 9; // Increased slightly for grid
 
 type SortOption = "date" | "name" | "progress" | "budget";
 
+function formatBudgetShort(n: number) {
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  return n.toLocaleString();
+}
+
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div
-          key={i}
-          className="rounded-2xl dark:bg-[#1a1a1a] bg-slate-100 border dark:border-zinc-800/50 border-slate-200 p-5 animate-pulse"
-        >
-          <div className="h-6 dark:bg-zinc-800 bg-slate-200 rounded w-3/4 mb-3" />
-          <div className="h-8 dark:bg-zinc-800 bg-slate-200 rounded w-1/3 mb-4" />
-          <div className="h-2 dark:bg-zinc-800 bg-slate-200 rounded w-full mb-2" />
-          <div className="h-2 dark:bg-zinc-800 bg-slate-200 rounded w-full mb-4" />
-          <div className="h-4 dark:bg-zinc-800 bg-slate-200 rounded w-2/3 mb-4" />
-          <div className="h-4 dark:bg-zinc-800 bg-slate-200 rounded w-1/3" />
-        </div>
-      ))}
+    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8 animate-pulse">
+      <div className="flex justify-between items-center">
+        <div className="h-8 w-48 bg-[#1e2230] rounded" />
+        <div className="h-10 w-32 bg-[#1e2230] rounded" />
+      </div>
+      <div className="h-32 bg-[#0f1219] border border-white/5 rounded-xl" />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
+          <div key={i} className="h-64 bg-[#0f1219] border border-white/5 rounded-xl" />
+        ))}
+      </div>
     </div>
   );
 }
@@ -60,6 +63,14 @@ export default function ProjectsPage() {
 
   const list = Array.isArray(fetched) ? fetched : projects;
   const hasProjects = list.length > 0;
+
+  // Stats calculation
+  const stats = useMemo(() => {
+    const totalProjects = list.length;
+    const totalBudget = list.reduce((sum, p) => sum + (p.totalBudget || 0), 0);
+    const activeProjects = list.filter(p => p.status === 'active' || !p.status).length;
+    return { totalProjects, totalBudget, activeProjects };
+  }, [list]);
 
   const sortedList = useMemo(() => {
     const arr = [...list];
@@ -110,6 +121,7 @@ export default function ProjectsPage() {
         totalBudget: data.project.budgetAmount != null ? parseFloat(String(data.project.budgetAmount)) : undefined,
         spentAmount: 0,
         status: "active",
+        progress: 0, // Explicitly set progress for new projects
       };
       setProjects([...list, newProject]);
       setCurrentProject(newProject);
@@ -127,38 +139,57 @@ export default function ProjectsPage() {
     }
   };
 
-  return (
-    <AppLayout>
-      <div className="max-w-7xl mx-auto">
-        {/* Header with Sort Dropdown */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <h1 className="text-2xl font-bold dark:text-white text-slate-900">{t("projects.title")}</h1>
+  if (isLoading) return <ProjectsLoadingSkeleton />;
 
-          <div className="flex items-center gap-4">
-            <div className="relative">
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <p className="text-red-500">
+            {error instanceof Error ? error.message : t("projects.loadError")}
+          </p>
+          <Button variant="outline" onClick={() => refetch()} className="border-zinc-700 text-zinc-300">
+            {t("projects.tryAgain")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* 1. Header Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">{t("projects.title")}</h1>
+            <p className="text-zinc-400 mt-1">{list.length} projects total</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="relative group">
               <select
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value as SortOption);
                   setPage(1);
                 }}
-                className="appearance-none dark:bg-transparent bg-white dark:border-zinc-700 border-slate-300 dark:text-zinc-300 text-slate-800 text-sm rounded-lg px-4 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:focus:border-[#22c55e] cursor-pointer"
+                className="appearance-none bg-[#0f1219] border border-white/10 text-zinc-300 text-sm rounded-lg pl-4 pr-10 py-2.5 focus:outline-none focus:border-[#00bcd4] cursor-pointer hover:bg-white/5 transition-colors"
               >
-                <option value="date">Sort by: Date updated</option>
-                <option value="name">Sort by: Name</option>
-                <option value="progress">Sort by: Progress</option>
-                <option value="budget">Sort by: Budget</option>
+                <option value="date">Sort: Date updated</option>
+                <option value="name">Sort: Name</option>
+                <option value="progress">Sort: Progress</option>
+                <option value="budget">Sort: Budget</option>
               </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                <svg className="w-4 h-4 dark:text-zinc-500 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                <ChevronRight className="w-4 h-4 rotate-90" />
               </div>
             </div>
 
             <Button
               onClick={() => setModalOpen(true)}
-              className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 shrink-0 rounded-lg px-4 py-2"
+              className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold rounded-full px-5 py-2.5 shadow-[0_0_15px_rgba(0,188,212,0.2)] hover:shadow-[0_0_20px_rgba(0,188,212,0.4)] transition-all"
             >
               <Plus className="h-4 w-4 mr-2" />
               {t("projects.new")}
@@ -166,20 +197,45 @@ export default function ProjectsPage() {
           </div>
         </div>
 
-        {isLoading ? (
-          <ProjectsLoadingSkeleton />
-        ) : isError ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <p className="dark:text-red-400 text-red-600 mb-4">
-              {error instanceof Error ? error.message : t("projects.loadError")}
-            </p>
-            <Button variant="outline" onClick={() => refetch()} className="dark:border-zinc-600 dark:text-zinc-300 border-slate-400 text-slate-700">
-              {t("projects.tryAgain")}
-            </Button>
+        {/* 2. Stats Banner */}
+        {hasProjects && (
+          <div className="bg-[#0f1219] border border-white/5 border-l-4 border-l-[#00bcd4] rounded-xl p-6 shadow-lg">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-white/5">
+              <div className="flex items-center gap-4 px-4">
+                <div className="p-3 rounded-full bg-zinc-900/50 text-[#00bcd4]">
+                  <LayoutGrid className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Total Projects</p>
+                  <p className="text-2xl font-bold text-white">{stats.totalProjects}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
+                <div className="p-3 rounded-full bg-zinc-900/50 text-emerald-500">
+                  <DollarSign className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Total Budget</p>
+                  <p className="text-2xl font-bold text-white">UGX {formatBudgetShort(stats.totalBudget)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
+                <div className="p-3 rounded-full bg-zinc-900/50 text-amber-500">
+                  <Activity className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Active Projects</p>
+                  <p className="text-2xl font-bold text-white">{stats.activeProjects}</p>
+                </div>
+              </div>
+            </div>
           </div>
-        ) : hasProjects ? (
+        )}
+
+        {/* 3. Projects Grid or Empty State */}
+        {hasProjects ? (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedList.map((project) => (
                 <ProjectCard key={project.id} project={project} />
               ))}
@@ -187,78 +243,89 @@ export default function ProjectsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
-                <button
+              <div className="flex items-center justify-center gap-2 mt-8">
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  title="Previous page"
-                  aria-label="Previous page"
-                  className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="bg-[#0f1219] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                 >
                   <ChevronLeft className="h-4 w-4" />
-                </button>
-
-                <span className="min-w-[6rem] text-center text-sm font-medium dark:text-zinc-300 text-slate-700">
-                  Page {page} of {totalPages}
+                </Button>
+                
+                <span className="text-sm text-zinc-500 px-4">
+                  Page <span className="text-white font-medium">{page}</span> of {totalPages}
                 </span>
 
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                  <button
-                    key={pageNum}
-                    onClick={() => setPage(pageNum)}
-                    aria-label={`Page ${pageNum}`}
-                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                      page === pageNum
-                        ? "dark:bg-zinc-700 dark:text-white bg-emerald-600 text-white"
-                        : "dark:text-zinc-400 dark:hover:bg-zinc-800 text-slate-600 hover:bg-slate-100"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                ))}
-
-                <button
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  title="Next page"
-                  aria-label="Next page"
-                  className="p-2 rounded-lg dark:border-zinc-700 border-slate-300 dark:text-zinc-400 text-slate-600 hover:bg-slate-100 dark:hover:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="bg-[#0f1219] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
                 >
                   <ChevronRight className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full dark:bg-zinc-800 bg-slate-200 p-6 mb-4">
-              <FolderOpen className="h-12 w-12 dark:text-zinc-500 text-slate-500" />
+          /* 4. Empty State */
+          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-zinc-800 rounded-2xl bg-[#0f1219]/50">
+            <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mb-6 ring-1 ring-[#00bcd4]/20">
+              <FolderOpen className="w-10 h-10 text-[#00bcd4]" />
             </div>
-            <h2 className="text-xl font-semibold dark:text-white text-slate-900 mb-2">
+            <h2 className="text-2xl font-bold text-white mb-2">
               {t("projects.empty.title")}
             </h2>
-            <p className="dark:text-zinc-400 text-slate-600 max-w-md mb-6">
+            <p className="text-zinc-400 max-w-md mb-8 leading-relaxed">
               {t("projects.emptySubtitleLong")}
             </p>
-            <Button
-              onClick={() => setModalOpen(true)}
-              className="bg-gradient-to-r from-[#22c55e] to-[#14b8a6] text-white hover:opacity-90 mb-4"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              {t("projects.createNew")}
-            </Button>
-            <p className="text-sm dark:text-zinc-500 text-slate-500">
-              {t("projects.orWhatsApp")}{" "}
-              <a
-                href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[#22c55e] hover:underline"
+            <div className="flex gap-4">
+              <Button
+                onClick={() => setModalOpen(true)}
+                className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold h-11 px-6"
               >
-                {WHATSAPP_JOIN}
-              </a>{" "}
-              with &quot;{JOIN_CODE}&quot; {t("projects.toGetStarted")}
-            </p>
+                <Plus className="h-4 w-4 mr-2" />
+                {t("projects.createNew")}
+              </Button>
+              <Button
+                variant="outline"
+                className="border-zinc-700 text-zinc-300 hover:text-white hover:bg-white/5 h-11 px-6"
+                asChild
+              >
+                <a href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`} target="_blank" rel="noreferrer">
+                  Link WhatsApp
+                </a>
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 6. Link WhatsApp Section */}
+        {hasProjects && (
+          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="p-3 rounded-full bg-[#22c55e]/10 text-[#22c55e] shrink-0">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">Import from WhatsApp</h3>
+                <p className="text-zinc-400 text-sm max-w-lg">
+                  {t("projects.orWhatsApp")} <span className="text-[#22c55e] font-mono">{WHATSAPP_JOIN}</span> with code <span className="text-white font-mono bg-zinc-800 px-1 rounded">{JOIN_CODE}</span> to get started instantly.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/10 shrink-0"
+              asChild
+            >
+              <a href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`} target="_blank" rel="noopener noreferrer">
+                Chat on WhatsApp
+              </a>
+            </Button>
           </div>
         )}
       </div>
@@ -273,6 +340,6 @@ export default function ProjectsPage() {
         isLoading={creating}
         errorMessage={createError}
       />
-    </AppLayout>
+    </div>
   );
 }
