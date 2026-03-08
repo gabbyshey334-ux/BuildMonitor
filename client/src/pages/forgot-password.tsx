@@ -75,7 +75,7 @@ export default function ForgotPassword() {
         <div className="absolute bottom-10 left-10 right-10 text-white z-10">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 bg-cyan-500/20 rounded-xl flex items-center justify-center border border-cyan-500/30 overflow-hidden shrink-0">
-              <img src="/favicon.png" alt="" className="w-7 h-7 object-contain" />
+              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-7 h-7 object-contain mix-blend-multiply dark:mix-blend-lighten" />
             </div>
             <span className="text-2xl font-bold tracking-tight">JengaTrack</span>
           </div>
@@ -125,7 +125,7 @@ export default function ForgotPassword() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 mb-6">
                   <div className="w-8 h-8 bg-cyan-500/10 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
-                    <img src="/favicon.png" alt="" className="w-5 h-5 object-contain" />
+                    <img src="/assets/images/logo.png" alt="JengaTrack" className="w-5 h-5 object-contain mix-blend-multiply dark:mix-blend-lighten" />
                   </div>
                   <span className="font-bold text-foreground">JengaTrack</span>
                 </div>

@@ -8,7 +8,7 @@ export default function Terms() {
         <header className="mb-10">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-[#00bcd4]/10 rounded-xl flex items-center justify-center border border-[#00bcd4]/20 overflow-hidden shrink-0">
-              <img src="/favicon.png" alt="" className="w-7 h-7 object-contain" />
+              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-7 h-7 object-contain mix-blend-multiply dark:mix-blend-lighten" />
             </div>
             <span className="text-xl font-bold text-foreground">JengaTrack</span>
           </div>
