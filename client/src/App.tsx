@@ -78,7 +78,11 @@ function Router() {
         {isAuthenticated ? <Redirect to="/projects" /> : <ResetPassword />}
       </Route>
       <Route path="/projects">
-        {isAuthenticated ? <ProjectsPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <ProjectsPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/dashboard">
         {isAuthenticated ? <DashboardRoute /> : <Redirect to="/login" />}
