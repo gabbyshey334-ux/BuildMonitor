@@ -563,6 +563,11 @@ export default function BudgetPage() {
   const { data: tasksData } = useProjectTasks(projectId);
 
   const [costTrendPeriod, setCostTrendPeriod] = useState<"1w" | "1m" | "3m" | "all">("1m");
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpenseDescription, setEditExpenseDescription] = useState("");
+  const [editExpenseAmount, setEditExpenseAmount] = useState("");
+  const [savingExpenseEdit, setSavingExpenseEdit] = useState(false);
+  const token = getToken();
 
   const tasks = useMemo(() => {
     const raw = (tasksData as any)?.tasks ?? tasksData;
@@ -782,6 +787,58 @@ export default function BudgetPage() {
   const budgetUsedDotColor =
     percentSpent < 60 ? COLORS.green : percentSpent < 80 ? COLORS.amber : COLORS.red;
 
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!window.confirm("Delete this expense?")) return;
+    try {
+      const res = await fetch(`/api/expenses/${expenseId}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete");
+      }
+      await refetch();
+    } catch (err) {
+      // Optionally toast; refetch already available
+      if (err instanceof Error) window.alert(err.message);
+    }
+  };
+
+  const handleSaveExpenseEdit = async (expenseId: string) => {
+    const description = editExpenseDescription.trim();
+    const amount = parseFloat(String(editExpenseAmount).replace(/,/g, ""));
+    if (!description || isNaN(amount) || amount <= 0) {
+      window.alert("Enter valid description and amount");
+      return;
+    }
+    setSavingExpenseEdit(true);
+    try {
+      const res = await fetch(`/api/expenses/${expenseId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ description, amount }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update");
+      }
+      setEditingExpenseId(null);
+      setEditExpenseDescription("");
+      setEditExpenseAmount("");
+      await refetch();
+    } catch (err) {
+      if (err instanceof Error) window.alert(err.message);
+    } finally {
+      setSavingExpenseEdit(false);
+    }
+  };
+
   // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
@@ -906,6 +963,101 @@ export default function BudgetPage() {
           lastWeekKey={lastWeekKey}
           onPeriodChange={setCostTrendPeriod}
         />
+
+        {/* Expense list — edit/delete per row */}
+        {expenses.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-6">
+            <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-[#00bcd4]" />
+              Expense history
+            </h3>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {expenses.slice(0, 50).map((expense: any) => (
+                <div key={expense.id} className="flex gap-3 group items-center py-2 border-b border-border last:border-0">
+                  {editingExpenseId === expense.id ? (
+                    <>
+                      <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={editExpenseDescription}
+                          onChange={(e) => setEditExpenseDescription(e.target.value)}
+                          placeholder="Description"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={editExpenseAmount}
+                          onChange={(e) => setEditExpenseAmount(e.target.value)}
+                          placeholder="Amount"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        className="bg-[#00bcd4] hover:bg-[#00acc1] text-black shrink-0"
+                        disabled={savingExpenseEdit}
+                        onClick={() => handleSaveExpenseEdit(expense.id)}
+                      >
+                        {savingExpenseEdit ? "Saving..." : "Save"}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{expense.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {(() => {
+                            const dateStr = expense.created_at || expense.expense_date;
+                            if (!dateStr) return "—";
+                            const d = dateStr.includes("T") ? new Date(dateStr) : new Date(dateStr + "T12:00:00");
+                            return timeAgo(d);
+                          })()}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-[#00bcd4] shrink-0">{formatUgx(parseFloat(String(expense.amount || 0)))}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                            aria-label="Expense options"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingExpenseId(expense.id);
+                              setEditExpenseDescription(expense.description || "");
+                              setEditExpenseAmount(String(expense.amount ?? ""));
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Pencil className="w-4 h-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteExpense(expense.id)}
+                            className="cursor-pointer text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            {expenses.length > 50 && (
+              <p className="text-xs text-muted-foreground mt-3">Showing latest 50 of {expenses.length} expenses.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
