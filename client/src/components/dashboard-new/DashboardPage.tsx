@@ -462,6 +462,16 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             </div>
             <span className="font-medium text-sm">Daily Log</span>
           </button>
+          <button
+            onClick={handleUploadPhoto}
+            disabled={uploading}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all group disabled:opacity-60 disabled:pointer-events-none"
+          >
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center group-hover:bg-emerald-500 transition-colors">
+              <Upload className="w-4 h-4 text-emerald-500 group-hover:text-black" />
+            </div>
+            <span className="font-medium text-sm">{uploading ? 'Uploading…' : 'Upload Photo'}</span>
+          </button>
         </div>
       </header>
 
@@ -788,6 +798,17 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                 <FileText className="w-6 h-6 text-[#3b82f6]" />
               </div>
               <span className="font-medium text-foreground group-hover:text-[#3b82f6] transition-colors">Daily Log</span>
+            </button>
+
+            <button
+              onClick={handleUploadPhoto}
+              disabled={uploading}
+              className="flex flex-col items-center justify-center p-6 rounded-xl bg-muted border border-border hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all group disabled:opacity-60 disabled:pointer-events-none"
+            >
+              <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                <Upload className="w-6 h-6 text-emerald-500" />
+              </div>
+              <span className="font-medium text-foreground group-hover:text-emerald-500 transition-colors">{uploading ? 'Uploading…' : 'Upload Photo'}</span>
             </button>
 
             <Link href="/trends">
