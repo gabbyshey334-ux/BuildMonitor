@@ -28,8 +28,18 @@ import {
   Clock,
   ArrowLeft,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  MoreVertical,
+  Pencil,
+  Trash2
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { getToken } from "@/lib/authToken";
 import { cn } from "@/lib/utils";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────

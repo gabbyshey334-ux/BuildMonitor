@@ -8,6 +8,7 @@ import { setToken, getToken, clearToken, hasToken } from "@/lib/authToken";
 export interface User {
   id: string;
   fullName: string;
+  email?: string | null;
   whatsappNumber?: string;
   defaultCurrency?: string;
   preferredLanguage?: string;

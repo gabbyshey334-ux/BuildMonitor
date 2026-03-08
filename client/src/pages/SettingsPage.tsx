@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useProject } from "@/contexts/ProjectContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
@@ -52,6 +53,7 @@ interface SettingsData {
 
 export default function SettingsPage() {
   const { currentProject } = useProject();
+  const { user } = useAuth();
   const { t } = useLanguage();
   const projectIdFromUrl =
     typeof window !== "undefined"
@@ -525,6 +527,15 @@ export default function SettingsPage() {
                 Change Password
               </h3>
               <div className="space-y-3">
+                <input
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  value={user?.email ?? ""}
+                  readOnly
+                  style={{ display: "none" }}
+                  aria-hidden="true"
+                />
                 <Input
                   type="password"
                   placeholder="Current Password"

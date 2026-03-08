@@ -13,16 +13,54 @@ export default function Signup() {
     password: "",
     whatsappNumber: "",
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
   const { register, isLoading } = useAuth();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: value }));
+    setErrors((prev) => ({ ...prev, [id]: "" }));
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    const next: Record<string, string> = {};
+
+    const fullNameTrim = formData.fullName.trim();
+    if (!fullNameTrim) {
+      next.fullName = "Full name is required";
+    } else if (fullNameTrim.length > 100) {
+      next.fullName = "Name must be under 100 characters";
+    }
+
+    const emailTrim = formData.email.trim();
+    if (!emailTrim) {
+      next.email = "Email is required";
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrim)) {
+        next.email = "Please enter a valid email address";
+      }
+    }
+    if (emailTrim.length > 254) {
+      next.email = "Please enter a valid email address";
+    }
+
+    const whatsappTrim = formData.whatsappNumber.trim();
+    if (!whatsappTrim) {
+      next.whatsappNumber = "WhatsApp number is required";
+    }
+
+    if (!formData.password) {
+      next.password = "Password is required";
+    } else if (formData.password.length < 8) {
+      next.password = "Password must be at least 8 characters";
+    }
+
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
+
     try {
       await register(formData);
     } catch (error) {
@@ -92,8 +130,10 @@ export default function Signup() {
                 onChange={handleInputChange}
                 placeholder="John Doe"
                 required
+                maxLength={100}
                 className="bg-muted border-border rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-full"
               />
+              {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
             </div>
 
             <div className="space-y-2">
@@ -105,8 +145,10 @@ export default function Signup() {
                 onChange={handleInputChange}
                 placeholder="+256..."
                 required
+                maxLength={15}
                 className="bg-muted border-border rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-full"
               />
+              {errors.whatsappNumber && <p className="text-red-500 text-xs mt-1">{errors.whatsappNumber}</p>}
             </div>
 
             <div className="space-y-2">
@@ -118,8 +160,10 @@ export default function Signup() {
                 onChange={handleInputChange}
                 placeholder="name@example.com"
                 required
+                maxLength={254}
                 className="bg-muted border-border rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-full"
               />
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
             
             <div className="space-y-2">
@@ -143,6 +187,7 @@ export default function Signup() {
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
             </div>
 
             <Button

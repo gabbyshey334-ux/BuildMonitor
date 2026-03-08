@@ -5,8 +5,14 @@ import { Button } from '@/components/ui/button';
 import {
   Plus, Upload, AlertCircle, FileText, X, RefreshCw,
   TrendingUp, Calendar, Clock, ArrowUpRight, CheckCircle,
-  AlertTriangle, DollarSign, Activity, ChevronRight, BarChart3
+  AlertTriangle, DollarSign, Activity, ChevronRight, BarChart3, MoreVertical, Pencil, Trash2
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useProjectSummary, useProjectTasks, useProjectExpenses, DASHBOARD_SUMMARY_QUERY_KEY } from '@/hooks/useDashboard';
 import { useProject } from '@/contexts/ProjectContext';
 import { useProjects } from '@/hooks/useProjects';
@@ -26,16 +32,24 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-// Helper for time ago
-const timeAgo = (dateStr: string) => {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-  if (diffInSeconds < 60) return 'just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  return `${Math.floor(diffInSeconds / 86400)}d ago`;
-};
+// Helper for time ago — handles date-only (YYYY-MM-DD) and full ISO timestamps
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "";
+  // If date-only string (YYYY-MM-DD), treat as local date not UTC midnight
+  const date = dateStr.includes("T")
+    ? new Date(dateStr)
+    : new Date(dateStr + "T00:00:00");
+  const ms = Date.now() - date.getTime();
+  const m = Math.floor(ms / 60000);
+  const h = Math.floor(ms / 3600000);
+  const d = Math.floor(ms / 86400000);
+  if (ms < 60000) return "just now";
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  if (d === 1) return "Yesterday";
+  if (d < 7) return `${d}d ago`;
+  return `${Math.floor(d / 7)}w ago`;
+}
 
 interface DashboardPageProps {
   projectId?: string | null;
@@ -75,7 +89,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   } = useProjectSummary(effectiveProjectId);
 
   const { data: tasksData } = useProjectTasks(effectiveProjectId);
-  const { data: expensesData } = useProjectExpenses(effectiveProjectId);
+  const { data: expensesData, refetch: refetchExpenses } = useProjectExpenses(effectiveProjectId);
   const { data: issuesData } = useQuery({
     queryKey: ['issues', effectiveProjectId],
     queryFn: async () => {
@@ -139,6 +153,10 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const [issueErrors, setIssueErrors] = useState<Record<string, string>>({});
   const [dailyForm, setDailyForm] = useState({ workerCount: '', notes: '' });
   const [dailyErrors, setDailyErrors] = useState<Record<string, string>>({});
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [editExpenseDescription, setEditExpenseDescription] = useState('');
+  const [editExpenseAmount, setEditExpenseAmount] = useState('');
+  const [savingExpenseEdit, setSavingExpenseEdit] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = getToken();
@@ -245,6 +263,63 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     }
   };
 
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!window.confirm('Delete this expense?')) return;
+    const token = getToken();
+    try {
+      const res = await fetch(`/api/expenses/${expenseId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete');
+      }
+      await refetchExpenses();
+      refetch();
+      toast({ title: 'Expense deleted' });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to delete', variant: 'destructive' });
+    }
+  };
+
+  const handleSaveExpenseEdit = async (expenseId: string) => {
+    const description = editExpenseDescription.trim();
+    const amount = parseFloat(String(editExpenseAmount).replace(/,/g, ''));
+    if (!description || isNaN(amount) || amount <= 0) {
+      toast({ title: 'Enter valid description and amount', variant: 'destructive' });
+      return;
+    }
+    const token = getToken();
+    setSavingExpenseEdit(true);
+    try {
+      const res = await fetch(`/api/expenses/${expenseId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ description, amount }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to update');
+      }
+      setEditingExpenseId(null);
+      setEditExpenseDescription('');
+      setEditExpenseAmount('');
+      await refetchExpenses();
+      refetch();
+      toast({ title: 'Expense updated' });
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to update', variant: 'destructive' });
+    } finally {
+      setSavingExpenseEdit(false);
+    }
+  };
+
   const handleUploadPhoto = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -327,6 +402,26 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const recentExpenses = expenses.slice(0, 6);
   const openIssuesCount = issuesSectionData.openIssues.length;
   const criticalCount = issuesSectionData.criticalCount;
+
+  // Schedule status from budget vs progress (not task-based)
+  const percentSpent = budgetHealth.pct;
+  const summaryProgressPct = (summary as any)?.progress_percentage ?? 0;
+  let scheduleStatus = "On Track";
+  let scheduleColor = "#22c55e";
+  let scheduleBg = "rgba(34,197,94,0.1)";
+  if (percentSpent >= 100) {
+    scheduleStatus = "Over Budget";
+    scheduleColor = "#ef4444";
+    scheduleBg = "rgba(239,68,68,0.1)";
+  } else if (percentSpent >= 85 || (percentSpent > summaryProgressPct + 20)) {
+    scheduleStatus = "At Risk";
+    scheduleColor = "#f59e0b";
+    scheduleBg = "rgba(245,158,11,0.1)";
+  } else if (percentSpent >= 70 || (percentSpent > summaryProgressPct + 10)) {
+    scheduleStatus = "Attention";
+    scheduleColor = "#f59e0b";
+    scheduleBg = "rgba(245,158,11,0.1)";
+  }
 
   // Donut chart calculation
   const donutRadius = 70;
@@ -415,17 +510,17 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
         {/* Schedule Card */}
         <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500 opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
+          <div className="absolute top-0 right-0 w-24 h-24 blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" style={{ backgroundColor: scheduleColor, opacity: 0.08 }} />
           <div className="flex justify-between items-start mb-2">
-            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+            <div className="p-2 rounded-lg" style={{ backgroundColor: scheduleBg, color: scheduleColor }}>
               <Calendar className="w-5 h-5" />
             </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${scheduleStatusFromTasks === 'On Track' ? 'text-emerald-400 bg-emerald-400/10' : 'text-amber-400 bg-amber-400/10'}`}>
-              {scheduleStatusFromTasks}
+            <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ color: scheduleColor, backgroundColor: scheduleBg }}>
+              {scheduleStatus}
             </span>
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold text-foreground">{scheduleStatusFromTasks}</span>
+            <span className="text-2xl font-bold text-foreground">{scheduleStatus}</span>
           </div>
           <p className="text-muted-foreground text-xs mt-1">
             {summary.schedule?.daysAhead ? `${summary.schedule.daysAhead} days ahead` : summary.schedule?.daysBehind ? `${summary.schedule.daysBehind} days behind` : 'On schedule'}
@@ -532,21 +627,88 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               <p className="text-muted-foreground text-sm text-center py-4">No recent activity</p>
             ) : (
               recentExpenses.map((expense: any) => (
-                <div key={expense.id} className="flex gap-3 group">
-                  <div className="mt-1 w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-[#00bcd4]/30 transition-colors">
-                    <DollarSign className="w-4 h-4 text-muted-foreground group-hover:text-[#00bcd4]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate group-hover:text-foreground/80 transition-colors">
-                      {expense.description}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{timeAgo(expense.expense_date || expense.created_at)}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-sm font-bold text-[#00bcd4]">
-                      {formatCurrency(expense.amount)}
-                    </span>
-                  </div>
+                <div key={expense.id} className="flex gap-3 group items-start">
+                  {editingExpenseId === expense.id ? (
+                    <>
+                      <div className="mt-1 w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border">
+                        <DollarSign className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <input
+                          type="text"
+                          value={editExpenseDescription}
+                          onChange={(e) => setEditExpenseDescription(e.target.value)}
+                          placeholder="Description"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent"
+                        />
+                        <input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={editExpenseAmount}
+                          onChange={(e) => setEditExpenseAmount(e.target.value)}
+                          placeholder="Amount"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent"
+                        />
+                        <Button
+                          size="sm"
+                          className="bg-[#00bcd4] hover:bg-[#00acc1] text-black h-8"
+                          disabled={savingExpenseEdit}
+                          onClick={() => handleSaveExpenseEdit(expense.id)}
+                        >
+                          {savingExpenseEdit ? 'Saving...' : 'Save'}
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mt-1 w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-[#00bcd4]/30 transition-colors">
+                        <DollarSign className="w-4 h-4 text-muted-foreground group-hover:text-[#00bcd4]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate group-hover:text-foreground/80 transition-colors">
+                          {expense.description}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{timeAgo(expense.created_at || expense.expense_date)}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-sm font-bold text-[#00bcd4]">
+                          {formatCurrency(expense.amount)}
+                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                              aria-label="Expense options"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditingExpenseId(expense.id);
+                                setEditExpenseDescription(expense.description || '');
+                                setEditExpenseAmount(String(expense.amount ?? ''));
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Pencil className="w-4 h-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteExpense(expense.id)}
+                              className="cursor-pointer text-red-600 focus:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </>
+                  )}
                 </div>
               ))
             )}

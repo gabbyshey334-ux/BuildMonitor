@@ -632,6 +632,115 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
   }
 });
 
+// DELETE /api/expenses/:id — Delete expense (ownership: expense must belong to user's project)
+app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
+  try {
+    const expenseId = req.params.id;
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: expenseRow, error: fetchErr } = await supabase
+      .from('expenses')
+      .select('id, project_id')
+      .eq('id', expenseId)
+      .maybeSingle();
+    if (fetchErr || !expenseRow) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', expenseRow.project_id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!projectRow) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const { error: deleteErr } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', expenseId);
+    if (deleteErr) {
+      console.error('[DELETE expense]', deleteErr.message);
+      return res.status(500).json({ success: false, error: deleteErr.message || 'Failed to delete' });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DELETE expense] Unexpected error:', err?.message, err?.stack || '');
+    return res.status(500).json({ success: false, error: err?.message || 'Server error' });
+  }
+});
+
+// PATCH /api/expenses/:id — Update expense (ownership: expense must belong to user's project)
+app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
+  try {
+    const expenseId = req.params.id;
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: expenseRow, error: fetchErr } = await supabase
+      .from('expenses')
+      .select('id, project_id')
+      .eq('id', expenseId)
+      .maybeSingle();
+    if (fetchErr || !expenseRow) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', expenseRow.project_id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!projectRow) {
+      return res.status(404).json({ success: false, error: 'Expense not found' });
+    }
+    const body = req.body || {};
+    const description = body.description != null ? String(body.description).trim() || 'Expense' : undefined;
+    const rawAmount = body.amount;
+    const amount = rawAmount != null ? parseFloat(String(rawAmount).replace(/,/g, '').replace(/[^0-9.]/g, '')) : undefined;
+    if (amount !== undefined && (isNaN(amount) || amount < 0)) {
+      return res.status(400).json({ success: false, error: 'Invalid amount' });
+    }
+    const updates = { updated_at: new Date().toISOString() };
+    if (description !== undefined) updates.description = description;
+    if (amount !== undefined) updates.amount = amount;
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('expenses')
+      .update(updates)
+      .eq('id', expenseId)
+      .select()
+      .single();
+    if (updateErr) {
+      console.error('[PATCH expense]', updateErr.message);
+      return res.status(500).json({ success: false, error: updateErr.message || 'Failed to update' });
+    }
+    return res.json({ success: true, expense: updated });
+  } catch (err) {
+    console.error('[PATCH expense] Unexpected error:', err?.message, err?.stack || '');
+    return res.status(500).json({ success: false, error: err?.message || 'Server error' });
+  }
+});
+
 // POST /api/projects/:projectId/issues — Report issue (issues table)
 app.post('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
   try {
