@@ -128,21 +128,21 @@ function categorise(description: string): string {
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8 animate-pulse">
+    <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
         <div className="h-8 w-48 bg-[#1e2230] rounded" />
         <div className="h-10 w-10 bg-[#1e2230] rounded" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-24 bg-[#0f1219] border border-white/5 rounded-xl" />
+          <div key={i} className="h-24 bg-card border border-border rounded-xl" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
-        <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+        <div className="lg:col-span-2 h-80 bg-card border border-border rounded-xl" />
+        <div className="h-80 bg-card border border-border rounded-xl" />
       </div>
-      <div className="h-80 bg-[#0f1219] border border-white/5 rounded-xl" />
+      <div className="h-80 bg-card border border-border rounded-xl" />
     </div>
   );
 }
@@ -166,14 +166,14 @@ function StatCard({
   icon?: any;
 }) {
   return (
-    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-4 flex flex-col justify-between min-h-[100px] relative overflow-hidden group hover:border-white/10 transition-all">
+    <div className="bg-card border border-border rounded-xl p-4 flex flex-col justify-between min-h-[100px] relative overflow-hidden group hover:border-white/10 transition-all">
       {Icon && (
         <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
           <Icon className="w-12 h-12" />
         </div>
       )}
       <div className="relative z-10">
-        <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider">{label}</p>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
         <div className="mt-2">
           <div className="flex items-center gap-2">
             {dotColor && (
@@ -182,12 +182,12 @@ function StatCard({
                 style={{ backgroundColor: dotColor, color: dotColor }}
               />
             )}
-            <p className={cn("text-xl font-bold leading-tight", valueClassName ?? "text-white")}>
+            <p className={cn("text-xl font-bold leading-tight", valueClassName ?? "text-foreground")}>
               {value}
             </p>
           </div>
-          {sub && <p className="text-xs text-zinc-500 mt-1">{sub}</p>}
-          {extraSub && <div className="text-[11px] text-zinc-500 mt-1">{extraSub}</div>}
+          {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+          {extraSub && <div className="text-[11px] text-muted-foreground mt-1">{extraSub}</div>}
         </div>
       </div>
     </div>
@@ -233,9 +233,9 @@ function BudgetComparisonSection({
       : `Spending and progress are aligned`;
 
   return (
-    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 h-full flex flex-col">
+    <div className="bg-card border border-border rounded-xl p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
           <PieChart className="w-5 h-5 text-[#00bcd4]" />
           Budget Comparison
         </h3>
@@ -245,7 +245,7 @@ function BudgetComparisonSection({
         {/* Project Progress bar */}
         <div>
           <div className="flex justify-between text-xs mb-2">
-            <span className="text-zinc-400">Project Progress</span>
+            <span className="text-muted-foreground">Project Progress</span>
             <span className="text-[#00bcd4] font-medium">
               {tasksPct !== null
                 ? `${progressPct}%`
@@ -254,7 +254,7 @@ function BudgetComparisonSection({
                 : "0%"}
             </span>
           </div>
-          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
               className="h-full rounded-full bg-gradient-to-r from-[#00bcd4] to-[#0097a7] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
               style={{ width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%` }}
@@ -265,7 +265,7 @@ function BudgetComparisonSection({
         {/* Budget Used bar */}
         <div>
           <div className="flex justify-between text-xs mb-2">
-            <span className="text-zinc-400">Budget Used</span>
+            <span className="text-muted-foreground">Budget Used</span>
             <span className={cn(
               "font-medium",
               budgetUsedPct > 80 ? "text-red-500" : budgetUsedPct > 60 ? "text-amber-500" : "text-emerald-500"
@@ -273,7 +273,7 @@ function BudgetComparisonSection({
               {formatUgx(totalSpent)} ({budgetUsedPct.toFixed(1)}%)
             </span>
           </div>
-          <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
               className={cn("h-full rounded-full transition-all duration-1000 ease-out", 
                 budgetUsedPct > 80 ? "bg-gradient-to-r from-red-500 to-red-600 shadow-[0_0_10px_rgba(239,68,68,0.3)]" :
@@ -287,15 +287,15 @@ function BudgetComparisonSection({
 
         {/* Category legend */}
         {categoryTotals.length > 0 && (
-          <div className="flex flex-wrap gap-x-6 gap-y-3 pt-4 border-t border-white/5">
+          <div className="flex flex-wrap gap-x-6 gap-y-3 pt-4 border-t border-border">
             {categoryTotals.map((d, i) => (
               <div key={d.name} className="flex items-center gap-2">
                 <span
                   className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }}
                 />
-                <span className="text-xs text-zinc-400">
-                  {d.name} <span className="text-zinc-500">({formatUgx(d.amount)})</span>
+                <span className="text-xs text-muted-foreground">
+                  {d.name} <span className="text-muted-foreground">({formatUgx(d.amount)})</span>
                 </span>
               </div>
             ))}
@@ -334,9 +334,9 @@ function AlertsSection({
   ).length;
 
   return (
-    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 h-full flex flex-col">
+    <div className="bg-card border border-border rounded-xl p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-amber-500" />
           Alerts
         </h3>
@@ -352,7 +352,7 @@ function AlertsSection({
           <div className="h-full flex flex-col items-center justify-center text-center p-4">
             <CheckCircle className="w-12 h-12 text-emerald-500/20 mb-3" />
             <p className="text-sm font-medium text-emerald-500">All Systems Normal</p>
-            <p className="text-xs text-zinc-500 mt-1">No budget alerts detected.</p>
+            <p className="text-xs text-muted-foreground mt-1">No budget alerts detected.</p>
           </div>
         ) : (
           alerts.map((a, i) => (
@@ -378,7 +378,7 @@ function AlertsSection({
                 <a.icon className="w-4 h-4" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-zinc-200 leading-snug">{a.title}</h4>
+                <h4 className="text-sm font-medium text-foreground leading-snug">{a.title}</h4>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={cn(
                     "text-[10px] uppercase font-bold tracking-wide",
@@ -389,8 +389,8 @@ function AlertsSection({
                   </span>
                   {a.timestamp && (
                     <>
-                      <span className="text-zinc-600 text-[10px]">•</span>
-                      <span className="text-[10px] text-zinc-500">{a.timestamp}</span>
+                      <span className="text-muted-foreground text-[10px]">•</span>
+                      <span className="text-[10px] text-muted-foreground">{a.timestamp}</span>
                     </>
                   )}
                 </div>
@@ -434,7 +434,7 @@ function CostTrendChart({
 
   if (filteredData.length === 0) {
     return (
-      <div className="h-64 flex flex-col items-center justify-center text-zinc-500 border border-dashed border-zinc-800 rounded-lg bg-zinc-900/30">
+      <div className="h-64 flex flex-col items-center justify-center text-muted-foreground border border-dashed border-border rounded-lg bg-muted">
         <TrendingUp className="w-8 h-8 mb-2 opacity-50" />
         <p className="text-sm">No expense history for this period.</p>
       </div>
@@ -442,13 +442,13 @@ function CostTrendChart({
   }
 
   return (
-    <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6">
+    <div className="bg-card border border-border rounded-xl p-6">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-[#00bcd4]" />
           Cost Trend
         </h3>
-        <div className="flex bg-[#161b27] p-1 rounded-lg border border-white/5">
+        <div className="flex bg-muted p-1 rounded-lg border border-border">
           {(["1w", "1m", "3m", "all"] as const).map((p) => (
             <button
               key={p}
@@ -457,7 +457,7 @@ function CostTrendChart({
                 "px-3 py-1 text-xs font-medium rounded-md transition-all",
                 period === p 
                   ? "bg-[#00bcd4] text-black shadow-lg" 
-                  : "text-zinc-400 hover:text-white hover:bg-white/5"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
               {p === "all" ? "All" : p.toUpperCase()}
@@ -511,19 +511,19 @@ function CostTrendChart({
         </ResponsiveContainer>
       </div>
 
-      <div className="mt-4 flex items-center justify-between pt-4 border-t border-white/5">
+      <div className="mt-4 flex items-center justify-between pt-4 border-t border-border">
         <div className="flex items-center gap-3 pl-4 border-l-4 border-[#00bcd4]">
           <div>
-            <span className="text-2xl font-bold text-white block leading-none">
+            <span className="text-2xl font-bold text-foreground block leading-none">
               {formatUgx(lastWeekSpend)}
             </span>
-            <span className="text-xs text-zinc-500 mt-1 block">
+            <span className="text-xs text-muted-foreground mt-1 block">
               spent last week {lastWeekKey ? `(${lastWeekKey})` : ""}
             </span>
           </div>
         </div>
         <div className="text-right">
-             <Button variant="ghost" size="sm" className="text-zinc-500 hover:text-[#00bcd4] hover:bg-[#00bcd4]/10">
+             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#00bcd4] hover:bg-[#00bcd4]/10">
                View Full Report <ArrowLeft className="w-3 h-3 ml-1 rotate-180" />
              </Button>
         </div>
@@ -775,14 +775,14 @@ export default function BudgetPage() {
   // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
         <div className="max-w-md w-full space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
             <DollarSign className="w-10 h-10 text-[#00bcd4]" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-white">{t("budget.title")}</h1>
-            <p className="text-zinc-400">
+            <h1 className="text-2xl font-bold text-foreground">{t("budget.title")}</h1>
+            <p className="text-muted-foreground">
               {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
             </p>
           </div>
@@ -800,14 +800,14 @@ export default function BudgetPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
         <div className="space-y-4">
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
             <AlertTriangle className="w-8 h-8 text-red-500" />
           </div>
-          <h1 className="text-xl font-bold text-white">{t("budget.title")}</h1>
-          <p className="text-zinc-400">{error instanceof Error ? error.message : t("common.error")}</p>
-          <Button onClick={() => refetch()} variant="outline" className="border-zinc-700 text-zinc-300">
+          <h1 className="text-xl font-bold text-foreground">{t("budget.title")}</h1>
+          <p className="text-muted-foreground">{error instanceof Error ? error.message : t("common.error")}</p>
+          <Button onClick={() => refetch()} variant="outline" className="border-border text-muted-foreground">
             <RefreshCw className="w-4 h-4 mr-2" />
             {t("common.retry")}
           </Button>
@@ -818,20 +818,20 @@ export default function BudgetPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-             <h1 className="text-3xl font-bold text-white tracking-tight">Budgets & Costs</h1>
-             <p className="text-zinc-400 mt-1">Track expenditure, analyze costs, and manage budget health.</p>
+             <h1 className="text-3xl font-bold text-foreground tracking-tight">Budgets & Costs</h1>
+             <p className="text-muted-foreground mt-1">Track expenditure, analyze costs, and manage budget health.</p>
           </div>
           <Button
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-[#0f1219] border-zinc-800 text-zinc-400 hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
+            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -854,7 +854,7 @@ export default function BudgetPage() {
           <StatCard
             label="Balance"
             value={formatUgx(balance)}
-            valueClassName={balance < 0 ? "text-red-500" : "text-white"}
+            valueClassName={balance < 0 ? "text-red-500" : "text-foreground"}
             sub={balance < 0 ? "Over budget" : `${formatUgx(budget - balance)} spent`}
             dotColor={balance < 0 ? COLORS.red : COLORS.teal}
           />

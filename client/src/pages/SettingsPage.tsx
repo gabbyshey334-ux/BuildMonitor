@@ -291,14 +291,14 @@ export default function SettingsPage() {
 
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
             <Settings className="w-10 h-10 text-[#00bcd4]" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-white">{t("settings.title")}</h1>
-            <p className="text-zinc-400">
+            <h1 className="text-2xl font-bold text-foreground">{t("settings.title")}</h1>
+            <p className="text-muted-foreground">
               {hasProjects ? t("trends.noProjectSelect") : t("trends.noProjectCreate")}
             </p>
           </div>
@@ -315,35 +315,35 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] p-6 space-y-6 animate-pulse">
-        <div className="h-8 w-48 bg-[#1e2230] rounded" />
+      <div className="min-h-screen bg-background p-6 space-y-6 animate-pulse">
+        <div className="h-8 w-48 bg-muted rounded" />
         <div className="grid gap-6">
-          <div className="h-96 bg-[#0f1219] border border-white/5 rounded-xl" />
-          <div className="h-64 bg-[#0f1219] border border-white/5 rounded-xl" />
+          <div className="h-96 bg-card border border-border rounded-xl" />
+          <div className="h-64 bg-card border border-border rounded-xl" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* 1. Header */}
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Settings</h1>
-          <p className="text-zinc-400 mt-1">Manage your project configuration and profile details.</p>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">Settings</h1>
+          <p className="text-muted-foreground mt-1">Manage your project configuration and profile details.</p>
         </div>
 
         {/* WhatsApp Link Utility (Preserved but styled) */}
-        <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 relative overflow-hidden">
+        <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden">
           <div className="flex flex-col md:flex-row gap-6 items-start">
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2 mb-2">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mb-2">
                 <Smartphone className="w-5 h-5 text-[#22c55e]" />
                 Link WhatsApp
               </h3>
-              <p className="text-zinc-400 text-sm mb-4">
+              <p className="text-muted-foreground text-sm mb-4">
                 Created a project via WhatsApp? Link your number to sync projects.
               </p>
               <div className="flex gap-3 max-w-md">
@@ -351,7 +351,7 @@ export default function SettingsPage() {
                   value={linkPhone}
                   onChange={(e) => setLinkPhone(e.target.value)}
                   placeholder="+234..."
-                  className="bg-[#161b27] border-white/10 text-white focus:ring-[#22c55e] focus:border-[#22c55e]"
+                  className="bg-muted border-border text-foreground focus:ring-[#22c55e] focus:border-[#22c55e]"
                 />
                 <Button 
                   onClick={handleLinkWhatsApp} 
@@ -371,56 +371,56 @@ export default function SettingsPage() {
         <form onSubmit={handleSave} className="space-y-8">
           
           {/* 2. Project Settings Card */}
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 md:p-8">
-            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+          <div className="bg-card border border-border rounded-xl p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
               <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
                 <Settings className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-white">Project Settings</h2>
+              <h2 className="text-xl font-bold text-foreground">Project Settings</h2>
             </div>
             
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">Project Name</Label>
+                  <Label className="text-muted-foreground">Project Name</Label>
                   <Input
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                    className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4]"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">Budget (UGX)</Label>
+                  <Label className="text-muted-foreground">Budget (UGX)</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-2.5 text-zinc-500">UGX</span>
+                    <span className="absolute left-3 top-2.5 text-muted-foreground">UGX</span>
                     <Input
                       type="number"
                       value={form.budget}
                       onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                      className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-12"
+                      className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-12"
                     />
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-zinc-400">Description</Label>
+                <Label className="text-muted-foreground">Description</Label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
-                  className="w-full rounded-md bg-[#161b27] border border-white/10 text-white focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent p-3 text-sm placeholder:text-zinc-600 resize-none"
+                  className="w-full rounded-md bg-muted border border-border text-foreground focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent p-3 text-sm placeholder:text-muted-foreground resize-none"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">Status</Label>
+                  <Label className="text-muted-foreground">Status</Label>
                   <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                    <SelectTrigger className="bg-[#161b27] border-white/10 text-white">
+                    <SelectTrigger className="bg-muted border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#161b27] border-white/10 text-white">
+                    <SelectContent className="bg-muted border-border text-foreground">
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="on_hold">On Hold</SelectItem>
@@ -428,12 +428,12 @@ export default function SettingsPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">Channel Type</Label>
+                  <Label className="text-muted-foreground">Channel Type</Label>
                   <Select value={form.channel_type} onValueChange={(v) => setForm({ ...form, channel_type: v })}>
-                    <SelectTrigger className="bg-[#161b27] border-white/10 text-white">
+                    <SelectTrigger className="bg-muted border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#161b27] border-white/10 text-white">
+                    <SelectContent className="bg-muted border-border text-foreground">
                       <SelectItem value="direct">Direct Message</SelectItem>
                       <SelectItem value="group">Group Chat</SelectItem>
                     </SelectContent>
@@ -455,40 +455,40 @@ export default function SettingsPage() {
           </div>
 
           {/* 3. Profile Settings Card */}
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 md:p-8">
-            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+          <div className="bg-card border border-border rounded-xl p-6 md:p-8">
+            <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
               <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
                 <User className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-white">Profile Settings</h2>
+              <h2 className="text-xl font-bold text-foreground">Profile Settings</h2>
             </div>
 
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">Full Name</Label>
+                  <Label className="text-muted-foreground">Full Name</Label>
                   <Input
                     value={form.full_name}
                     onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                    className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                    className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4]"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-zinc-400">WhatsApp Number</Label>
+                  <Label className="text-muted-foreground">WhatsApp Number</Label>
                   <div className="relative">
-                    <Phone className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500" />
+                    <Phone className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
                     <Input
                       value={form.whatsapp_number}
                       onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                      className="bg-[#161b27] border-white/10 text-white focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-10"
+                      className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-10"
                     />
                   </div>
                 </div>
               </div>
 
                <div className="space-y-2">
-                  <Label className="text-zinc-400">Language</Label>
-                  <div className="bg-[#161b27] border border-white/10 rounded-md p-2">
+                  <Label className="text-muted-foreground">Language</Label>
+                  <div className="bg-muted border border-border rounded-md p-2">
                     <LanguageSwitcher variant="full" />
                   </div>
                 </div>
@@ -508,9 +508,9 @@ export default function SettingsPage() {
         </form>
 
         {/* 4. Danger Zone */}
-        <div className="bg-[#0f1219] border border-red-500/20 rounded-xl p-6 md:p-8 relative overflow-hidden">
+        <div className="bg-card border border-red-500/20 rounded-xl p-6 md:p-8 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-red-500/50" />
-          <div className="flex items-center gap-3 mb-6 pb-6 border-b border-white/5">
+          <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
              <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
                 <AlertTriangle className="w-6 h-6" />
               </div>
@@ -520,8 +520,8 @@ export default function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             {/* Change Password */}
             <div className="space-y-4">
-              <h3 className="text-white font-medium flex items-center gap-2">
-                <Lock className="w-4 h-4 text-zinc-400" />
+              <h3 className="text-foreground font-medium flex items-center gap-2">
+                <Lock className="w-4 h-4 text-muted-foreground" />
                 Change Password
               </h3>
               <div className="space-y-3">
@@ -530,21 +530,21 @@ export default function SettingsPage() {
                   placeholder="Current Password"
                   value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                  className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
                 />
                 <Input
                   type="password"
                   placeholder="New Password"
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                  className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
                 />
                 <Input
                   type="password"
                   placeholder="Confirm New Password"
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                  className="bg-[#161b27] border-white/10 text-white focus:ring-red-500 focus:border-red-500"
+                  className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
                 />
               </div>
               
@@ -563,11 +563,11 @@ export default function SettingsPage() {
 
             {/* Complete Project */}
              <div className="space-y-4">
-              <h3 className="text-white font-medium flex items-center gap-2">
-                <Trash2 className="w-4 h-4 text-zinc-400" />
+              <h3 className="text-foreground font-medium flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-muted-foreground" />
                 Complete Project
               </h3>
-              <p className="text-zinc-500 text-sm leading-relaxed">
+              <p className="text-muted-foreground text-sm leading-relaxed">
                 Marking this project as completed will archive it. You won't be able to make further changes unless reactivated.
               </p>
               
@@ -581,15 +581,15 @@ export default function SettingsPage() {
                 >
                   Mark as Completed
                 </Button>
-                <AlertDialogContent className="bg-[#1e2235] border border-white/10 text-white">
+                <AlertDialogContent className="bg-card border border-border text-foreground">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="text-white">Mark project as completed?</AlertDialogTitle>
-                    <AlertDialogDescription className="text-zinc-400">
+                    <AlertDialogTitle className="text-foreground">Mark project as completed?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
                       This action will archive the project. You can reactivate it later from the project settings if needed.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel className="bg-transparent border-white/10 text-white hover:bg-white/5 hover:text-white">Cancel</AlertDialogCancel>
+                    <AlertDialogCancel className="bg-transparent border-border text-foreground hover:bg-muted hover:text-foreground">Cancel</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={(e) => {
                         e.preventDefault();

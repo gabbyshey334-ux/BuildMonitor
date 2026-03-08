@@ -67,8 +67,8 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
     cn(
       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
       active
-        ? "bg-[#22c55e]/15 text-[#22c55e] border-l-4 border-[#22c55e] pl-[calc(0.75rem-4px)] dark:bg-[#22c55e]/15 dark:text-[#22c55e]"
-        : "dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-zinc-200 text-slate-600 hover:bg-slate-100 border-l-4 border-transparent"
+        ? "bg-[#22c55e]/15 text-[#22c55e] border-l-4 border-[#22c55e] pl-[calc(0.75rem-4px)]"
+        : "text-muted-foreground hover:bg-muted hover:text-foreground border-l-4 border-transparent"
     );
 
   return (
@@ -82,16 +82,16 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
       )}
     <aside
       className={cn(
-        "hidden md:flex fixed left-0 top-0 z-30 flex-col h-full dark:bg-[#1a1d2e] bg-white border-r dark:border-zinc-700 border-slate-200 transition-[width] duration-300 ease-out",
+        "hidden md:flex fixed left-0 top-0 z-30 flex-col h-full bg-card border-r border-border transition-[width] duration-300 ease-out",
         open ? "w-[240px]" : "w-16"
       )}
     >
       {/* Logo + hamburger */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b dark:border-zinc-700 border-slate-200 px-3">
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
         <button
           type="button"
           onClick={onToggle}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white text-slate-600 hover:bg-slate-100 transition-colors"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
           aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
         >
           <Menu className="h-5 w-5" />
@@ -104,7 +104,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 alt="JengaTrack"
                 className="h-9 w-auto shrink-0 object-contain mix-blend-multiply dark:mix-blend-lighten"
               />
-              <span className="font-heading font-semibold dark:text-white text-slate-800 truncate">
+              <span className="font-heading font-semibold text-foreground truncate">
                 JengaTrack
               </span>
             </a>
@@ -133,7 +133,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 <a
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200",
-                    "bg-[#00bcd4] text-black hover:bg-[#0097a7] dark:bg-[#00bcd4] dark:text-black dark:hover:bg-[#0097a7]",
+                    "bg-[#00bcd4] text-black hover:bg-[#0097a7]",
                     "border-l-4 border-transparent"
                   )}
                 >
@@ -149,14 +149,14 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                       <a
                         className={cn(
                           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                          "bg-[#00bcd4] text-black hover:bg-[#0097a7] dark:bg-[#00bcd4] dark:text-black"
+                          "bg-[#00bcd4] text-black hover:bg-[#0097a7]"
                         )}
                       >
                         <Plus className="h-5 w-5" />
                       </a>
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
+                  <TooltipContent side="right" className="bg-card border-border text-foreground">
                     New Project
                   </TooltipContent>
                 </Tooltip>
@@ -179,7 +179,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 <TooltipProvider key={item.href} delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>{el}</TooltipTrigger>
-                    <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
+                    <TooltipContent side="right" className="bg-card border-border text-foreground">
                       {t(item.labelKey)}
                     </TooltipContent>
                   </Tooltip>
@@ -190,7 +190,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
           })}
         </nav>
 
-        <div className="mt-auto border-t dark:border-zinc-700 border-slate-200 pt-3 space-y-0.5 px-2">
+        <div className="mt-auto border-t border-border pt-3 space-y-0.5 px-2">
           {BOTTOM_NAV.map((item) => {
             const active = isActive(item.href);
             const href = hrefWithProject(item.href);
@@ -207,7 +207,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 <TooltipProvider key={item.href} delayDuration={0}>
                   <Tooltip>
                     <TooltipTrigger asChild>{el}</TooltipTrigger>
-                    <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
+                    <TooltipContent side="right" className="bg-card border-border text-foreground">
                       {t(item.labelKey)}
                     </TooltipContent>
                   </Tooltip>
@@ -224,13 +224,13 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                     type="button"
                     onClick={() => logout()}
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium dark:text-zinc-400 dark:hover:bg-red-500/10 dark:hover:text-red-400 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 border-l-4 border-transparent"
+                      "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 border-l-4 border-transparent"
                     )}
                   >
                     <LogOut className="h-5 w-5 shrink-0" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="dark:bg-zinc-900 dark:border-zinc-700 dark:text-white bg-white border-slate-200 text-slate-800">
+                <TooltipContent side="right" className="bg-card border-border text-foreground">
                   {t("nav.logout")}
                 </TooltipContent>
               </Tooltip>
@@ -240,7 +240,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               type="button"
               onClick={() => logout()}
               className={cn(
-                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium dark:text-zinc-400 dark:hover:bg-red-500/10 dark:hover:text-red-400 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-200 border-l-4 border-transparent"
+                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-red-500/10 hover:text-red-400 transition-all duration-200 border-l-4 border-transparent"
               )}
             >
               <LogOut className="h-5 w-5 shrink-0" />

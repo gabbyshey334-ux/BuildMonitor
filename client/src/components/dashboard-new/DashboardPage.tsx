@@ -43,16 +43,16 @@ interface DashboardPageProps {
 
 function DashboardSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0a0c12] p-6 animate-pulse">
-      <div className="h-10 bg-[#0f1219] rounded w-64 mb-8" />
+    <div className="min-h-screen bg-background p-6 animate-pulse">
+      <div className="h-10 bg-muted rounded w-64 mb-8" />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-32 bg-[#0f1219] rounded-xl border border-white/5" />
+          <div key={i} className="h-32 bg-card rounded-xl border border-border" />
         ))}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-96 bg-[#0f1219] rounded-xl border border-white/5" />
-        <div className="h-96 bg-[#0f1219] rounded-xl border border-white/5" />
+        <div className="lg:col-span-2 h-96 bg-card rounded-xl border border-border" />
+        <div className="h-96 bg-card rounded-xl border border-border" />
       </div>
     </div>
   );
@@ -263,11 +263,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
   if (effectiveProjectId == null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0c12] p-6">
-        <Card className="max-w-md w-full bg-[#0f1219] border-white/5">
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
+        <Card className="max-w-md w-full bg-card border-border">
           <CardContent className="pt-6 text-center">
-            <h2 className="text-2xl font-bold mb-2 text-white">Select a Project</h2>
-            <p className="text-zinc-400 mb-6">
+            <h2 className="text-2xl font-bold mb-2 text-foreground">Select a Project</h2>
+            <p className="text-muted-foreground mb-6">
               {hasProjects ? 'Please select a project to view its dashboard.' : 'Get started by creating your first project.'}
             </p>
             <Button asChild className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold">
@@ -285,10 +285,10 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
   if (isError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0c12] p-6">
+      <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="text-center">
-          <h2 className="text-xl font-bold text-white mb-2">Error loading dashboard</h2>
-          <Button onClick={() => refetch()} variant="outline" className="border-white/10 text-white">
+          <h2 className="text-xl font-bold text-foreground mb-2">Error loading dashboard</h2>
+          <Button onClick={() => refetch()} variant="outline" className="border-border text-foreground">
             Try again
           </Button>
         </div>
@@ -308,12 +308,12 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const donutColor = budgetHealth.pct > 100 ? '#ef4444' : budgetHealth.pct > 80 ? '#f59e0b' : '#00bcd4';
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
       {/* 1. Header Row */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">{currentProject?.name || 'Project Dashboard'}</h1>
-          <div className="flex items-center gap-2 mt-1 text-zinc-500 text-sm">
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">{currentProject?.name || 'Project Dashboard'}</h1>
+          <div className="flex items-center gap-2 mt-1 text-muted-foreground text-sm">
             <Clock className="w-4 h-4" />
             <span>Last updated: {lastSyncLabel}</span>
           </div>
@@ -321,7 +321,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setShowExpenseModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#0f1219] border border-white/10 hover:border-[#00bcd4]/50 hover:bg-[#00bcd4]/10 transition-all group"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border hover:border-[#00bcd4]/50 hover:bg-[#00bcd4]/10 transition-all group"
           >
             <div className="w-6 h-6 rounded-full bg-[#00bcd4]/20 flex items-center justify-center group-hover:bg-[#00bcd4] transition-colors">
               <Plus className="w-4 h-4 text-[#00bcd4] group-hover:text-black" />
@@ -330,7 +330,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           </button>
           <button
             onClick={() => setShowIssueModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#0f1219] border border-white/10 hover:border-[#ef4444]/50 hover:bg-[#ef4444]/10 transition-all group"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border hover:border-[#ef4444]/50 hover:bg-[#ef4444]/10 transition-all group"
           >
             <div className="w-6 h-6 rounded-full bg-[#ef4444]/20 flex items-center justify-center group-hover:bg-[#ef4444] transition-colors">
               <AlertCircle className="w-4 h-4 text-[#ef4444] group-hover:text-black" />
@@ -339,7 +339,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           </button>
           <button
             onClick={() => setShowDailyModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#0f1219] border border-white/10 hover:border-[#3b82f6]/50 hover:bg-[#3b82f6]/10 transition-all group"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-border hover:border-[#3b82f6]/50 hover:bg-[#3b82f6]/10 transition-all group"
           >
             <div className="w-6 h-6 rounded-full bg-[#3b82f6]/20 flex items-center justify-center group-hover:bg-[#3b82f6] transition-colors">
               <FileText className="w-4 h-4 text-[#3b82f6] group-hover:text-white" />
@@ -352,8 +352,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       {/* 2. KPI Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Progress Card */}
-        <div className="relative bg-[#0f1219] rounded-xl border border-white/5 p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-[#00bcd4] opacity-[0.03] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.08] transition-opacity" />
+        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-[#00bcd4] opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
           <div className="flex justify-between items-start mb-2">
             <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
               <TrendingUp className="w-5 h-5" />
@@ -361,17 +361,17 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             {tasks.length > 0 && <span className="text-xs font-medium text-[#00bcd4] bg-[#00bcd4]/10 px-2 py-1 rounded-full">Active</span>}
           </div>
           <div className="mt-2">
-            <span className="text-3xl font-bold text-white">{progressPct}%</span>
-            <span className="text-zinc-500 text-sm ml-2">Complete</span>
+            <span className="text-3xl font-bold text-foreground">{progressPct}%</span>
+            <span className="text-muted-foreground text-sm ml-2">Complete</span>
           </div>
-          <div className="w-full bg-zinc-800 h-1 mt-4 rounded-full overflow-hidden">
+          <div className="w-full bg-muted h-1 mt-4 rounded-full overflow-hidden">
             <div className="bg-[#00bcd4] h-full rounded-full" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
 
         {/* Budget Card */}
-        <div className="relative bg-[#0f1219] rounded-xl border border-white/5 p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500 opacity-[0.03] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.08] transition-opacity" />
+        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500 opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
           <div className="flex justify-between items-start mb-2">
             <div className={`p-2 rounded-lg ${budgetHealth.pct > 100 ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
               <DollarSign className="w-5 h-5" />
@@ -381,14 +381,14 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             </span>
           </div>
           <div className="mt-2">
-            <span className="text-3xl font-bold text-white">{formatCurrency(budgetHealth.spent)}</span>
+            <span className="text-3xl font-bold text-foreground">{formatCurrency(budgetHealth.spent)}</span>
           </div>
-          <p className="text-zinc-500 text-xs mt-1">of {formatCurrency(budgetHealth.total)} total budget</p>
+          <p className="text-muted-foreground text-xs mt-1">of {formatCurrency(budgetHealth.total)} total budget</p>
         </div>
 
         {/* Schedule Card */}
-        <div className="relative bg-[#0f1219] rounded-xl border border-white/5 p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500 opacity-[0.03] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.08] transition-opacity" />
+        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500 opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
           <div className="flex justify-between items-start mb-2">
             <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
               <Calendar className="w-5 h-5" />
@@ -398,16 +398,16 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             </span>
           </div>
           <div className="mt-2">
-            <span className="text-2xl font-bold text-white">{scheduleStatusFromTasks}</span>
+            <span className="text-2xl font-bold text-foreground">{scheduleStatusFromTasks}</span>
           </div>
-          <p className="text-zinc-500 text-xs mt-1">
+          <p className="text-muted-foreground text-xs mt-1">
             {summary.schedule?.daysAhead ? `${summary.schedule.daysAhead} days ahead` : summary.schedule?.daysBehind ? `${summary.schedule.daysBehind} days behind` : 'On schedule'}
           </p>
         </div>
 
         {/* Issues Card */}
-        <div className="relative bg-[#0f1219] rounded-xl border border-white/5 p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group" onClick={() => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' })}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-red-500 opacity-[0.03] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.08] transition-opacity" />
+        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group" onClick={() => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' })}>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-red-500 opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
           <div className="flex justify-between items-start mb-2">
             <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
               <AlertTriangle className="w-5 h-5" />
@@ -419,10 +419,10 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             )}
           </div>
           <div className="mt-2">
-            <span className="text-3xl font-bold text-white">{openIssuesCount}</span>
-            <span className="text-zinc-500 text-sm ml-2">Active Issues</span>
+            <span className="text-3xl font-bold text-foreground">{openIssuesCount}</span>
+            <span className="text-muted-foreground text-sm ml-2">Active Issues</span>
           </div>
-          <p className="text-zinc-500 text-xs mt-1 cursor-pointer hover:text-[#00bcd4] flex items-center gap-1">
+          <p className="text-muted-foreground text-xs mt-1 cursor-pointer hover:text-[#00bcd4] flex items-center gap-1">
             View details <ArrowUpRight className="w-3 h-3" />
           </p>
         </div>
@@ -431,21 +431,21 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       {/* 3. Middle Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Budget Breakdown - 2/3 */}
-        <div className="lg:col-span-2 bg-[#0f1219] rounded-xl border border-white/5 p-6 relative overflow-hidden">
+        <div className="lg:col-span-2 bg-card rounded-xl border border-border p-6 relative overflow-hidden">
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-lg font-bold text-white">Budget Breakdown</h3>
+            <h3 className="text-lg font-bold text-foreground">Budget Breakdown</h3>
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-[#00bcd4]" />
-              <span className="text-xs text-zinc-400">Spent</span>
+              <span className="text-xs text-muted-foreground">Spent</span>
               <div className="w-3 h-3 rounded-full bg-zinc-700 ml-2" />
-              <span className="text-xs text-zinc-400">Remaining</span>
+              <span className="text-xs text-muted-foreground">Remaining</span>
             </div>
           </div>
           <div className="flex flex-col md:flex-row items-center gap-8">
             {/* SVG Donut */}
             <div className="relative w-48 h-48 shrink-0">
               <svg width="100%" height="100%" viewBox="0 0 160 160" className="transform -rotate-90">
-                <circle cx="80" cy="80" r={donutRadius} fill="transparent" stroke="#27272a" strokeWidth="12" />
+                <circle cx="80" cy="80" r={donutRadius} fill="transparent" stroke="currentColor" className="text-muted" strokeWidth="12" />
                 <circle
                   cx="80"
                   cy="80"
@@ -460,32 +460,32 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold text-white">{budgetHealth.pct}%</span>
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">Used</span>
+                <span className="text-3xl font-bold text-foreground">{budgetHealth.pct}%</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">Used</span>
               </div>
             </div>
 
             <div className="flex-1 w-full space-y-6">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900/50 border border-white/5">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted border border-border">
                 <div>
-                  <p className="text-zinc-400 text-sm mb-1">Total Spent</p>
-                  <p className="text-2xl font-bold text-white">{formatCurrency(budgetHealth.spent)}</p>
+                  <p className="text-muted-foreground text-sm mb-1">Total Spent</p>
+                  <p className="text-2xl font-bold text-foreground">{formatCurrency(budgetHealth.spent)}</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-[#00bcd4]/10 flex items-center justify-center text-[#00bcd4]">
                   <Activity className="w-5 h-5" />
                 </div>
               </div>
-              <div className="flex items-center justify-between p-4 rounded-lg bg-zinc-900/50 border border-white/5">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-muted border border-border">
                 <div>
-                  <p className="text-zinc-400 text-sm mb-1">Remaining Budget</p>
-                  <p className="text-2xl font-bold text-zinc-300">{formatCurrency(budgetHealth.remaining)}</p>
+                  <p className="text-muted-foreground text-sm mb-1">Remaining Budget</p>
+                  <p className="text-2xl font-bold text-foreground/80">{formatCurrency(budgetHealth.remaining)}</p>
                 </div>
                 <div className="h-10 w-10 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400">
                   <DollarSign className="w-5 h-5" />
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-xs text-zinc-500 mb-2">
+                <div className="flex justify-between text-xs text-muted-foreground mb-2">
                   <span>Weekly Burn Rate</span>
                   <span>{formatCurrency(summary.budget?.dailyBurnRate ? summary.budget.dailyBurnRate * 7 : 0)} / week</span>
                 </div>
@@ -498,22 +498,22 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
 
         {/* Recent Activity - 1/3 */}
-        <div className="bg-[#0f1219] rounded-xl border border-white/5 p-6 flex flex-col h-full">
-          <h3 className="text-lg font-bold text-white mb-4">Recent Activity</h3>
+        <div className="bg-card rounded-xl border border-border p-6 flex flex-col h-full">
+          <h3 className="text-lg font-bold text-foreground mb-4">Recent Activity</h3>
           <div className="flex-1 overflow-y-auto pr-2 space-y-4 max-h-[300px] lg:max-h-none scrollbar-thin scrollbar-thumb-zinc-700">
             {recentExpenses.length === 0 ? (
-              <p className="text-zinc-500 text-sm text-center py-4">No recent activity</p>
+              <p className="text-muted-foreground text-sm text-center py-4">No recent activity</p>
             ) : (
               recentExpenses.map((expense: any) => (
                 <div key={expense.id} className="flex gap-3 group">
-                  <div className="mt-1 w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 border border-white/5 group-hover:border-[#00bcd4]/30 transition-colors">
-                    <DollarSign className="w-4 h-4 text-zinc-400 group-hover:text-[#00bcd4]" />
+                  <div className="mt-1 w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 border border-border group-hover:border-[#00bcd4]/30 transition-colors">
+                    <DollarSign className="w-4 h-4 text-muted-foreground group-hover:text-[#00bcd4]" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-zinc-200 truncate group-hover:text-white transition-colors">
+                    <p className="text-sm font-medium text-foreground truncate group-hover:text-foreground/80 transition-colors">
                       {expense.description}
                     </p>
-                    <p className="text-xs text-zinc-500">{timeAgo(expense.expense_date || expense.created_at)}</p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(expense.expense_date || expense.created_at)}</p>
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-sm font-bold text-[#00bcd4]">
@@ -524,7 +524,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               ))
             )}
           </div>
-          <Button variant="ghost" className="w-full mt-4 text-xs text-zinc-400 hover:text-white hover:bg-white/5">
+          <Button variant="ghost" className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50">
             View All Activity <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </div>
@@ -533,30 +533,30 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       {/* 4. Bottom Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="issues-section">
         {/* Issues List */}
-        <div className="bg-[#0f1219] rounded-xl border border-white/5 p-6">
+        <div className="bg-card rounded-xl border border-border p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-white">Issues & Risks</h3>
-            <span className="text-xs bg-zinc-800 text-zinc-300 px-2 py-1 rounded-full border border-white/5">
+            <h3 className="text-lg font-bold text-foreground">Issues & Risks</h3>
+            <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full border border-border">
               {issuesSectionData.openIssues.length} Open
             </span>
           </div>
           <div className="space-y-3">
             {issuesSectionData.openIssues.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-zinc-500">
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <CheckCircle className="w-8 h-8 mb-2 opacity-50" />
                 <p>No open issues</p>
               </div>
             ) : (
               issuesSectionData.openIssues.slice(0, 4).map((issue) => (
-                <div key={issue.id} className="flex items-center gap-4 p-3 rounded-lg bg-zinc-900/30 border border-white/5 hover:bg-zinc-800/50 transition-colors">
+                <div key={issue.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted border border-border hover:bg-muted/80 transition-colors">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${
                     issue.priority === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
                     issue.priority === 'high' ? 'bg-amber-500' :
                     'bg-blue-500'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-zinc-200 truncate">{issue.title}</h4>
-                    <p className="text-xs text-zinc-500 truncate">{issue.description}</p>
+                    <h4 className="text-sm font-medium text-foreground truncate">{issue.title}</h4>
+                    <p className="text-xs text-muted-foreground truncate">{issue.description}</p>
                   </div>
                   <div className="text-right">
                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
@@ -574,45 +574,45 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
 
         {/* Quick Actions Panel */}
-        <div className="bg-[#0f1219] rounded-xl border border-white/5 p-6">
-          <h3 className="text-lg font-bold text-white mb-4">Quick Actions</h3>
+        <div className="bg-card rounded-xl border border-border p-6">
+          <h3 className="text-lg font-bold text-foreground mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => setShowExpenseModal(true)}
-              className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-900/30 border border-white/5 hover:bg-[#22c55e]/10 hover:border-[#22c55e]/30 transition-all group"
+              className="flex flex-col items-center justify-center p-6 rounded-xl bg-muted border border-border hover:bg-[#22c55e]/10 hover:border-[#22c55e]/30 transition-all group"
             >
               <div className="w-10 h-10 rounded-full bg-[#22c55e]/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <Plus className="w-6 h-6 text-[#22c55e]" />
               </div>
-              <span className="font-medium text-white group-hover:text-[#22c55e] transition-colors">Log Expense</span>
+              <span className="font-medium text-foreground group-hover:text-[#22c55e] transition-colors">Log Expense</span>
             </button>
 
             <button
               onClick={() => setShowIssueModal(true)}
-              className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-900/30 border border-white/5 hover:bg-[#ef4444]/10 hover:border-[#ef4444]/30 transition-all group"
+              className="flex flex-col items-center justify-center p-6 rounded-xl bg-muted border border-border hover:bg-[#ef4444]/10 hover:border-[#ef4444]/30 transition-all group"
             >
               <div className="w-10 h-10 rounded-full bg-[#ef4444]/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <AlertCircle className="w-6 h-6 text-[#ef4444]" />
               </div>
-              <span className="font-medium text-white group-hover:text-[#ef4444] transition-colors">Report Issue</span>
+              <span className="font-medium text-foreground group-hover:text-[#ef4444] transition-colors">Report Issue</span>
             </button>
 
             <button
               onClick={() => setShowDailyModal(true)}
-              className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-900/30 border border-white/5 hover:bg-[#3b82f6]/10 hover:border-[#3b82f6]/30 transition-all group"
+              className="flex flex-col items-center justify-center p-6 rounded-xl bg-muted border border-border hover:bg-[#3b82f6]/10 hover:border-[#3b82f6]/30 transition-all group"
             >
               <div className="w-10 h-10 rounded-full bg-[#3b82f6]/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <FileText className="w-6 h-6 text-[#3b82f6]" />
               </div>
-              <span className="font-medium text-white group-hover:text-[#3b82f6] transition-colors">Daily Log</span>
+              <span className="font-medium text-foreground group-hover:text-[#3b82f6] transition-colors">Daily Log</span>
             </button>
 
             <Link href="/trends">
-              <a className="flex flex-col items-center justify-center p-6 rounded-xl bg-zinc-900/30 border border-white/5 hover:bg-[#8b5cf6]/10 hover:border-[#8b5cf6]/30 transition-all group h-full">
+              <a className="flex flex-col items-center justify-center p-6 rounded-xl bg-muted border border-border hover:bg-[#8b5cf6]/10 hover:border-[#8b5cf6]/30 transition-all group h-full">
                 <div className="w-10 h-10 rounded-full bg-[#8b5cf6]/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                   <BarChart3 className="w-6 h-6 text-[#8b5cf6]" />
                 </div>
-                <span className="font-medium text-white group-hover:text-[#8b5cf6] transition-colors">View Trends</span>
+                <span className="font-medium text-foreground group-hover:text-[#8b5cf6] transition-colors">View Trends</span>
               </a>
             </Link>
           </div>
@@ -622,37 +622,37 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       {/* Modals - Kept exactly as before but with dark theme wrappers if needed */}
       {showExpenseModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#1e2235] rounded-xl p-6 w-full max-w-md border border-white/10 shadow-2xl">
+          <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-white font-bold text-xl">Log Expense</h3>
-              <button onClick={() => setShowExpenseModal(false)} className="text-zinc-400 hover:text-white transition-colors">
+              <h3 className="text-foreground font-bold text-xl">Log Expense</h3>
+              <button onClick={() => setShowExpenseModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
             <div className="space-y-5">
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Description</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Description</label>
                 <input
                   type="text"
                   placeholder="e.g. Bought 50 bags cement"
                   value={expenseForm.description}
                   onChange={(e) => setExpenseForm((p) => ({ ...p, description: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder-zinc-600"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
                 />
               </div>
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Amount (UGX)</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Amount (UGX)</label>
                 <input
                   type="text"
                   placeholder="e.g. 500,000"
                   value={expenseForm.amount}
                   onChange={(e) => setExpenseForm((p) => ({ ...p, amount: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder-zinc-600"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
                 />
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-white/10 hover:bg-white/5 hover:text-white text-zinc-300 h-12" onClick={() => setShowExpenseModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowExpenseModal(false)}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold h-12" onClick={handleLogExpense}>Save Expense</Button>
             </div>
           </div>
@@ -661,40 +661,40 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
       {showIssueModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#1e2235] rounded-xl p-6 w-full max-w-md border border-white/10 shadow-2xl">
+          <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-white font-bold text-xl">Report Issue</h3>
-              <button onClick={() => setShowIssueModal(false)} className="text-zinc-400 hover:text-white transition-colors">
+              <h3 className="text-foreground font-bold text-xl">Report Issue</h3>
+              <button onClick={() => setShowIssueModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
             <div className="space-y-5">
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Title</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Title</label>
                 <input
                   type="text"
                   placeholder="e.g. Foundation delay"
                   value={issueForm.title}
                   onChange={(e) => setIssueForm((p) => ({ ...p, title: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#ef4444] placeholder-zinc-600"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#ef4444] placeholder:text-muted-foreground"
                 />
               </div>
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Description</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Description</label>
                 <textarea
                   placeholder="Details about the issue..."
                   value={issueForm.description}
                   onChange={(e) => setIssueForm((p) => ({ ...p, description: e.target.value }))}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#ef4444] placeholder-zinc-600 resize-none"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#ef4444] placeholder:text-muted-foreground resize-none"
                 />
               </div>
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Priority</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Priority</label>
                 <select
                   value={issueForm.priority}
                   onChange={(e) => setIssueForm((p) => ({ ...p, priority: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#ef4444]"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#ef4444]"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -704,7 +704,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-white/10 hover:bg-white/5 hover:text-white text-zinc-300 h-12" onClick={() => setShowIssueModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowIssueModal(false)}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold h-12" onClick={handleReportIssue}>Report Issue</Button>
             </div>
           </div>
@@ -713,38 +713,38 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
       {showDailyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#1e2235] rounded-xl p-6 w-full max-w-md border border-white/10 shadow-2xl">
+          <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-white font-bold text-xl">Daily Log</h3>
-              <button onClick={() => setShowDailyModal(false)} className="text-zinc-400 hover:text-white transition-colors">
+              <h3 className="text-foreground font-bold text-xl">Daily Log</h3>
+              <button onClick={() => setShowDailyModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
             <div className="space-y-5">
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Workers on site</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Workers on site</label>
                 <input
                   type="number"
                   min={0}
                   placeholder="0"
                   value={dailyForm.workerCount}
                   onChange={(e) => setDailyForm((p) => ({ ...p, workerCount: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder-zinc-600"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
                 />
               </div>
               <div>
-                <label className="text-zinc-300 text-sm font-medium mb-2 block">Notes</label>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Notes</label>
                 <textarea
                   placeholder="e.g. Foundation 80% complete, rain delayed work..."
                   value={dailyForm.notes}
                   onChange={(e) => setDailyForm((p) => ({ ...p, notes: e.target.value }))}
                   rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-[#0f1219] border border-white/10 text-white focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder-zinc-600 resize-none"
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground resize-none"
                 />
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-white/10 hover:bg-white/5 hover:text-white text-zinc-300 h-12" onClick={() => setShowDailyModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowDailyModal(false)}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold h-12" onClick={handleDailyLog}>Save Log</Button>
             </div>
           </div>

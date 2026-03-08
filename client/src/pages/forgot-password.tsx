@@ -49,9 +49,12 @@ export default function ForgotPassword() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] flex flex-col md:flex-row overflow-hidden">
-        {/* Visual Panel - LEFT SIDE */}
-        <div className="hidden md:flex w-1/2 bg-[#0a0c12] relative overflow-hidden flex-col justify-between p-12 border-r border-white/5">
+      <div className="min-h-screen bg-background flex flex-col md:flex-row overflow-hidden">
+        {/* Visual Panel - LEFT SIDE - Always Dark */}
+        <div 
+          className="hidden md:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 border-r border-white/5"
+          style={{ backgroundColor: "#0a0c12" }}
+        >
           <div className="absolute inset-0 pointer-events-none opacity-[0.04]">
             <div className="absolute top-1/4 left-1/4 w-32 h-32 border-2 border-white rounded-full animate-float-slow" />
             <div className="absolute top-3/4 right-1/4 w-24 h-24 border-2 border-white rotate-45 animate-float-slower" />
@@ -69,15 +72,15 @@ export default function ForgotPassword() {
           </div>
         </div>
 
-        {/* Form Panel - RIGHT SIDE */}
-        <div className="w-full md:w-1/2 bg-[#0f1219] flex flex-col justify-center px-6 md:px-20 lg:px-32 relative">
+        {/* Form Panel - RIGHT SIDE - Theme Adaptive */}
+        <div className="w-full md:w-1/2 bg-background flex flex-col justify-center px-6 md:px-20 lg:px-32 relative">
           <div className="max-w-md w-full mx-auto md:mx-0 text-center">
             <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto mb-6 ring-1 ring-[#00bcd4]/20">
               <CheckCircle2 className="w-10 h-10 text-[#00bcd4]" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-4">Check your email</h2>
-            <p className="text-zinc-400 mb-8">
-              We've sent a password reset link to <span className="text-white font-medium">{email}</span>. 
+            <h2 className="text-2xl font-bold text-foreground mb-4">Check your email</h2>
+            <p className="text-muted-foreground mb-8">
+              We've sent a password reset link to <span className="text-foreground font-medium">{email}</span>. 
               Please click the link in the email to reset your password.
             </p>
             <Link href="/login">
@@ -92,9 +95,12 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] flex flex-col md:flex-row overflow-hidden">
-      {/* Visual Panel - LEFT SIDE */}
-      <div className="hidden md:flex w-1/2 bg-[#0a0c12] relative overflow-hidden flex-col justify-between p-12 border-r border-white/5">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row overflow-hidden">
+      {/* Visual Panel - LEFT SIDE - Always Dark */}
+      <div 
+        className="hidden md:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 border-r border-white/5"
+        style={{ backgroundColor: "#0a0c12" }}
+      >
         {/* Animated Background */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.04]">
           <div className="absolute top-1/4 left-1/4 w-32 h-32 border-2 border-white rounded-full animate-float-slow" />
@@ -137,32 +143,32 @@ export default function ForgotPassword() {
         </div>
       </div>
 
-      {/* Form Panel - RIGHT SIDE */}
-      <div className="w-full md:w-1/2 bg-[#0f1219] flex flex-col justify-center px-6 md:px-20 lg:px-32 relative">
+      {/* Form Panel - RIGHT SIDE - Theme Adaptive */}
+      <div className="w-full md:w-1/2 bg-background flex flex-col justify-center px-6 md:px-20 lg:px-32 relative">
         {/* Mobile Header */}
         <div className="md:hidden text-center mb-8 pt-10">
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="text-3xl">🧱</span>
-            <span className="text-xl font-bold text-white">JengaTrack</span>
+            <span className="text-xl font-bold text-foreground">JengaTrack</span>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Password Reset</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Password Reset</h2>
         </div>
 
         <div className="max-w-md w-full mx-auto md:mx-0 animate-in slide-in-from-right duration-500 fade-in">
           {/* Desktop Logo within form (small) */}
           <div className="hidden md:flex items-center gap-2 mb-8 opacity-50">
             <span className="text-xl">🧱</span>
-            <span className="font-bold text-white">JengaTrack</span>
+            <span className="font-bold text-foreground">JengaTrack</span>
           </div>
 
-          <h2 className="text-3xl font-bold text-white mb-2">Reset your password</h2>
-          <p className="text-zinc-400 mb-8">Enter your email and we'll send you a reset link</p>
+          <h2 className="text-3xl font-bold text-foreground mb-2">Reset your password</h2>
+          <p className="text-muted-foreground mb-8">Enter your email and we'll send you a reset link</p>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-zinc-500 text-xs uppercase font-semibold tracking-wider">Email Address</Label>
+              <Label htmlFor="email" className="text-muted-foreground text-xs uppercase font-semibold tracking-wider">Email Address</Label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-[#00bcd4] transition-colors" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-[#00bcd4] transition-colors" />
                 <Input
                   id="email"
                   type="email"
@@ -170,7 +176,7 @@ export default function ForgotPassword() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
-                  className="bg-[#161b27] border-white/10 text-white placeholder:text-zinc-600 pl-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pl-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
                 />
               </div>
             </div>

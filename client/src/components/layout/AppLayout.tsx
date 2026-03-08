@@ -24,7 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsData, setProjects]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden dark:bg-[#0a0a0a] bg-slate-50 dark:text-zinc-200 text-slate-800">
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       <TopBar onMenuClick={toggle} showHamburger />
       <Sidebar open={open} onToggle={toggle} />
 

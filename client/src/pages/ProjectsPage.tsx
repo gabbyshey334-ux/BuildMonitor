@@ -28,15 +28,15 @@ function formatBudgetShort(n: number) {
 
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8 animate-pulse">
+    <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-[#1e2230] rounded" />
-        <div className="h-10 w-32 bg-[#1e2230] rounded" />
+        <div className="h-8 w-48 bg-muted rounded" />
+        <div className="h-10 w-32 bg-muted rounded" />
       </div>
-      <div className="h-32 bg-[#0f1219] border border-white/5 rounded-xl" />
+      <div className="h-32 bg-card border border-border rounded-xl" />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-64 bg-[#0f1219] border border-white/5 rounded-xl" />
+          <div key={i} className="h-64 bg-card border border-border rounded-xl" />
         ))}
       </div>
     </div>
@@ -111,6 +111,7 @@ export default function ProjectsPage() {
         budgetAmount: parseBudget(form.totalBudget) || undefined,
         status: "active",
         channelType: "direct",
+        location: form.location // Ensure location is passed if needed by backend, though description maps to it usually
       });
       const data = await res.json();
       if (!data.success || !data.project) throw new Error(data.error || "Create failed");
@@ -143,12 +144,12 @@ export default function ProjectsPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] flex items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
         <div className="space-y-4">
           <p className="text-red-500">
             {error instanceof Error ? error.message : t("projects.loadError")}
           </p>
-          <Button variant="outline" onClick={() => refetch()} className="border-zinc-700 text-zinc-300">
+          <Button variant="outline" onClick={() => refetch()} className="border-border text-muted-foreground">
             {t("projects.tryAgain")}
           </Button>
         </div>
@@ -157,14 +158,14 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* 1. Header Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">{t("projects.title")}</h1>
-            <p className="text-zinc-400 mt-1">{list.length} projects total</p>
+            <h1 className="text-3xl font-bold text-foreground tracking-tight">{t("projects.title")}</h1>
+            <p className="text-muted-foreground mt-1">{list.length} projects total</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -175,14 +176,14 @@ export default function ProjectsPage() {
                   setSortBy(e.target.value as SortOption);
                   setPage(1);
                 }}
-                className="appearance-none bg-[#0f1219] border border-white/10 text-zinc-300 text-sm rounded-lg pl-4 pr-10 py-2.5 focus:outline-none focus:border-[#00bcd4] cursor-pointer hover:bg-white/5 transition-colors"
+                className="appearance-none bg-card border border-border text-foreground text-sm rounded-lg pl-4 pr-10 py-2.5 focus:outline-none focus:border-[#00bcd4] cursor-pointer hover:bg-muted/50 transition-colors"
               >
                 <option value="date">Sort: Date updated</option>
                 <option value="name">Sort: Name</option>
                 <option value="progress">Sort: Progress</option>
                 <option value="budget">Sort: Budget</option>
               </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
                 <ChevronRight className="w-4 h-4 rotate-90" />
               </div>
             </div>
@@ -199,33 +200,33 @@ export default function ProjectsPage() {
 
         {/* 2. Stats Banner */}
         {hasProjects && (
-          <div className="bg-[#0f1219] border border-white/5 border-l-4 border-l-[#00bcd4] rounded-xl p-6 shadow-lg">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-white/5">
+          <div className="bg-card border border-border border-l-4 border-l-[#00bcd4] rounded-xl p-6 shadow-lg">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
               <div className="flex items-center gap-4 px-4">
-                <div className="p-3 rounded-full bg-zinc-900/50 text-[#00bcd4]">
+                <div className="p-3 rounded-full bg-muted text-[#00bcd4]">
                   <LayoutGrid className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Total Projects</p>
-                  <p className="text-2xl font-bold text-white">{stats.totalProjects}</p>
+                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Total Projects</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.totalProjects}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
-                <div className="p-3 rounded-full bg-zinc-900/50 text-emerald-500">
+                <div className="p-3 rounded-full bg-muted text-emerald-500">
                   <DollarSign className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Total Budget</p>
-                  <p className="text-2xl font-bold text-white">UGX {formatBudgetShort(stats.totalBudget)}</p>
+                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Total Budget</p>
+                  <p className="text-2xl font-bold text-foreground">UGX {formatBudgetShort(stats.totalBudget)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
-                <div className="p-3 rounded-full bg-zinc-900/50 text-amber-500">
+                <div className="p-3 rounded-full bg-muted text-amber-500">
                   <Activity className="w-6 h-6" />
                 </div>
                 <div>
-                  <p className="text-zinc-500 text-xs uppercase tracking-wider font-medium">Active Projects</p>
-                  <p className="text-2xl font-bold text-white">{stats.activeProjects}</p>
+                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Active Projects</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.activeProjects}</p>
                 </div>
               </div>
             </div>
@@ -249,13 +250,13 @@ export default function ProjectsPage() {
                   size="icon"
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="bg-[#0f1219] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
+                  className="bg-card border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 
-                <span className="text-sm text-zinc-500 px-4">
-                  Page <span className="text-white font-medium">{page}</span> of {totalPages}
+                <span className="text-sm text-muted-foreground px-4">
+                  Page <span className="text-foreground font-medium">{page}</span> of {totalPages}
                 </span>
 
                 <Button
@@ -263,7 +264,7 @@ export default function ProjectsPage() {
                   size="icon"
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="bg-[#0f1219] border-white/10 text-zinc-400 hover:text-white hover:bg-white/5"
+                  className="bg-card border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </Button>
@@ -272,14 +273,14 @@ export default function ProjectsPage() {
           </>
         ) : (
           /* 4. Empty State */
-          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-zinc-800 rounded-2xl bg-[#0f1219]/50">
+          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-zinc-800 rounded-2xl bg-card/50">
             <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mb-6 ring-1 ring-[#00bcd4]/20">
               <FolderOpen className="w-10 h-10 text-[#00bcd4]" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">
+            <h2 className="text-2xl font-bold text-foreground mb-2">
               {t("projects.empty.title")}
             </h2>
-            <p className="text-zinc-400 max-w-md mb-8 leading-relaxed">
+            <p className="text-muted-foreground max-w-md mb-8 leading-relaxed">
               {t("projects.emptySubtitleLong")}
             </p>
             <div className="flex gap-4">
@@ -292,7 +293,7 @@ export default function ProjectsPage() {
               </Button>
               <Button
                 variant="outline"
-                className="border-zinc-700 text-zinc-300 hover:text-white hover:bg-white/5 h-11 px-6"
+                className="border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 h-11 px-6"
                 asChild
               >
                 <a href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`} target="_blank" rel="noreferrer">
@@ -305,15 +306,15 @@ export default function ProjectsPage() {
 
         {/* 6. Link WhatsApp Section */}
         {hasProjects && (
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="bg-card border border-border rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-start gap-4">
               <div className="p-3 rounded-full bg-[#22c55e]/10 text-[#22c55e] shrink-0">
                 <Smartphone className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white mb-1">Import from WhatsApp</h3>
-                <p className="text-zinc-400 text-sm max-w-lg">
-                  {t("projects.orWhatsApp")} <span className="text-[#22c55e] font-mono">{WHATSAPP_JOIN}</span> with code <span className="text-white font-mono bg-zinc-800 px-1 rounded">{JOIN_CODE}</span> to get started instantly.
+                <h3 className="text-lg font-bold text-foreground mb-1">Import from WhatsApp</h3>
+                <p className="text-muted-foreground text-sm max-w-lg">
+                  {t("projects.orWhatsApp")} <span className="text-[#22c55e] font-mono">{WHATSAPP_JOIN}</span> with code <span className="text-foreground font-mono bg-muted px-1 rounded">{JOIN_CODE}</span> to get started instantly.
                 </p>
               </div>
             </div>

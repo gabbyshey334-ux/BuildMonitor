@@ -94,7 +94,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
     active: "bg-[#00bcd4]/10 text-[#00bcd4] border-[#00bcd4]/20",
     completed: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
     on_hold: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-    archived: "bg-zinc-500/10 text-zinc-500 border-zinc-500/20",
+    archived: "bg-zinc-500/10 text-muted-foreground border-border",
   };
   const statusStyle = statusColors[project.status || "active"] || statusColors.active;
   const statusLabel = (project.status || "Active").replace("_", " ");
@@ -105,14 +105,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <Link href={`/dashboard?project=${project.id}`}>
         <a
           onClick={handleClick}
-          className="block h-full bg-[#0f1219] border border-white/5 rounded-xl p-5 hover:border-white/10 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden shadow-lg"
+          className="block h-full bg-card border border-border rounded-xl p-5 hover:border-border hover:scale-[1.02] transition-all duration-300 relative overflow-hidden shadow-lg"
         >
           {/* Faint Glow */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#00bcd4] opacity-[0.02] blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.05] transition-opacity" />
 
           {/* Header */}
           <div className="flex justify-between items-start mb-4 relative z-10">
-            <h3 className="font-bold text-white text-lg truncate pr-2 flex-1">
+            <h3 className="font-bold text-foreground text-lg truncate pr-2 flex-1">
               {project.name}
             </h3>
             <span className={cn("px-2 py-0.5 rounded-full text-[10px] uppercase font-bold border", statusStyle)}>
@@ -125,10 +125,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
             {/* Progress */}
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-zinc-400 font-medium">Progress</span>
+                <span className="text-muted-foreground font-medium">Progress</span>
                 <span className="text-[#00bcd4] font-bold">{progress}%</span>
               </div>
-              <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-[#00bcd4] rounded-full transition-all duration-500" 
                   style={{ width: `${progress}%` }} 
@@ -139,12 +139,12 @@ export function ProjectCard({ project }: ProjectCardProps) {
             {/* Expenditure */}
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-zinc-400 font-medium">Expenditure</span>
+                <span className="text-muted-foreground font-medium">Expenditure</span>
                 <span className={cn("font-bold", budgetSpentPct > 80 ? "text-red-500" : budgetSpentPct > 60 ? "text-amber-500" : "text-emerald-500")}>
                   {Math.round(budgetSpentPct)}%
                 </span>
               </div>
-              <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+              <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                 <div 
                   className={cn("h-full rounded-full transition-all duration-500", expenditureBarColor)} 
                   style={{ width: `${budgetSpentPct}%` }} 
@@ -154,11 +154,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </div>
 
           {/* Budget Row */}
-          <div className="mb-4 pt-4 border-t border-white/5 relative z-10">
+          <div className="mb-4 pt-4 border-t border-border relative z-10">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-zinc-500">Budget Spent</span>
-              <span className="text-zinc-300 font-medium">
-                UGX {formatShortBudget(spent)} <span className="text-zinc-600">/ {formatShortBudget(total)}</span>
+              <span className="text-muted-foreground">Budget Spent</span>
+              <span className="text-muted-foreground font-medium">
+                UGX {formatShortBudget(spent)} <span className="text-muted-foreground">/ {formatShortBudget(total)}</span>
               </span>
             </div>
           </div>
@@ -171,7 +171,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
                 {health.status}
               </span>
             </div>
-            <span className="text-xs text-zinc-600 font-medium">
+            <span className="text-xs text-muted-foreground font-medium">
               Updated {formatRelativeTime(project.lastActivityAt)}
             </span>
           </div>
@@ -183,19 +183,19 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <div className="absolute top-4 right-2 z-20">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="p-1.5 rounded-full text-zinc-500 hover:text-white hover:bg-white/10 transition-colors">
+            <button className="p-1.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors">
               <MoreHorizontal className="w-5 h-5" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-[#1e2235] border-white/10 text-zinc-200">
+          <DropdownMenuContent align="end" className="bg-card border-border text-foreground">
             <DropdownMenuItem asChild>
               <Link href={`/dashboard?project=${project.id}`}>
-                <a className="cursor-pointer hover:bg-white/5 hover:text-white focus:bg-white/5 focus:text-white w-full">View Dashboard</a>
+                <a className="cursor-pointer hover:bg-muted/50 w-full">View Dashboard</a>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={`/settings?project=${project.id}`}>
-                <a className="cursor-pointer hover:bg-white/5 hover:text-white focus:bg-white/5 focus:text-white w-full">Edit Project</a>
+                <a className="cursor-pointer hover:bg-muted/50 w-full">Edit Project</a>
               </Link>
             </DropdownMenuItem>
             {/* Add Delete logic if needed, or keep generic actions */}

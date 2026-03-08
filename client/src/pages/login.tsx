@@ -24,9 +24,12 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] flex flex-col md:flex-row overflow-hidden">
-      {/* Visual Panel - RIGHT SIDE for Login */}
-      <div className="hidden md:flex w-1/2 bg-[#0a0c12] relative overflow-hidden flex-col justify-between p-12 order-2 border-l border-white/5">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row overflow-hidden">
+      {/* Visual Panel - RIGHT SIDE for Login - Always Dark */}
+      <div 
+        className="hidden md:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 order-2 border-l border-white/5"
+        style={{ backgroundColor: "#0a0c12" }}
+      >
         {/* Animated Background */}
         <div className="absolute inset-0 pointer-events-none opacity-[0.04]">
           <div className="absolute top-1/4 left-1/4 w-32 h-32 border-2 border-white rounded-full animate-float-slow" />
@@ -84,33 +87,33 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Form Panel - LEFT SIDE for Login */}
-      <div className="w-full md:w-1/2 bg-[#0f1219] flex flex-col justify-center px-6 md:px-20 lg:px-32 relative order-1">
+      {/* Form Panel - LEFT SIDE for Login - Theme Adaptive */}
+      <div className="w-full md:w-1/2 bg-background flex flex-col justify-center px-6 md:px-20 lg:px-32 relative order-1">
         {/* Mobile Header */}
         <div className="md:hidden text-center mb-8 pt-10">
           <div className="flex items-center justify-center gap-2 mb-4">
             <span className="text-3xl">🧱</span>
-            <span className="text-xl font-bold text-white">JengaTrack</span>
+            <span className="text-xl font-bold text-foreground">JengaTrack</span>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Build Smarter</h2>
-          <p className="text-zinc-400 text-sm">WhatsApp-powered construction management</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Build Smarter</h2>
+          <p className="text-muted-foreground text-sm">WhatsApp-powered construction management</p>
         </div>
 
         <div className="max-w-md w-full mx-auto md:mx-0 animate-in slide-in-from-left duration-500 fade-in">
           {/* Desktop Logo within form (small) */}
           <div className="hidden md:flex items-center gap-2 mb-8 opacity-50">
             <span className="text-xl">🧱</span>
-            <span className="font-bold text-white">JengaTrack</span>
+            <span className="font-bold text-foreground">JengaTrack</span>
           </div>
 
-          <h2 className="text-3xl font-bold text-white mb-2">Welcome back</h2>
-          <p className="text-zinc-400 mb-8">Sign in to your dashboard</p>
+          <h2 className="text-3xl font-bold text-foreground mb-2">Welcome back</h2>
+          <p className="text-muted-foreground mb-8">Sign in to your dashboard</p>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-zinc-500 text-xs uppercase font-semibold tracking-wider">Email</Label>
+              <Label htmlFor="email" className="text-muted-foreground text-xs uppercase font-semibold tracking-wider">Email</Label>
               <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-[#00bcd4] transition-colors" />
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-[#00bcd4] transition-colors" />
                 <Input
                   id="email"
                   type="email"
@@ -118,17 +121,17 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
-                  className="bg-[#161b27] border-white/10 text-white placeholder:text-zinc-600 pl-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pl-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
                 />
               </div>
             </div>
             
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-zinc-500 text-xs uppercase font-semibold tracking-wider">Password</Label>
+                <Label htmlFor="password" className="text-muted-foreground text-xs uppercase font-semibold tracking-wider">Password</Label>
               </div>
               <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-zinc-500 group-focus-within:text-[#00bcd4] transition-colors" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-[#00bcd4] transition-colors" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -136,12 +139,12 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="bg-[#161b27] border-white/10 text-white placeholder:text-zinc-600 pl-12 pr-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
+                  className="bg-muted border-border text-foreground placeholder:text-muted-foreground pl-12 pr-12 h-12 rounded-xl focus:border-[#00bcd4] focus:ring-0 focus:ring-offset-0 transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
@@ -171,7 +174,7 @@ export default function Login() {
             </Button>
           </form>
 
-          <p className="text-center mt-8 text-zinc-400 text-sm">
+          <p className="text-center mt-8 text-muted-foreground text-sm">
             Don't have an account?{" "}
             <Link href="/signup">
               <span className="text-[#00bcd4] hover:text-[#0097a7] font-bold cursor-pointer transition-colors">

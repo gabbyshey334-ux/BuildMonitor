@@ -17,27 +17,27 @@ function formatDate(s: string | null) {
 
 function MaterialsSkeleton() {
   return (
-    <div className="min-h-screen bg-[#0a0c12] p-6 space-y-8">
+    <div className="min-h-screen bg-background p-6 space-y-8">
       {/* Header Skeleton */}
       <div className="flex justify-between items-start">
         <div className="space-y-2">
-          <div className="h-8 w-48 bg-[#1e2230] rounded animate-pulse" />
-          <div className="h-4 w-32 bg-[#1e2230] rounded animate-pulse" />
+          <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+          <div className="h-4 w-32 bg-muted rounded animate-pulse" />
         </div>
-        <div className="h-10 w-10 bg-[#1e2230] rounded animate-pulse" />
+        <div className="h-10 w-10 bg-muted rounded animate-pulse" />
       </div>
 
       {/* KPI Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-32 bg-[#0f1219] border border-white/5 rounded-xl animate-pulse" />
+          <div key={i} className="h-32 bg-card border border-border rounded-xl animate-pulse" />
         ))}
       </div>
 
       {/* List Skeleton */}
       <div className="space-y-4">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-20 bg-[#0f1219] border border-white/5 rounded-xl animate-pulse" />
+          <div key={i} className="h-20 bg-card border border-border rounded-xl animate-pulse" />
         ))}
       </div>
     </div>
@@ -47,11 +47,11 @@ function MaterialsSkeleton() {
 function EmptyState({ message, hint }: { message: string; hint?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-        <Box className="w-8 h-8 text-zinc-500" />
+      <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+        <Box className="w-8 h-8 text-muted-foreground" />
       </div>
-      <h3 className="text-xl font-medium text-zinc-200 mb-2">{message}</h3>
-      {hint && <p className="text-zinc-500 text-sm max-w-md mx-auto leading-relaxed">{hint}</p>}
+      <h3 className="text-xl font-medium text-foreground mb-2">{message}</h3>
+      {hint && <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">{hint}</p>}
     </div>
   );
 }
@@ -76,14 +76,14 @@ export default function MaterialsPage() {
   // No Project Selected State
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground p-6 flex flex-col items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="w-20 h-20 rounded-full bg-cyan-500/10 flex items-center justify-center mx-auto ring-1 ring-cyan-500/20">
             <Package className="w-10 h-10 text-cyan-400" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-white">{t("materials.title")}</h1>
-            <p className="text-zinc-400">
+            <h1 className="text-2xl font-bold text-foreground">{t("materials.title")}</h1>
+            <p className="text-muted-foreground">
               {hasProjects ? t("materials.noProjectSelect") : t("materials.noProjectCreate")}
             </p>
           </div>
@@ -102,19 +102,19 @@ export default function MaterialsPage() {
   // Error State
   if (isError) {
     return (
-      <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground p-6 flex flex-col items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
             <AlertTriangle className="w-8 h-8 text-red-500" />
           </div>
           <div className="space-y-2">
-            <h1 className="text-xl font-bold text-white">{t("common.error")}</h1>
-            <p className="text-zinc-400">{error instanceof Error ? error.message : "Failed to load materials"}</p>
+            <h1 className="text-xl font-bold text-foreground">{t("common.error")}</h1>
+            <p className="text-muted-foreground">{error instanceof Error ? error.message : "Failed to load materials"}</p>
           </div>
           <Button
             onClick={() => refetch()}
             variant="outline"
-            className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            className="border-border text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             {t("common.retry")}
@@ -128,17 +128,17 @@ export default function MaterialsPage() {
   const maxQty = inventory.length ? Math.max(...inventory.map((m) => m.quantity), 1) : 1;
 
   return (
-    <div className="min-h-screen bg-[#0a0c12] text-zinc-100 p-6 font-sans">
+    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* 1. Header Row */}
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Materials & Supplies</h1>
-            <p className="text-zinc-400 mt-1 flex items-center gap-2 text-sm">
+            <h1 className="text-3xl font-bold text-foreground tracking-tight">Materials & Supplies</h1>
+            <p className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">
               <span className="font-medium text-cyan-400">{summary.totalItems} unique materials</span>
               <span className="w-1 h-1 rounded-full bg-zinc-700" />
-              <span className={cn("font-medium", summary.lowStockCount > 0 ? "text-amber-500" : "text-zinc-400")}>
+              <span className={cn("font-medium", summary.lowStockCount > 0 ? "text-amber-500" : "text-muted-foreground")}>
                 {summary.lowStockCount} low stock alerts
               </span>
             </p>
@@ -147,7 +147,7 @@ export default function MaterialsPage() {
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-[#0f1219] border-zinc-800 text-zinc-400 hover:text-cyan-400 hover:border-cyan-500/50 transition-all"
+            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-cyan-400 hover:border-cyan-500/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -156,7 +156,7 @@ export default function MaterialsPage() {
         {/* 2. Summary KPI Row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Total Items Card */}
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 relative overflow-hidden group hover:border-white/10 transition-all duration-300">
+          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-border transition-all duration-300">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Package className="w-24 h-24 text-cyan-500" />
             </div>
@@ -165,17 +165,17 @@ export default function MaterialsPage() {
                 <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400">
                   <Package className="w-5 h-5" />
                 </div>
-                <span className="text-sm font-medium text-zinc-400 uppercase tracking-wider">{t("materials.totalMaterials")}</span>
+                <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("materials.totalMaterials")}</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold text-white">{summary.totalItems}</span>
-                <span className="text-sm text-zinc-500">items logged</span>
+                <span className="text-3xl font-bold text-foreground">{summary.totalItems}</span>
+                <span className="text-sm text-muted-foreground">items logged</span>
               </div>
             </div>
           </div>
 
           {/* Low Stock Alerts Card */}
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
+          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-amber-500/30 transition-all duration-300">
              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <AlertTriangle className="w-24 h-24 text-amber-500" />
             </div>
@@ -184,19 +184,19 @@ export default function MaterialsPage() {
                 <div className={cn("p-2 rounded-lg", summary.lowStockCount > 0 ? "bg-amber-500/10 text-amber-500" : "bg-emerald-500/10 text-emerald-500")}>
                   <AlertTriangle className="w-5 h-5" />
                 </div>
-                <span className="text-sm font-medium text-zinc-400 uppercase tracking-wider">{t("materials.lowStockItems")}</span>
+                <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("materials.lowStockItems")}</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className={cn("text-3xl font-bold", summary.lowStockCount > 0 ? "text-amber-500" : "text-white")}>
+                <span className={cn("text-3xl font-bold", summary.lowStockCount > 0 ? "text-amber-500" : "text-foreground")}>
                   {summary.lowStockCount}
                 </span>
-                <span className="text-sm text-zinc-500">requiring attention</span>
+                <span className="text-sm text-muted-foreground">requiring attention</span>
               </div>
             </div>
           </div>
 
           {/* Last Updated Card */}
-          <div className="bg-[#0f1219] border border-white/5 rounded-xl p-6 relative overflow-hidden group hover:border-white/10 transition-all duration-300">
+          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-border transition-all duration-300">
              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Clock className="w-24 h-24 text-purple-500" />
             </div>
@@ -205,12 +205,12 @@ export default function MaterialsPage() {
                 <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
                   <Clock className="w-5 h-5" />
                 </div>
-                <span className="text-sm font-medium text-zinc-400 uppercase tracking-wider">{t("materials.lastUpdated")}</span>
+                <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("materials.lastUpdated")}</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-lg font-medium text-white">{formatDate(summary.lastUpdated)}</span>
+                <span className="text-lg font-medium text-foreground">{formatDate(summary.lastUpdated)}</span>
               </div>
-              <p className="text-xs text-zinc-500 mt-1">Most recent activity</p>
+              <p className="text-xs text-muted-foreground mt-1">Most recent activity</p>
             </div>
           </div>
         </div>
@@ -218,14 +218,14 @@ export default function MaterialsPage() {
         {/* 3. Main Content - Inventory List */}
         <div className="space-y-4">
           <div className="flex items-center justify-between px-2">
-            <h2 className="text-lg font-semibold text-white">Inventory List</h2>
+            <h2 className="text-lg font-semibold text-foreground">Inventory List</h2>
             {inventory.length > 0 && (
-               <span className="text-xs text-zinc-500 uppercase tracking-widest font-medium">Quantity • Status</span>
+               <span className="text-xs text-muted-foreground uppercase tracking-widest font-medium">Quantity • Status</span>
             )}
           </div>
 
           {inventory.length === 0 ? (
-            <div className="bg-[#0f1219] border border-white/5 rounded-xl p-12">
+            <div className="bg-card border border-border rounded-xl p-12">
               <EmptyState
                 message="No materials logged yet"
                 hint='You can log materials via WhatsApp by sending a message like "Received 50 bags of cement" or "Used 100 bricks".'
@@ -249,7 +249,7 @@ export default function MaterialsPage() {
                 return (
                   <div
                     key={m.id}
-                    className="group bg-[#0f1219] border border-white/5 rounded-xl p-5 hover:bg-[#161b26] hover:border-white/10 transition-all duration-200"
+                    className="group bg-card border border-border rounded-xl p-5 hover:bg-muted/50 hover:border-border transition-all duration-200"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-3">
                       <div className="flex items-center gap-3">
@@ -259,8 +259,8 @@ export default function MaterialsPage() {
                           <Package className="w-5 h-5" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-white text-lg">{m.material_name}</h3>
-                          <p className="text-xs text-zinc-500">Last updated: {formatDate(m.last_updated)}</p>
+                          <h3 className="font-bold text-foreground text-lg">{m.material_name}</h3>
+                          <p className="text-xs text-muted-foreground">Last updated: {formatDate(m.last_updated)}</p>
                         </div>
                       </div>
                       
@@ -271,14 +271,14 @@ export default function MaterialsPage() {
                           </div>
                         )}
                         <div className="text-right">
-                          <span className="text-2xl font-bold text-white tabular-nums">{m.quantity.toLocaleString()}</span>
-                          <span className="text-sm text-zinc-500 ml-1 font-medium">{m.unit}</span>
+                          <span className="text-2xl font-bold text-foreground tabular-nums">{m.quantity.toLocaleString()}</span>
+                          <span className="text-sm text-muted-foreground ml-1 font-medium">{m.unit}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Stock Bar */}
-                    <div className="relative w-full h-2 bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="relative w-full h-2 bg-muted rounded-full overflow-hidden">
                       <div 
                         className={cn("h-full rounded-full transition-all duration-1000 ease-out", statusColor)}
                         style={{ width: `${Math.max(pct, 5)}%` }} // Minimum width for visibility
