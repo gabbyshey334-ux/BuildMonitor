@@ -1822,10 +1822,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!profile) {
       profile = await createUserProfile(phoneNumber);
-      await updateOnboardingState(profile.id, 'welcome_sent');
-      await sendWelcomeMessage(From, profile.full_name);
-      res.setHeader('Content-Type', 'text/xml');
-      return res.status(200).send(twimlOk);
     }
 
     const userId = profile.id;
@@ -1851,6 +1847,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (needsOnboarding) {
       switch (onboardingState) {
         case null:
+          await updateOnboardingState(userId, 'welcome_sent');
+          await sendWelcomeMessage(From, profile.full_name);
+          break;
         case 'welcome_sent':
           await handleProjectTypeSelection(userId, From, message);
           break;

@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectExpenses, useProjectMaterials, useProjectTasks } from "@/hooks/useDashboard";
@@ -519,7 +518,9 @@ export default function BudgetPage() {
       : null;
   const projectId = (projectIdFromUrl || currentProject?.id) ?? null;
 
-  const { data, isLoading, isError, error, refetch } = useProjectExpenses(projectId);
+  const { data, isLoading, isError, error, refetch } = useProjectExpenses(projectId ?? undefined);
+  const isResolvingProject = !projectId && !isError;
+
   const { data: materialsData } = useProjectMaterials(projectId);
   const { data: tasksData } = useProjectTasks(projectId);
 
@@ -531,7 +532,7 @@ export default function BudgetPage() {
   }, [tasksData]);
 
   const isProjectSwitch = projectId != null && data === undefined && !isError;
-  const showLoading = isLoading || isProjectSwitch;
+  const showLoading = isLoading || isProjectSwitch || isResolvingProject;
 
   const expenses: any[] = useMemo(
     () =>
@@ -751,54 +752,47 @@ export default function BudgetPage() {
   // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
-      <AppLayout>
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-screen bg-background">
-          <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
-          <p className="max-w-md mx-auto mb-6 text-muted-foreground">
-            {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
-          </p>
-          <Button asChild variant="outline">
-            <Link href="/projects">
-              {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
-            </Link>
-          </Button>
-        </div>
-      </AppLayout>
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center min-h-screen bg-background">
+        <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
+        <p className="max-w-md mx-auto mb-6 text-muted-foreground">
+          {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
+        </p>
+        <Button asChild variant="outline">
+          <Link href="/projects">
+            {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
+          </Link>
+        </Button>
+      </div>
     );
   }
 
   if (showLoading) {
     return (
-      <AppLayout>
-        <div className="min-h-screen p-6 bg-background">
-          <h1 className="text-2xl font-bold mb-6 text-foreground">Budgets & Costs</h1>
-          <BudgetSkeleton />
-        </div>
-      </AppLayout>
+      <div className="min-h-screen p-6 bg-background">
+        <h1 className="text-2xl font-bold mb-6 text-foreground">Budgets & Costs</h1>
+        <BudgetSkeleton />
+      </div>
     );
   }
 
   if (isError) {
     return (
-      <AppLayout>
-        <div className="py-16 px-4 text-center min-h-screen bg-background">
-          <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
-          <p className="mb-4 text-muted-foreground">
-            {error instanceof Error ? error.message : t("common.error")}
-          </p>
-          <Button onClick={() => refetch()}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            {t("common.retry")}
-          </Button>
-        </div>
-      </AppLayout>
+      <div className="py-16 px-4 text-center min-h-screen bg-background">
+        <h1 className="text-2xl font-bold mb-2 text-foreground">{t("budget.title")}</h1>
+        <p className="mb-4 text-muted-foreground">
+          {error instanceof Error ? error.message : t("common.error")}
+        </p>
+        <Button onClick={() => refetch()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          {t("common.retry")}
+        </Button>
+      </div>
     );
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <AppLayout>
-      <div className="min-h-screen p-6 bg-background">
+    <div className="min-h-screen p-6 bg-background">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-foreground">Budgets & Costs</h1>
@@ -895,6 +889,5 @@ export default function BudgetPage() {
           />
         </div>
       </div>
-    </AppLayout>
   );
 }

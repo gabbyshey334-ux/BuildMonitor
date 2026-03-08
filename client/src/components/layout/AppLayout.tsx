@@ -24,7 +24,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsData, setProjects]);
 
   return (
-    <div className="min-h-screen dark:bg-[#0a0a0a] bg-slate-50 dark:text-zinc-200 text-slate-800">
+    <div className="min-h-screen overflow-x-hidden dark:bg-[#0a0a0a] bg-slate-50 dark:text-zinc-200 text-slate-800">
       <TopBar onMenuClick={toggle} showHamburger />
       <Sidebar open={open} onToggle={toggle} />
 
@@ -32,11 +32,11 @@ export function AppLayout({ children }: AppLayoutProps) {
         className={cn(
           "min-h-screen transition-[margin-left] duration-300 ease-out",
           "pt-14",
-          "pb-20 md:pb-0",
+          "pb-16 md:pb-0",
           open ? "md:ml-[240px]" : "md:ml-16"
         )}
       >
-        <div className="p-4 md:p-6">
+        <div className="p-3 md:p-6 max-w-[100vw] overflow-x-hidden">
           {children}
         </div>
       </main>

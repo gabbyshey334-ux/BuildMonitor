@@ -72,6 +72,14 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
     );
 
   return (
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/40 z-20 md:hidden"
+          onClick={onToggle}
+          aria-hidden="true"
+        />
+      )}
     <aside
       className={cn(
         "hidden md:flex fixed left-0 top-0 z-30 flex-col h-full dark:bg-[#1a1d2e] bg-white border-r dark:border-zinc-700 border-slate-200 transition-[width] duration-300 ease-out",
@@ -242,6 +250,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
         </div>
       </div>
     </aside>
+    </>
   );
 }
 
