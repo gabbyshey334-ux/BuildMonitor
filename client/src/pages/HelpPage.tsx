@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -147,8 +146,7 @@ export default function HelpPage() {
   );
 
   return (
-    <AppLayout>
-      <div className="max-w-5xl mx-auto space-y-12 pb-12">
+    <div className="max-w-5xl mx-auto space-y-12 pb-12">
         {/* 1. Hero Section */}
         <div className="relative rounded-2xl bg-card border border-border p-8 md:p-12 overflow-hidden text-center">
           {/* Background Glow */}
@@ -345,6 +343,5 @@ export default function HelpPage() {
         </div>
 
       </div>
-    </AppLayout>
   );
 }
