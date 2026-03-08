@@ -84,22 +84,46 @@ function Router() {
         {isAuthenticated ? <DashboardRoute /> : <Redirect to="/login" />}
       </Route>
       <Route path="/budget">
-        {isAuthenticated ? <BudgetPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <BudgetPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/materials">
-        {isAuthenticated ? <MaterialsPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <MaterialsPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/daily">
-        {isAuthenticated ? <DailyPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <DailyPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/trends">
-        {isAuthenticated ? <TrendsPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <TrendsPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/settings">
-        {isAuthenticated ? <SettingsPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <SettingsPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/help">
-        {isAuthenticated ? <HelpPage /> : <Redirect to="/login" />}
+        {isAuthenticated ? (
+          <AppLayout>
+            <HelpPage />
+          </AppLayout>
+        ) : <Redirect to="/login" />}
       </Route>
       <Route path="/demo">
         <DemoPage />
