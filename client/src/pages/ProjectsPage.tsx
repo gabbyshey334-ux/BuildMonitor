@@ -28,7 +28,7 @@ function formatBudgetShort(n: number) {
 
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
+    <div className="max-w-7xl mx-auto space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
         <div className="h-8 w-48 bg-muted rounded" />
         <div className="h-10 w-32 bg-muted rounded" />
@@ -158,7 +158,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
+    <>
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* 1. Header Row */}
@@ -341,6 +341,6 @@ export default function ProjectsPage() {
         isLoading={creating}
         errorMessage={createError}
       />
-    </div>
+    </>
   );
 }
