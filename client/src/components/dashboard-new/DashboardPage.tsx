@@ -134,20 +134,32 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const [showDailyModal, setShowDailyModal] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [expenseForm, setExpenseForm] = useState({ description: '', amount: '' });
+  const [errors, setErrors] = useState<{ description?: string; amount?: string }>({});
   const [issueForm, setIssueForm] = useState({ title: '', description: '', priority: 'medium' });
+  const [issueErrors, setIssueErrors] = useState<Record<string, string>>({});
   const [dailyForm, setDailyForm] = useState({ workerCount: '', notes: '' });
+  const [dailyErrors, setDailyErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = getToken();
 
   const handleLogExpense = async () => {
-    if (!expenseForm.description.trim() || !expenseForm.amount.trim()) return;
+    const nextErrors: { description?: string; amount?: string } = {};
+
+    if (!expenseForm.description.trim()) {
+      nextErrors.description = 'Description is required';
+    }
+
+    const amountStr = expenseForm.amount.trim();
+    const amount = amountStr ? parseFloat(amountStr.replace(/,/g, '')) : NaN;
+    if (!amountStr || isNaN(amount) || amount <= 0) {
+      nextErrors.amount = 'Please enter a valid amount';
+    }
+
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
     try {
-      const amount = parseFloat(expenseForm.amount.replace(/,/g, ''));
-      if (isNaN(amount)) {
-        toast({ title: 'Invalid amount', variant: 'destructive' });
-        return;
-      }
       const res = await fetch(`/api/projects/${effectiveProjectId}/expenses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -161,6 +173,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       if (!res.ok) throw new Error('Failed to log expense');
       setShowExpenseModal(false);
       setExpenseForm({ description: '', amount: '' });
+      setErrors({});
       queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
       queryClient.invalidateQueries({ queryKey: ['project-expenses'] });
       toast({ title: 'Expense logged! ✅' });
@@ -170,7 +183,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   };
 
   const handleReportIssue = async () => {
-    if (!issueForm.title.trim()) return;
+    const next: Record<string, string> = {};
+    if (!issueForm.title.trim()) next.title = 'Issue title is required';
+    setIssueErrors(next);
+    if (Object.keys(next).length > 0) return;
+
     try {
       const res = await fetch(`/api/projects/${effectiveProjectId}/issues`, {
         method: 'POST',
@@ -187,6 +204,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       if (!res.ok) throw new Error('Failed to report issue');
       setShowIssueModal(false);
       setIssueForm({ title: '', description: '', priority: 'medium' });
+      setIssueErrors({});
       queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId] });
       queryClient.invalidateQueries({ queryKey: ['issues', effectiveProjectId] });
       toast({ title: 'Issue reported! 🚩' });
@@ -196,14 +214,22 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   };
 
   const handleDailyLog = async () => {
-    if (!dailyForm.workerCount.trim() && !dailyForm.notes.trim()) return;
+    const next: Record<string, string> = {};
+    const workerStr = dailyForm.workerCount.trim();
+    const workerNum = workerStr ? parseInt(workerStr, 10) : NaN;
+    if (!workerStr || isNaN(workerNum) || workerNum < 1) {
+      next.workerCount = 'Please enter the number of workers';
+    }
+    setDailyErrors(next);
+    if (Object.keys(next).length > 0) return;
+
     try {
       const res = await fetch(`/api/projects/${effectiveProjectId}/daily/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
-          worker_count: parseInt(dailyForm.workerCount, 10) || 0,
+          worker_count: workerNum,
           notes: dailyForm.notes.trim(),
           log_date: new Date().toISOString().split('T')[0],
         }),
@@ -211,6 +237,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       if (!res.ok) throw new Error('Failed to save daily log');
       setShowDailyModal(false);
       setDailyForm({ workerCount: '', notes: '' });
+      setDailyErrors({});
       queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
       toast({ title: 'Daily log saved! ✅' });
     } catch {
@@ -625,7 +652,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-foreground font-bold text-xl">Log Expense</h3>
-              <button onClick={() => setShowExpenseModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => { setShowExpenseModal(false); setErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -636,9 +663,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   type="text"
                   placeholder="e.g. Bought 50 bags cement"
                   value={expenseForm.description}
-                  onChange={(e) => setExpenseForm((p) => ({ ...p, description: e.target.value }))}
+                  onChange={(e) => {
+                    setExpenseForm((p) => ({ ...p, description: e.target.value }));
+                    setErrors((prev) => ({ ...prev, description: undefined }));
+                  }}
                   className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
                 />
+                {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
               </div>
               <div>
                 <label className="text-muted-foreground text-sm font-medium mb-2 block">Amount (UGX)</label>
@@ -646,13 +677,17 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   type="text"
                   placeholder="e.g. 500,000"
                   value={expenseForm.amount}
-                  onChange={(e) => setExpenseForm((p) => ({ ...p, amount: e.target.value }))}
+                  onChange={(e) => {
+                    setExpenseForm((p) => ({ ...p, amount: e.target.value }));
+                    setErrors((prev) => ({ ...prev, amount: undefined }));
+                  }}
                   className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
                 />
+                {errors.amount && <p className="text-red-500 text-xs mt-1">{errors.amount}</p>}
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowExpenseModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => { setShowExpenseModal(false); setErrors({}); }}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold h-12" onClick={handleLogExpense}>Save Expense</Button>
             </div>
           </div>
@@ -664,7 +699,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-foreground font-bold text-xl">Report Issue</h3>
-              <button onClick={() => setShowIssueModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => { setShowIssueModal(false); setIssueErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -675,9 +710,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   type="text"
                   placeholder="e.g. Foundation delay"
                   value={issueForm.title}
-                  onChange={(e) => setIssueForm((p) => ({ ...p, title: e.target.value }))}
+                  onChange={(e) => {
+                    setIssueForm((p) => ({ ...p, title: e.target.value }));
+                    setIssueErrors((prev) => ({ ...prev, title: '' }));
+                  }}
                   className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#ef4444] placeholder:text-muted-foreground"
                 />
+                {issueErrors.title && <p className="text-red-500 text-xs mt-1">{issueErrors.title}</p>}
               </div>
               <div>
                 <label className="text-muted-foreground text-sm font-medium mb-2 block">Description</label>
@@ -704,7 +743,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowIssueModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => { setShowIssueModal(false); setIssueErrors({}); }}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#ef4444] hover:bg-[#dc2626] text-white font-bold h-12" onClick={handleReportIssue}>Report Issue</Button>
             </div>
           </div>
@@ -716,7 +755,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-foreground font-bold text-xl">Daily Log</h3>
-              <button onClick={() => setShowDailyModal(false)} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={() => { setShowDailyModal(false); setDailyErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
             </div>
@@ -728,9 +767,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   min={0}
                   placeholder="0"
                   value={dailyForm.workerCount}
-                  onChange={(e) => setDailyForm((p) => ({ ...p, workerCount: e.target.value }))}
+                  onChange={(e) => {
+                    setDailyForm((p) => ({ ...p, workerCount: e.target.value }));
+                    setDailyErrors((prev) => ({ ...prev, workerCount: '' }));
+                  }}
                   className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
                 />
+                {dailyErrors.workerCount && <p className="text-red-500 text-xs mt-1">{dailyErrors.workerCount}</p>}
               </div>
               <div>
                 <label className="text-muted-foreground text-sm font-medium mb-2 block">Notes</label>
@@ -744,7 +787,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => setShowDailyModal(false)}>Cancel</Button>
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => { setShowDailyModal(false); setDailyErrors({}); }}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold h-12" onClick={handleDailyLog}>Save Log</Button>
             </div>
           </div>

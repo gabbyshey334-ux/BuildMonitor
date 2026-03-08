@@ -44,7 +44,7 @@ export function BottomNav() {
             location.startsWith(tab.href + "?");
           return (
             <Link key={tab.href} href={href}>
-              <a
+              <div
                 className={cn(
                   "flex flex-col items-center justify-center gap-1 min-w-[56px] py-2 rounded-lg transition-all duration-200",
                   isActive ? "text-[#22c55e]" : "dark:text-zinc-500 dark:hover:text-zinc-300 text-slate-400 hover:text-slate-600"
@@ -52,7 +52,7 @@ export function BottomNav() {
               >
                 <tab.icon className="h-6 w-6" />
                 <span className="text-xs font-medium">{t(tab.labelKey)}</span>
-              </a>
+              </div>
             </Link>
           );
         })}

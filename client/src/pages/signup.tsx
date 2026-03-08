@@ -132,6 +132,7 @@ export default function Signup() {
                   onChange={handleInputChange}
                   placeholder="••••••••"
                   required
+                  autoComplete="new-password"
                   className="bg-muted border-border rounded-xl h-12 pl-4 pr-12 text-foreground focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-full"
                 />
                 <button

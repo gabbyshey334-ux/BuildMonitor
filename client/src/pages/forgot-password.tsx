@@ -8,19 +8,34 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      setError("Email is required");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: trimmedEmail }),
       });
 
       const contentType = res.headers.get("content-type");
@@ -28,20 +43,18 @@ export default function ForgotPassword() {
       const data = isJson ? await res.json() : { message: "Something went wrong. Please try again." };
 
       if (!res.ok) {
-        throw new Error(data.message || data.error || "Failed to send reset link");
+        const message = data.message || data.error || "Failed to send reset link";
+        setError(message);
+        return;
       }
 
-      setIsSubmitted(true);
+      setSuccess(true);
       toast({
         title: "Link Sent",
         description: "Check your email for the reset password link.",
       });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -88,7 +101,7 @@ export default function ForgotPassword() {
       <div className="w-full md:w-[55%] md:ml-[45%] min-h-screen bg-background flex flex-col justify-center items-center py-12 px-6 md:px-10">
         <div className="w-full max-w-[420px] space-y-8">
           
-          {isSubmitted ? (
+          {success ? (
             // Success State
             <div className="text-center space-y-6">
                <div className="w-20 h-20 rounded-full bg-cyan-500/10 flex items-center justify-center mx-auto ring-1 ring-cyan-500/20">
@@ -127,11 +140,15 @@ export default function ForgotPassword() {
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setError("");
+                    }}
                     placeholder="name@example.com"
                     required
                     className="bg-muted border-border rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-cyan-500 focus:border-transparent w-full"
                   />
+                  {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
                 </div>
 
                 <Button

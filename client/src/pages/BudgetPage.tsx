@@ -130,8 +130,8 @@ function BudgetSkeleton() {
   return (
     <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-[#1e2230] rounded" />
-        <div className="h-10 w-10 bg-[#1e2230] rounded" />
+        <div className="h-8 w-48 bg-muted rounded" />
+        <div className="h-10 w-10 bg-muted rounded" />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
@@ -466,7 +466,7 @@ function CostTrendChart({
         </div>
       </div>
 
-      <div className="h-[300px] w-full">
+      <div className="h-[300px] w-full text-card">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={filteredData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
@@ -504,7 +504,7 @@ function CostTrendChart({
               dataKey="total"
               stroke="#00bcd4"
               strokeWidth={3}
-              dot={{ r: 4, fill: "#0f1219", stroke: "#00bcd4", strokeWidth: 2 }}
+              dot={{ r: 4, fill: "currentColor", stroke: "#00bcd4", strokeWidth: 2 }}
               activeDot={{ r: 6, fill: "#00bcd4", stroke: "#fff", strokeWidth: 2 }}
             />
           </ComposedChart>

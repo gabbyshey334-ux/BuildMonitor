@@ -97,18 +97,18 @@ export default function ResetPassword() {
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0c14] relative overflow-hidden">
+      <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ocean-pine/10 rounded-full blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600/10 rounded-full blur-[120px] pointer-events-none" />
 
         <div className="w-full max-w-[440px] px-6 relative z-10">
-          <Card className="bg-[#121624]/80 border-white/5 backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl text-center py-8">
+          <Card className="bg-background border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl text-center py-8">
             <CardContent className="space-y-6">
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/10 mb-4">
                 <CheckCircle2 className="h-10 w-10 text-green-500" />
               </div>
-              <h1 className="text-2xl font-bold text-white">Password Reset!</h1>
-              <p className="text-slate-400">
+              <h1 className="text-2xl font-bold text-foreground">Password Reset!</h1>
+              <p className="text-muted-foreground">
                 Your password has been successfully updated. You will be redirected to the login page in a few seconds.
               </p>
               <Link href="/login">
@@ -124,7 +124,7 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0c14] relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ocean-pine/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600/10 rounded-full blur-[120px] pointer-events-none" />
 
@@ -133,19 +133,19 @@ export default function ResetPassword() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 mb-6 shadow-lg shadow-amber-500/20">
             <span className="text-2xl font-black text-white">CM</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
             Set New Password
           </h1>
-          <p className="text-slate-400 text-sm">
+          <p className="text-muted-foreground text-sm">
             Please enter your new password below
           </p>
         </div>
 
-        <Card className="bg-[#121624]/80 border-white/5 backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
+        <Card className="bg-background border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
           <CardContent className="pt-6">
             {!recoveryToken && !error ? (
               <div className="space-y-4 text-center py-4">
-                <p className="text-slate-400">
+                <p className="text-muted-foreground">
                   Use the link from your password reset email to set a new password. If you don&apos;t have it, request a new one.
                 </p>
                 <Link href="/forgot-password">
@@ -164,9 +164,9 @@ export default function ResetPassword() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-300 text-xs uppercase tracking-wider font-bold">New Password</Label>
+                <Label htmlFor="password" className="text-muted-foreground text-xs uppercase tracking-wider font-bold">New Password</Label>
                 <div className="relative group">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-amber-500 transition-colors" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
@@ -174,12 +174,12 @@ export default function ResetPassword() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="bg-[#0a0c14]/50 border-white/5 text-white placeholder:text-slate-600 pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -187,9 +187,9 @@ export default function ResetPassword() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-slate-300 text-xs uppercase tracking-wider font-bold">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-muted-foreground text-xs uppercase tracking-wider font-bold">Confirm Password</Label>
                 <div className="relative group">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-amber-500 transition-colors" />
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-amber-500 transition-colors" />
                   <Input
                     id="confirmPassword"
                     type={showPassword ? "text" : "password"}
@@ -197,7 +197,7 @@ export default function ResetPassword() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="bg-[#0a0c14]/50 border-white/5 text-white placeholder:text-slate-600 pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
+                    className="bg-background border-border text-foreground placeholder:text-muted-foreground pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
                   />
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function ResetPassword() {
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="h-4 w-4 border-2 border-border border-t-foreground rounded-full animate-spin" />
                     <span>Updating...</span>
                   </div>
                 ) : (
@@ -219,9 +219,9 @@ export default function ResetPassword() {
             </form>
             )}
           </CardContent>
-          <CardFooter className="bg-white/[0.02] border-t border-white/5 py-4 flex justify-center">
+          <CardFooter className="bg-muted/30 border-t border-border py-4 flex justify-center">
             <Link href="/login">
-              <span className="text-slate-400 hover:text-white transition-colors text-sm font-medium cursor-pointer">
+              <span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer">
                 Cancel and go to Login
               </span>
             </Link>

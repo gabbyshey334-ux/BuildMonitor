@@ -66,13 +66,13 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
         <nav className="px-4 pb-8">
           {MORE_ITEMS.map((item) => (
             <Link key={item.href} href={hrefWithProject(item.href)}>
-              <a
+              <div
                 onClick={() => onOpenChange(false)}
                 className="flex w-full items-center gap-4 rounded-xl px-4 py-4 text-left text-base font-medium dark:text-zinc-200 dark:hover:bg-zinc-700 text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <item.icon className="h-5 w-5 shrink-0 dark:text-zinc-400 text-slate-500" />
                 {t(item.labelKey)}
-              </a>
+              </div>
             </Link>
           ))}
           <button

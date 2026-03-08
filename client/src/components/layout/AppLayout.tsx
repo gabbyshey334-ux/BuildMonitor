@@ -17,11 +17,17 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { data: projectsData } = useProjects();
   const { setProjects } = useProject();
 
+  const projectsJson = JSON.stringify(projectsData);
   useEffect(() => {
-    if (Array.isArray(projectsData)) {
-      setProjects(projectsData);
+    try {
+      const data = JSON.parse(projectsJson);
+      if (Array.isArray(data) && data.length > 0) {
+        setProjects(data);
+      }
+    } catch {
+      // ignore invalid json
     }
-  }, [projectsData, setProjects]);
+  }, [projectsJson]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">

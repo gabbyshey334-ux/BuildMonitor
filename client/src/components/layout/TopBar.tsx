@@ -115,10 +115,10 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
             <DropdownMenuSeparator className="dark:bg-zinc-700 bg-slate-200" />
             <DropdownMenuItem asChild>
               <Link href="/projects">
-                <a className="flex items-center gap-2 cursor-pointer text-[#22c55e]">
+                <div className="flex items-center gap-2 cursor-pointer text-[#22c55e]">
                   <Plus className="h-4 w-4" />
                   {t("projects.new")}
-                </a>
+                </div>
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -160,10 +160,10 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
             <DropdownMenuSeparator className="dark:bg-zinc-700 bg-slate-200" />
             <DropdownMenuItem asChild>
               <Link href={currentProject ? `/settings?project=${currentProject.id}` : "/settings"}>
-                <a className="flex items-center gap-2 cursor-pointer">
+                <div className="flex items-center gap-2 cursor-pointer">
                   <Settings className="h-4 w-4" />
                   {t("nav.settings")}
-                </a>
+                </div>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem

@@ -48,8 +48,14 @@ function DashboardRoute() {
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [forceReady, setForceReady] = React.useState(false);
 
-  if (isLoading) {
+  React.useEffect(() => {
+    const t = setTimeout(() => setForceReady(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (isLoading && !forceReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">

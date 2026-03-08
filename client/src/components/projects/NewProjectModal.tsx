@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -93,6 +94,9 @@ export function NewProjectModal({
         <DialogHeader>
           <DialogTitle className="text-white">{t("projects.modalTitle")}</DialogTitle>
         </DialogHeader>
+        <DialogDescription>
+          Create a new construction project to start tracking expenses, materials, and progress.
+        </DialogDescription>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label htmlFor="name" className="text-zinc-300">{t("projects.projectName")}</Label>

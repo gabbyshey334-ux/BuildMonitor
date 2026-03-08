@@ -98,7 +98,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
         </button>
         {open ? (
           <Link href={hrefWithProject("/projects")}>
-            <a className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
               <img
                 src="/assets/images/logo.png"
                 alt="JengaTrack"
@@ -107,7 +107,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               <span className="font-heading font-semibold text-foreground truncate">
                 JengaTrack
               </span>
-            </a>
+            </div>
           </Link>
         ) : null}
       </div>
@@ -116,13 +116,13 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
         {!open && (
           <div className="flex justify-center pb-2">
             <Link href={hrefWithProject("/projects")}>
-              <a className="flex h-8 w-8 items-center justify-center shrink-0">
+              <div className="flex h-8 w-8 items-center justify-center shrink-0">
                 <img
                   src="/assets/images/logo.png"
                   alt="JengaTrack"
                   className="h-8 w-auto max-h-8 object-contain mix-blend-multiply dark:mix-blend-lighten"
                 />
-              </a>
+              </div>
             </Link>
           </div>
         )}
@@ -130,7 +130,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
           <div className="mb-2">
             {open ? (
               <Link href="/projects">
-                <a
+                <div
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all duration-200",
                     "bg-[#00bcd4] text-black hover:bg-[#0097a7]",
@@ -139,21 +139,21 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 >
                   <Plus className="h-5 w-5 shrink-0" />
                   <span className="truncate">New Project</span>
-                </a>
+                </div>
               </Link>
             ) : (
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link href="/projects">
-                      <a
+                      <div
                         className={cn(
                           "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
                           "bg-[#00bcd4] text-black hover:bg-[#0097a7]"
                         )}
                       >
                         <Plus className="h-5 w-5" />
-                      </a>
+                      </div>
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent side="right" className="bg-card border-border text-foreground">
@@ -168,10 +168,10 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
             const href = hrefWithProject(item.href);
             const el = (
               <Link key={item.href} href={href}>
-                <a className={linkClass(active)}>
+                <div className={linkClass(active)}>
                   <item.icon className="h-5 w-5 shrink-0" />
                   {open && <span className="truncate">{t(item.labelKey)}</span>}
-                </a>
+                </div>
               </Link>
             );
             if (!open) {
@@ -196,10 +196,10 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
             const href = hrefWithProject(item.href);
             const el = (
               <Link key={item.href} href={href}>
-                <a className={linkClass(active)}>
+                <div className={linkClass(active)}>
                   <item.icon className="h-5 w-5 shrink-0" />
                   {open && <span className="truncate">{t(item.labelKey)}</span>}
-                </a>
+                </div>
               </Link>
             );
             if (!open) {

@@ -1659,20 +1659,26 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
     const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/reset-password` : undefined;
+    console.log('[forgot-password] redirectTo:', redirectTo);
+    console.log('[forgot-password] Sending reset to:', email.trim());
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: redirectTo || undefined,
     });
     if (error) {
       console.error('[forgot-password] Supabase error:', error.message);
+      console.error('[forgot-password] Full Supabase error:', JSON.stringify(error));
       return res.status(400).json({
         success: false,
         error: error.message,
         message: error.message,
       });
     }
+    // Supabase dashboard: Authentication → Email Templates → ensure "Reset Password" is enabled.
+    // Authentication → Settings → "Enable email confirmations" and SMTP. Free tier: 3 emails/hour; custom SMTP may be needed.
     return res.json({
       success: true,
       message: 'Reset link sent',
+      emailProvider: 'supabase',
     });
   } catch (err) {
     console.error('[forgot-password] Unexpected error:', err?.message || err, err?.stack || '');

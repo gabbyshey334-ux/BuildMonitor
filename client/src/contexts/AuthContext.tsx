@@ -33,10 +33,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
 
-  // Fetch current user from backend
+  // Fetch current user from backend. Always run so loading resolves when there's no token (e.g. after logout).
   const {
     data: user,
-    isLoading,
+    isLoading: queryLoading,
     error,
     refetch,
   } = useQuery<User | null>({
@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     retry: false,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    enabled: hasToken(), // Only fetch if we have a token
+    enabled: true, // Always run so isLoading resolves even when no token (fixes stuck spinner after logout)
   });
 
   // Login mutation
@@ -259,7 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     user: user,
-    isLoading: isLoading || loginMutation.isPending || logoutMutation.isPending || registerMutation.isPending,
+    isLoading: queryLoading || loginMutation.isPending || logoutMutation.isPending || registerMutation.isPending,
     isAuthenticated: !!user,
     login,
     register: (userData: any) => registerMutation.mutateAsync(userData),

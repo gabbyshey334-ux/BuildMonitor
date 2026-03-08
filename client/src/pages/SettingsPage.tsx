@@ -519,7 +519,7 @@ export default function SettingsPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             {/* Change Password */}
-            <div className="space-y-4">
+            <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }}>
               <h3 className="text-foreground font-medium flex items-center gap-2">
                 <Lock className="w-4 h-4 text-muted-foreground" />
                 Change Password
@@ -528,6 +528,7 @@ export default function SettingsPage() {
                 <Input
                   type="password"
                   placeholder="Current Password"
+                  autoComplete="current-password"
                   value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
                   className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
@@ -535,6 +536,7 @@ export default function SettingsPage() {
                 <Input
                   type="password"
                   placeholder="New Password"
+                  autoComplete="new-password"
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                   className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
@@ -542,6 +544,7 @@ export default function SettingsPage() {
                 <Input
                   type="password"
                   placeholder="Confirm New Password"
+                  autoComplete="new-password"
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
                   className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
@@ -552,14 +555,14 @@ export default function SettingsPage() {
               {passwordSuccess && <p className="text-[#22c55e] text-sm">Password updated successfully.</p>}
               
               <Button 
-                onClick={handlePasswordChange}
+                type="submit"
                 disabled={changingPassword}
                 variant="destructive"
                 className="w-full bg-red-500 hover:bg-red-600 text-white font-bold"
               >
                 {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Change Password"}
               </Button>
-            </div>
+            </form>
 
             {/* Complete Project */}
              <div className="space-y-4">
