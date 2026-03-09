@@ -732,13 +732,12 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               ))
             )}
           </div>
-          <Button
-            variant="ghost"
-            className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
-            onClick={() => { if (effectiveProjectId) setLocation(`/budget?project=${effectiveProjectId}`); }}
+          <Link
+            href={effectiveProjectId ? `/budget?project=${effectiveProjectId}` : '/budget'}
+            className="w-full mt-4 flex items-center justify-center gap-1 rounded-md px-4 py-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer transition-colors"
           >
             View All Activity <ChevronRight className="w-3 h-3 ml-1" />
-          </Button>
+          </Link>
         </div>
       </div>
 

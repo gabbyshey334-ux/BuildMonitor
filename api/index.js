@@ -942,7 +942,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
   }
 });
 
-// GET /api/projects/:projectId/materials — Materials & Inventory page
+// GET /api/projects/:projectId/materials — Materials & Inventory page (Supabase + DB merge so dashboard and WhatsApp materials both show)
 app.get('/api/projects/:projectId/materials', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
@@ -969,41 +969,63 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
+      const byKey = new Map();
+      function addRow(id, material_name, quantity, unit, last_updated) {
+        const name = (material_name || '').trim().toLowerCase();
+        if (!name) return;
+        const qty = parseFloat(String(quantity)) || 0;
+        const existing = byKey.get(name);
+        const existingTime = existing?.last_updated ? new Date(existing.last_updated).getTime() : 0;
+        const newTime = last_updated ? new Date(last_updated).getTime() : 0;
+        if (!existing || newTime > existingTime) {
+          byKey.set(name, { id, material_name: material_name || name, quantity: qty, unit: unit || 'units', last_updated: last_updated || null });
+        }
+      }
+
       const { data: rows, error } = await supabase
         .from('materials_inventory')
         .select('id, material_name, quantity, unit, last_updated')
         .eq('project_id', projectId)
         .order('material_name', { ascending: true });
-
-      if (error) {
-        console.error('[Materials]', error);
-        return res.status(500).json({ success: false, error: error.message });
+      if (!error && rows && rows.length > 0) {
+        for (const r of rows) {
+          addRow(r.id, r.material_name, r.quantity, r.unit, r.last_updated);
+        }
       }
 
-      const inventory = (rows || []).map((r) => ({
-        id: r.id,
-        material_name: r.material_name || '',
-        quantity: parseFloat(String(r.quantity || 0)),
-        unit: r.unit || 'units',
-        last_updated: r.last_updated || null,
-      }));
+      const dbConnection = initializeDatabase();
+      if (dbConnection) {
+        try {
+          const matResult = await dbConnection.execute(sql`
+            SELECT id, material_name, quantity, unit, last_updated
+            FROM materials_inventory
+            WHERE project_id = ${projectId}
+            ORDER BY material_name
+          `);
+          const dbRows = Array.isArray(matResult) ? matResult : (matResult?.rows || []);
+          for (const r of dbRows) {
+            if (r && (r.id != null || r.material_name != null)) {
+              addRow(r.id, r.material_name, r.quantity, r.unit, r.last_updated);
+            }
+          }
+        } catch (dbErr) {
+          console.warn('[Materials] DB fallback query failed:', dbErr?.message);
+        }
+      }
 
+      const inventory = Array.from(byKey.values()).sort((a, b) => (a.material_name || '').localeCompare(b.material_name || ''));
       const lowStock = inventory.filter((m) => m.quantity <= 5).map((m) => ({
         material_name: m.material_name,
         quantity: m.quantity,
         unit: m.unit,
       }));
-
       const usage = [];
-
-      const maxQty = inventory.length ? Math.max(...inventory.map((m) => m.quantity), 1) : 1;
       const lastUpdated = inventory.length
         ? inventory.reduce((latest, m) => {
             const t = m.last_updated ? new Date(m.last_updated).getTime() : 0;
             return t > latest ? t : latest;
           }, 0)
         : null;
-
       const summary = {
         totalItems: inventory.length,
         lowStockCount: lowStock.length,
