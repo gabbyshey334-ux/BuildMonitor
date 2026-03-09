@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { eq, and, isNull, sql, desc, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../db.js';
+import { supabase } from '../db.js';
 import { getUserByWhatsApp, getUserDefaultProject } from '../lib/supabase.js';
 import {
   profiles,
@@ -1884,6 +1885,8 @@ router.get('/projects/:projectId/expenses', requireAuth, async (req: Request, re
 
 /**
  * GET /api/projects/:projectId/materials
+ * Reads from BOTH Drizzle (dashboard UI) and Supabase materials_inventory (WhatsApp bot)
+ * so the page shows all materials regardless of source.
  */
 router.get('/projects/:projectId/materials', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -1893,28 +1896,81 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
-    const materials = await db
+
+    type InventoryItem = {
+      id: string;
+      material_name: string;
+      quantity: number;
+      unit: string;
+      last_updated: string | null;
+    };
+    const byKey = new Map<string, InventoryItem>();
+
+    function addRow(id: string, material_name: string, quantity: number, unit: string, last_updated: string | null) {
+      const name = (material_name || '').trim().toLowerCase();
+      if (!name) return;
+      const qty = parseFloat(String(quantity)) || 0;
+      const existing = byKey.get(name);
+      const existingTime = existing?.last_updated ? new Date(existing.last_updated).getTime() : 0;
+      const newTime = last_updated ? new Date(last_updated).getTime() : 0;
+      if (!existing || newTime > existingTime) {
+        byKey.set(name, { id, material_name: material_name || name, quantity: qty, unit: unit || 'units', last_updated });
+      }
+    }
+
+    // 1) Drizzle (dashboard UI writes here when using this server)
+    const materialsDrizzle = await db
       .select()
       .from(materialsInventory)
       .where(eq(materialsInventory.projectId, projectId));
-    const inventory = materials.map((r) => ({
-      id: r.id,
-      material_name: r.materialName,
-      quantity: parseFloat(r.quantity?.toString() || '0'),
-      unit: r.unit ?? '',
-      last_updated: r.lastUpdated ? new Date(r.lastUpdated).toISOString() : null,
+    for (const r of materialsDrizzle) {
+      addRow(
+        r.id,
+        r.materialName || '',
+        parseFloat(r.quantity?.toString() || '0'),
+        r.unit ?? 'units',
+        r.lastUpdated ? new Date(r.lastUpdated).toISOString() : null
+      );
+    }
+
+    // 2) Supabase materials_inventory (WhatsApp bot writes here)
+    const { data: rowsSupabase, error: supabaseError } = await supabase
+      .from('materials_inventory')
+      .select('id, material_name, quantity, unit, last_updated')
+      .eq('project_id', projectId)
+      .order('material_name', { ascending: true });
+    if (!supabaseError && rowsSupabase && rowsSupabase.length > 0) {
+      for (const r of rowsSupabase) {
+        addRow(
+          r.id,
+          r.material_name || '',
+          parseFloat(String(r.quantity || 0)),
+          r.unit || 'units',
+          r.last_updated || null
+        );
+      }
+    }
+
+    const inventory: InventoryItem[] = Array.from(byKey.values()).sort((a, b) =>
+      a.material_name.localeCompare(b.material_name)
+    );
+    const lowStockThreshold = 5;
+    const lowStock = inventory.filter((m) => m.quantity <= lowStockThreshold).map((m) => ({
+      material_name: m.material_name,
+      quantity: m.quantity,
+      unit: m.unit,
     }));
-    const lowStock = inventory.filter((m) => m.quantity < 10);
-    const lastUpdated = materials.length
-      ? materials.reduce((latest, r) => {
-          const t = r.lastUpdated ? new Date(r.lastUpdated).getTime() : 0;
+    const lastUpdated = inventory.length
+      ? inventory.reduce((latest, r) => {
+          const t = r.last_updated ? new Date(r.last_updated).getTime() : 0;
           return t > latest ? t : latest;
         }, 0)
       : null;
     res.json({
       success: true,
       inventory,
-      lowStock: lowStock.map((m) => ({ material_name: m.material_name, quantity: m.quantity, unit: m.unit })),
+      lowStock,
+      usage: [],
       summary: {
         totalItems: inventory.length,
         lowStockCount: lowStock.length,

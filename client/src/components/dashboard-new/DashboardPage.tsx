@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -72,6 +72,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const projects = Array.isArray(projectsData) ? projectsData : [];
   const hasProjects = projects.length > 0;
   const effectiveProjectId = projectIdProp ?? currentProject?.id ?? null;
+  const [, setLocation] = useLocation();
 
   const {
     data: summaryData,
@@ -98,14 +99,24 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const issuesList = issuesData?.issues ?? [];
 
   const budgetHealth = useMemo(() => {
-    const budget = parseFloat(String((summaryData as any)?.budget?.total ?? currentProject?.budget ?? 0));
-    const spent = expenses?.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0) ?? (summaryData as any)?.budget?.spent ?? 0;
-    if (!budget) return { pct: 0, remaining: 0, total: 0, spent: spent };
+    const summaryBudget = (summaryData as any)?.budget;
+    // Use summary API values when available (they reflect ALL expenses). Do not sum only "recent" expenses.
+    if (summaryBudget && typeof summaryBudget.total === 'number') {
+      const total = Number(summaryBudget.total);
+      const spent = typeof summaryBudget.spent === 'number' ? summaryBudget.spent : 0;
+      const remaining = typeof summaryBudget.remaining === 'number' ? summaryBudget.remaining : Math.max(0, total - spent);
+      const pct = total > 0 ? parseFloat(((spent / total) * 100).toFixed(1)) : 0;
+      return { pct, remaining, total, spent };
+    }
+    // Fallback before summary has loaded or if API shape differs
+    const budget = parseFloat(String(currentProject?.budgetAmount ?? currentProject?.budget ?? 0));
+    const spentFallback = (expenses ?? []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+    if (!budget) return { pct: 0, remaining: 0, total: 0, spent: spentFallback };
     return {
-      pct: parseFloat(((spent / budget) * 100).toFixed(1)),
-      remaining: Math.max(0, budget - spent),
+      pct: parseFloat(((spentFallback / budget) * 100).toFixed(1)),
+      remaining: Math.max(0, budget - spentFallback),
       total: budget,
-      spent: spent
+      spent: spentFallback,
     };
   }, [currentProject, summaryData, expenses]);
 
@@ -532,7 +543,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
 
         {/* Issues Card */}
-        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group" onClick={() => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' })}>
+        <div className="relative bg-card rounded-xl border border-border p-5 hover:scale-[1.02] transition-transform duration-300 overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-red-500 opacity-[0.08] blur-2xl rounded-full -mr-10 -mt-10 pointer-events-none transition-opacity" />
           <div className="flex justify-between items-start mb-2">
             <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
@@ -548,9 +559,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             <span className="text-3xl font-bold text-foreground">{openIssuesCount}</span>
             <span className="text-muted-foreground text-sm ml-2">Active Issues</span>
           </div>
-          <p className="text-muted-foreground text-xs mt-1 cursor-pointer hover:text-[#00bcd4] flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => { if (effectiveProjectId) setLocation(`/dashboard?project=${effectiveProjectId}#issues-section`); }}
+            className="text-muted-foreground text-xs mt-1 cursor-pointer hover:text-[#00bcd4] flex items-center gap-1 bg-transparent border-0 p-0 font-inherit text-left"
+          >
             View details <ArrowUpRight className="w-3 h-3" />
-          </p>
+          </button>
         </div>
       </div>
 
@@ -717,7 +732,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               ))
             )}
           </div>
-          <Button variant="ghost" className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50">
+          <Button
+            variant="ghost"
+            className="w-full mt-4 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-pointer"
+            onClick={() => { if (effectiveProjectId) setLocation(`/budget?project=${effectiveProjectId}`); }}
+          >
             View All Activity <ChevronRight className="w-3 h-3 ml-1" />
           </Button>
         </div>
