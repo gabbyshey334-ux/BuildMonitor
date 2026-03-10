@@ -228,6 +228,7 @@ export interface ProjectDailyResponse {
     notes: string | null;
     weather_condition: string | null;
     photo_urls: string[];
+    photo_entries?: Array<{ url: string; caption: string | null; tag: string | null }>;
     created_at: string;
   }>;
   stats: {

@@ -838,7 +838,115 @@ app.get('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/projects/:projectId/daily/log — Daily log entry
+// PATCH /api/issues/:id — Update issue (e.g. acknowledge)
+app.patch('/api/issues/:id', requireAuth, async (req, res) => {
+  try {
+    const issueId = req.params.id;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { data: issueRow, error: fetchErr } = await supabase
+      .from('issues')
+      .select('id, project_id')
+      .eq('id', issueId)
+      .maybeSingle();
+    if (fetchErr || !issueRow) {
+      return res.status(404).json({ success: false, error: 'Issue not found' });
+    }
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('id, user_id, manager_id')
+      .eq('id', issueRow.project_id)
+      .maybeSingle();
+    if (!projectRow) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const isOwner = projectRow.user_id === userId;
+    const isManager = projectRow.manager_id && projectRow.manager_id === userId;
+    if (!isOwner && !isManager) {
+      return res.status(403).json({ success: false, error: 'Not allowed to update this issue' });
+    }
+    const { status } = req.body || {};
+    const updates = {};
+    if (typeof status === 'string' && status.trim()) updates.status = status.trim();
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No valid updates' });
+    }
+    const { data: updated, error: updateErr } = await supabase
+      .from('issues')
+      .update(updates)
+      .eq('id', issueId)
+      .select()
+      .single();
+    if (updateErr) {
+      console.error('[PATCH issues]', updateErr.message);
+      return res.status(500).json({ success: false, error: updateErr.message });
+    }
+    return res.json({ success: true, issue: updated });
+  } catch (err) {
+    console.error('[PATCH issues] Unexpected error:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, error: err?.message || 'Server error' });
+  }
+});
+
+// POST /api/daily-logs — Daily site log: { project_id, log_date, worker_count, entries }
+// Stores worker_count on daily_logs row and entries in activity_entries JSONB.
+app.post('/api/daily-logs', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const { project_id, log_date, worker_count, entries } = req.body;
+    const projectId = project_id;
+    if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    const activityEntries = Array.isArray(entries) ? entries.map(e => ({
+      log_time: e.log_time || null,
+      activity_type: e.activity_type || 'Other',
+      description: e.description || '',
+      amount: e.amount != null ? parseFloat(e.amount) : null,
+    })) : [];
+    const { data: existing } = await supabase.from('daily_logs').select('id, notes, activity_entries').eq('project_id', projectId).eq('log_date', today).maybeSingle();
+    if (existing) {
+      const updateData = {
+        worker_count: worker_count != null ? worker_count : existing.worker_count,
+        updated_at: new Date().toISOString(),
+      };
+      if (activityEntries.length > 0) updateData.activity_entries = activityEntries;
+      await supabase.from('daily_logs').update(updateData).eq('id', existing.id);
+    } else {
+      await supabase.from('daily_logs').insert({
+        project_id: projectId,
+        log_date: today,
+        worker_count: worker_count != null ? worker_count : null,
+        notes: '',
+        activity_entries: activityEntries.length > 0 ? activityEntries : [],
+        created_at: new Date().toISOString(),
+      });
+    }
+    return res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('[POST /api/daily-logs]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save daily log' });
+  }
+});
+
+// POST /api/projects/:projectId/daily/log — Daily log entry (legacy)
+// Accepts: { log_date, worker_count, notes?, entries?: [{ log_time, activity_type, description, amount? }] }
 app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
@@ -853,18 +961,30 @@ app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => 
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
     if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
-    const { worker_count, notes, log_date } = req.body;
+    const { worker_count, notes, log_date, entries } = req.body;
     const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', today).maybeSingle();
+    const activityEntries = Array.isArray(entries) ? entries.map(e => ({
+      log_time: e.log_time || null,
+      activity_type: e.activity_type || 'Other',
+      description: e.description || '',
+      amount: e.amount != null ? parseFloat(e.amount) : null,
+    })) : [];
+    const { data: existing } = await supabase.from('daily_logs').select('id, notes, activity_entries').eq('project_id', projectId).eq('log_date', today).maybeSingle();
     if (existing) {
-      const updatedNotes = notes ? (existing.notes ? `${existing.notes}\n${notes}` : notes) : existing.notes;
-      await supabase.from('daily_logs').update({ worker_count: worker_count ?? existing.worker_count, notes: updatedNotes }).eq('id', existing.id);
+      const updateData = {
+        worker_count: worker_count != null ? worker_count : existing.worker_count,
+        updated_at: new Date().toISOString(),
+      };
+      if (notes != null) updateData.notes = notes ? (existing.notes ? `${existing.notes}\n${notes}` : notes) : existing.notes;
+      if (activityEntries.length > 0) updateData.activity_entries = activityEntries;
+      await supabase.from('daily_logs').update(updateData).eq('id', existing.id);
     } else {
       await supabase.from('daily_logs').insert({
         project_id: projectId,
         log_date: today,
-        worker_count: worker_count || 0,
+        worker_count: worker_count != null ? worker_count : null,
         notes: notes || '',
+        activity_entries: activityEntries.length > 0 ? activityEntries : [],
         created_at: new Date().toISOString(),
       });
     }
@@ -897,7 +1017,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
       console.error('[POST daily/photo] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
-    const { photoUrl } = req.body || {};
+    const { photoUrl, caption, tag } = req.body || {};
     if (!photoUrl || typeof photoUrl !== 'string' || !photoUrl.startsWith('http')) {
       return res.status(400).json({ success: false, error: 'Valid photoUrl required' });
     }
@@ -910,12 +1030,19 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
       .eq('log_date', today)
       .maybeSingle();
 
-    const urls = Array.isArray(existing?.photo_urls) ? [...existing.photo_urls, photoUrl] : [photoUrl];
+    const captionStr = typeof caption === 'string' ? caption.trim() || null : null;
+    const tagStr = typeof tag === 'string' ? tag.trim() || null : null;
+    const newEntry = { url: photoUrl, caption: captionStr, tag: tagStr };
+
+    const raw = existing?.photo_urls;
+    let entries = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    entries = entries.map((e) => (typeof e === 'string' ? { url: e, caption: null, tag: null } : { url: e?.url || e, caption: e?.caption ?? null, tag: e?.tag ?? null }));
+    entries.push(newEntry);
 
     if (existing) {
       const { error: updateErr } = await supabase
         .from('daily_logs')
-        .update({ photo_urls: urls })
+        .update({ photo_urls: entries })
         .eq('id', existing.id);
       if (updateErr) {
         console.error('[POST daily/photo] daily_logs update error:', updateErr.message);
@@ -927,7 +1054,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
         log_date: today,
         worker_count: 0,
         notes: '',
-        photo_urls: urls,
+        photo_urls: entries,
         created_at: new Date().toISOString(),
       });
       if (insertErr) {
@@ -969,6 +1096,9 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
+      const MATERIALS_TABLE = 'materials_inventory';
+      console.log('[Materials] GET /api/projects/:projectId/materials — querying table:', MATERIALS_TABLE);
+
       const byKey = new Map();
       function addRow(id, material_name, quantity, unit, last_updated) {
         const name = (material_name || '').trim().toLowerCase();
@@ -983,7 +1113,7 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
       }
 
       const { data: rows, error } = await supabase
-        .from('materials_inventory')
+        .from(MATERIALS_TABLE)
         .select('id, material_name, quantity, unit, last_updated')
         .eq('project_id', projectId)
         .order('material_name', { ascending: true });
@@ -1112,15 +1242,23 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
         };
       });
 
-      const recentLogs = logs.slice(0, 10).map((l) => ({
-        id: l.id,
-        log_date: l.log_date,
-        worker_count: l.worker_count,
-        notes: l.notes,
-        weather_condition: l.weather_condition,
-        photo_urls: Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []),
-        created_at: l.created_at,
-      }));
+      const recentLogs = logs.slice(0, 10).map((l) => {
+        const raw = l.photo_urls;
+        const photoEntries = Array.isArray(raw)
+          ? raw.map((e) => (typeof e === 'string' ? { url: e, caption: null, tag: null } : { url: e?.url || e, caption: e?.caption ?? null, tag: e?.tag ?? null }))
+          : raw ? [{ url: raw, caption: null, tag: null }] : [];
+        const photoUrls = photoEntries.map((p) => p.url);
+        return {
+          id: l.id,
+          log_date: l.log_date,
+          worker_count: l.worker_count,
+          notes: l.notes,
+          weather_condition: l.weather_condition,
+          photo_urls: photoUrls,
+          photo_entries: photoEntries,
+          created_at: l.created_at,
+        };
+      });
 
       const totalPhotos = logs.reduce((sum, l) => {
         const urls = Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []);
@@ -1161,7 +1299,11 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
         workerCount: todayLog ? (todayLog.worker_count || 0) : 0,
         notes: todayLog ? (todayLog.notes || '') : '',
         photos: todayLog
-          ? (Array.isArray(todayLog.photo_urls) ? todayLog.photo_urls : todayLog.photo_urls ? [todayLog.photo_urls] : [])
+          ? (() => {
+              const raw = todayLog.photo_urls;
+              const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+              return arr.map((e) => (typeof e === 'string' ? e : e?.url)).filter(Boolean);
+            })()
           : [],
       };
 

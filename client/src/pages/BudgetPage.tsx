@@ -31,7 +31,9 @@ import {
   AlertCircle,
   MoreVertical,
   Pencil,
-  Trash2
+  Trash2,
+  Search,
+  X
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -567,6 +569,10 @@ export default function BudgetPage() {
   const [editExpenseDescription, setEditExpenseDescription] = useState("");
   const [editExpenseAmount, setEditExpenseAmount] = useState("");
   const [savingExpenseEdit, setSavingExpenseEdit] = useState(false);
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [expenseDateFrom, setExpenseDateFrom] = useState("");
+  const [expenseDateTo, setExpenseDateTo] = useState("");
+  const [expenseSort, setExpenseSort] = useState<"newest" | "oldest" | "highest" | "lowest">("newest");
   const token = getToken();
 
   const tasks = useMemo(() => {
@@ -588,6 +594,60 @@ export default function BudgetPage() {
         : [],
     [data]
   );
+
+  const filteredExpenses = useMemo(() => {
+    let list = [...expenses];
+    const search = expenseSearch.trim().toLowerCase();
+    if (search) {
+      list = list.filter((e: any) =>
+        String(e.description || "").toLowerCase().includes(search)
+      );
+    }
+    if (expenseDateFrom) {
+      list = list.filter((e: any) => {
+        const d = e.expense_date || e.created_at || "";
+        const dateStr = typeof d === "string" ? d : d?.split?.("T")[0] || "";
+        return dateStr >= expenseDateFrom;
+      });
+    }
+    if (expenseDateTo) {
+      list = list.filter((e: any) => {
+        const d = e.expense_date || e.created_at || "";
+        const dateStr = typeof d === "string" ? d : d?.split?.("T")[0] || "";
+        return dateStr <= expenseDateTo;
+      });
+    }
+    const sorted = [...list];
+    if (expenseSort === "newest") {
+      sorted.sort((a: any, b: any) => {
+        const ta = new Date(a.created_at || a.expense_date || 0).getTime();
+        const tb = new Date(b.created_at || b.expense_date || 0).getTime();
+        return tb - ta;
+      });
+    } else if (expenseSort === "oldest") {
+      sorted.sort((a: any, b: any) => {
+        const ta = new Date(a.created_at || a.expense_date || 0).getTime();
+        const tb = new Date(b.created_at || b.expense_date || 0).getTime();
+        return ta - tb;
+      });
+    } else if (expenseSort === "highest") {
+      sorted.sort((a: any, b: any) => {
+        const amtA = parseFloat(String(a.amount || 0));
+        const amtB = parseFloat(String(b.amount || 0));
+        return amtB - amtA;
+      });
+    } else {
+      sorted.sort((a: any, b: any) => {
+        const amtA = parseFloat(String(a.amount || 0));
+        const amtB = parseFloat(String(b.amount || 0));
+        return amtA - amtB;
+      });
+    }
+    return sorted;
+  }, [expenses, expenseSearch, expenseDateFrom, expenseDateTo, expenseSort]);
+
+  const expenseFiltersActive =
+    expenseSearch.trim() !== "" || expenseDateFrom !== "" || expenseDateTo !== "" || expenseSort !== "newest";
 
   const materials: any[] = useMemo(
     () =>
@@ -971,8 +1031,70 @@ export default function BudgetPage() {
               <CreditCard className="w-5 h-5 text-[#00bcd4]" />
               Expense history
             </h3>
+            <div className="space-y-3 mb-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="relative flex-1 min-w-[180px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search expenses..."
+                    value={expenseSearch}
+                    onChange={(e) => setExpenseSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent placeholder:text-muted-foreground"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-muted-foreground text-sm whitespace-nowrap">From</label>
+                  <input
+                    type="date"
+                    value={expenseDateFrom}
+                    onChange={(e) => setExpenseDateFrom(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-muted-foreground text-sm whitespace-nowrap">To</label>
+                  <input
+                    type="date"
+                    value={expenseDateTo}
+                    onChange={(e) => setExpenseDateTo(e.target.value)}
+                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                  />
+                </div>
+                <select
+                  value={expenseSort}
+                  onChange={(e) => setExpenseSort(e.target.value as "newest" | "oldest" | "highest" | "lowest")}
+                  className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                  <option value="highest">Highest amount</option>
+                  <option value="lowest">Lowest amount</option>
+                </select>
+                {expenseFiltersActive && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setExpenseSearch("");
+                      setExpenseDateFrom("");
+                      setExpenseDateTo("");
+                      setExpenseSort("newest");
+                    }}
+                    className="text-muted-foreground hover:text-foreground shrink-0"
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Clear filters
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredExpenses.length} of {expenses.length} expenses
+              </p>
+            </div>
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {expenses.slice(0, 50).map((expense: any) => (
+              {filteredExpenses.slice(0, 50).map((expense: any) => (
                 <div key={expense.id} className="flex gap-3 group items-center py-2 border-b border-border last:border-0">
                   {editingExpenseId === expense.id ? (
                     <>
@@ -1053,8 +1175,8 @@ export default function BudgetPage() {
                 </div>
               ))}
             </div>
-            {expenses.length > 50 && (
-              <p className="text-xs text-muted-foreground mt-3">Showing latest 50 of {expenses.length} expenses.</p>
+            {filteredExpenses.length > 50 && (
+              <p className="text-xs text-muted-foreground mt-3">Showing latest 50 of {filteredExpenses.length} expenses.</p>
             )}
           </div>
         )}

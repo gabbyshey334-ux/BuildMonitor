@@ -317,22 +317,28 @@ export default function DailyPage() {
 
                   {/* Photos footer */}
                   {log.photo_urls && log.photo_urls.length > 0 && (
-                    <div className="flex items-center gap-2 mt-auto pt-4 border-t border-border">
-                      {log.photo_urls.slice(0, 3).map((url, idx) => (
-                        <a 
-                          key={idx} 
-                          href={url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="w-12 h-12 rounded-lg overflow-hidden border border-border hover:border-[#00bcd4] transition-colors relative group/img"
-                        >
-                          <img src={url} alt="Site" className="w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/20 transition-colors" />
-                        </a>
+                    <div className="flex flex-wrap gap-3 mt-auto pt-4 border-t border-border">
+                      {(log.photo_entries && log.photo_entries.length > 0 ? log.photo_entries : log.photo_urls.map((url) => ({ url, caption: null as string | null, tag: null as string | null }))).slice(0, 6).map((entry, idx) => (
+                        <div key={idx} className="flex flex-col">
+                          <a
+                            href={entry.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-14 h-14 rounded-lg overflow-hidden border border-border hover:border-[#00bcd4] transition-colors block"
+                          >
+                            <img src={entry.url} alt="Site" className="w-full h-full object-cover" />
+                          </a>
+                          {(entry.caption || entry.tag) && (
+                            <div className="mt-1 text-[10px] text-muted-foreground max-w-[14ch] truncate">
+                              {entry.caption && <span className="block truncate">{entry.caption}</span>}
+                              {entry.tag && <span className="text-[#00bcd4] font-medium">{entry.tag}</span>}
+                            </div>
+                          )}
+                        </div>
                       ))}
-                      {log.photo_urls.length > 3 && (
-                        <div className="w-12 h-12 rounded-lg bg-muted border border-border flex items-center justify-center text-xs font-medium text-muted-foreground">
-                          +{log.photo_urls.length - 3}
+                      {log.photo_urls.length > 6 && (
+                        <div className="w-14 h-14 rounded-lg bg-muted border border-border flex items-center justify-center text-xs font-medium text-muted-foreground">
+                          +{log.photo_urls.length - 6}
                         </div>
                       )}
                     </div>

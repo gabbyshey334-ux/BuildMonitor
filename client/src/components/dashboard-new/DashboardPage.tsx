@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import {
   Plus, Upload, AlertCircle, FileText, X, RefreshCw,
   TrendingUp, Calendar, Clock, ArrowUpRight, CheckCircle,
-  AlertTriangle, DollarSign, Activity, ChevronRight, BarChart3, MoreVertical, Pencil, Trash2
+  AlertTriangle, DollarSign, Activity, ChevronRight, BarChart3, MoreVertical, Pencil, Trash2, Check
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -25,6 +25,8 @@ import { cn } from '@/lib/utils';
 
 // Helper for currency formatting (use explicit UGX; Intl can show wrong symbol in some locales)
 const formatCurrency = (amount: number) => `UGX ${Number(amount).toLocaleString()}`;
+
+const PHOTO_TAGS = ['Foundation', 'Structure', 'Delivery', 'Workers', 'Inspection', 'Other'] as const;
 
 // Helper for time ago — handles date-only (YYYY-MM-DD) and full ISO timestamps
 function timeAgo(dateStr: string): string {
@@ -85,7 +87,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
   const { data: tasksData } = useProjectTasks(effectiveProjectId);
   const { data: expensesData, refetch: refetchExpenses } = useProjectExpenses(effectiveProjectId);
-  const { data: issuesData } = useQuery({
+  const { data: issuesData, refetch: refetchIssues } = useQuery({
     queryKey: ['issues', effectiveProjectId],
     queryFn: async () => {
       const res = await apiRequest('GET', `/api/projects/${effectiveProjectId}/issues`);
@@ -156,12 +158,24 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const [errors, setErrors] = useState<{ description?: string; amount?: string }>({});
   const [issueForm, setIssueForm] = useState({ title: '', description: '', priority: 'medium' });
   const [issueErrors, setIssueErrors] = useState<Record<string, string>>({});
-  const [dailyForm, setDailyForm] = useState({ workerCount: '', notes: '' });
+  const getDefaultTime = () => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  };
+  const ACTIVITY_TYPES = ['Delivery', 'Work Completed', 'Workers', 'Payment', 'Issue', 'Photo', 'Other'] as const;
+  type ActivityType = typeof ACTIVITY_TYPES[number];
+  const emptyEntry = () => ({ log_time: getDefaultTime(), activity_type: 'Other' as ActivityType, description: '', amount: '' });
+  const [dailyForm, setDailyForm] = useState({ workerCount: '', entries: [emptyEntry()] });
   const [dailyErrors, setDailyErrors] = useState<Record<string, string>>({});
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [editExpenseDescription, setEditExpenseDescription] = useState('');
   const [editExpenseAmount, setEditExpenseAmount] = useState('');
   const [savingExpenseEdit, setSavingExpenseEdit] = useState(false);
+  const [acknowledgingIssueId, setAcknowledgingIssueId] = useState<string | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoCaption, setPhotoCaption] = useState('');
+  const [photoTag, setPhotoTag] = useState<string>('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = getToken();
@@ -236,36 +250,80 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     }
   };
 
+  const handleAcknowledgeIssue = async (issueId: string) => {
+    if (acknowledgingIssueId) return;
+    setAcknowledgingIssueId(issueId);
+    try {
+      const res = await fetch(`/api/issues/${issueId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify({ status: 'acknowledged' }),
+      });
+      if (!res.ok) throw new Error('Failed to acknowledge issue');
+      await refetchIssues();
+      toast({ title: 'Issue acknowledged' });
+    } catch {
+      toast({ title: 'Failed to acknowledge issue', variant: 'destructive' });
+    } finally {
+      setAcknowledgingIssueId(null);
+    }
+  };
+
   const handleDailyLog = async () => {
     const next: Record<string, string> = {};
     const workerStr = dailyForm.workerCount.trim();
     const workerNum = workerStr ? parseInt(workerStr, 10) : NaN;
-    if (!workerStr || isNaN(workerNum) || workerNum < 1) {
-      next.workerCount = 'Please enter the number of workers';
+    if (!workerStr || isNaN(workerNum) || workerNum < 0) {
+      next.workerCount = 'Please enter the number of workers on site';
     }
     setDailyErrors(next);
     if (Object.keys(next).length > 0) return;
 
+    const entries = dailyForm.entries.map((e) => ({
+      log_time: e.log_time,
+      activity_type: e.activity_type,
+      description: e.description.trim(),
+      amount: (e.activity_type === 'Payment' || e.activity_type === 'Delivery') && e.amount
+        ? parseFloat(String(e.amount).replace(/,/g, ''))
+        : null,
+    }));
+
     try {
-      const res = await fetch(`/api/projects/${effectiveProjectId}/daily/log`, {
+      const res = await fetch(`/api/daily-logs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
         body: JSON.stringify({
-          worker_count: workerNum,
-          notes: dailyForm.notes.trim(),
+          project_id: effectiveProjectId,
           log_date: new Date().toISOString().split('T')[0],
+          worker_count: workerNum,
+          entries,
         }),
       });
       if (!res.ok) throw new Error('Failed to save daily log');
       setShowDailyModal(false);
-      setDailyForm({ workerCount: '', notes: '' });
+      setDailyForm({ workerCount: '', entries: [emptyEntry()] });
       setDailyErrors({});
       queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
       toast({ title: 'Daily log saved! ✅' });
     } catch {
       toast({ title: 'Failed to save daily log', variant: 'destructive' });
     }
+  };
+
+  const updateDailyEntry = (idx: number, field: string, value: string | number) => {
+    setDailyForm((p) => ({
+      ...p,
+      entries: p.entries.map((e, i) => (i === idx ? { ...e, [field]: value } : e)),
+    }));
+  };
+  const addDailyEntry = () => {
+    setDailyForm((p) => ({ ...p, entries: [...p.entries, emptyEntry()] }));
+  };
+  const removeDailyEntry = (idx: number) => {
+    if (dailyForm.entries.length <= 1) return;
+    setDailyForm((p) => ({ ...p, entries: p.entries.filter((_, i) => i !== idx) }));
   };
 
   const handleDeleteExpense = async (expenseId: string) => {
@@ -330,25 +388,53 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     input.type = 'file';
     input.accept = 'image/*';
     input.capture = 'environment';
-    input.onchange = async (e) => {
+    input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file || !effectiveProjectId) return;
-      try {
-        setUploading(true);
-        const photoUrl = await uploadPhotoDirectly(file, effectiveProjectId);
-        await apiRequest('POST', `/api/projects/${effectiveProjectId}/daily/photo`, { photoUrl });
-        queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId] });
-        queryClient.invalidateQueries({ queryKey: ['project-daily', effectiveProjectId] });
-        toast({ title: 'Photo uploaded successfully!' });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Upload failed';
-        toast({ title: 'Upload failed', description: message, variant: 'destructive' });
-      } finally {
-        setUploading(false);
-      }
+      const url = URL.createObjectURL(file);
+      setPhotoPreviewUrl(url);
+      setPendingPhoto(file);
+      setPhotoCaption('');
+      setPhotoTag('');
     };
     input.click();
   };
+
+  const handleCancelPhotoModal = () => {
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(null);
+    setPendingPhoto(null);
+    setPhotoCaption('');
+    setPhotoTag('');
+  };
+
+  const handleConfirmUploadPhoto = async () => {
+    if (!pendingPhoto || !effectiveProjectId) return;
+    try {
+      setUploading(true);
+      const photoUrl = await uploadPhotoDirectly(pendingPhoto, effectiveProjectId);
+      await apiRequest('POST', `/api/projects/${effectiveProjectId}/daily/photo`, {
+        photoUrl,
+        caption: photoCaption.trim() || undefined,
+        tag: photoTag || undefined,
+      });
+      queryClient.invalidateQueries({ queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['project-daily', effectiveProjectId] });
+      toast({ title: 'Photo uploaded successfully!' });
+      handleCancelPhotoModal();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      toast({ title: 'Upload failed', description: message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    };
+  }, [photoPreviewUrl]);
 
   useEffect(() => {
     const update = () => {
@@ -561,7 +647,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           </div>
           <button
             type="button"
-            onClick={() => { if (effectiveProjectId) setLocation(`/dashboard?project=${effectiveProjectId}#issues-section`); }}
+            onClick={() => document.getElementById('issues-section')?.scrollIntoView({ behavior: 'smooth' })}
             className="text-muted-foreground text-xs mt-1 cursor-pointer hover:text-[#00bcd4] flex items-center gap-1 bg-transparent border-0 p-0 font-inherit text-left"
           >
             View details <ArrowUpRight className="w-3 h-3" />
@@ -758,28 +844,49 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                 <p>No open issues</p>
               </div>
             ) : (
-              issuesSectionData.openIssues.slice(0, 4).map((issue) => (
-                <div key={issue.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted border border-border hover:bg-muted/80 transition-colors">
+              issuesSectionData.openIssues.slice(0, 4).map((issue) => {
+                const isAcknowledged = issue.status === 'acknowledged';
+                const priority = issue.priority || issue.severity;
+                return (
+                <div
+                  key={issue.id}
+                  className={cn(
+                    'flex items-center gap-4 p-3 rounded-lg bg-muted border border-border hover:bg-muted/80 transition-colors',
+                    isAcknowledged && 'opacity-50'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => !isAcknowledged && handleAcknowledgeIssue(issue.id)}
+                    disabled={isAcknowledged || acknowledgingIssueId === issue.id}
+                    className="shrink-0 w-6 h-6 rounded border border-border bg-card flex items-center justify-center text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    aria-label={isAcknowledged ? 'Acknowledged' : 'Mark as acknowledged'}
+                  >
+                    {isAcknowledged ? <Check className="w-3.5 h-3.5 text-green-500" /> : null}
+                  </button>
                   <div className={`w-2 h-2 rounded-full shrink-0 ${
-                    issue.priority === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
-                    issue.priority === 'high' ? 'bg-amber-500' :
+                    isAcknowledged ? 'bg-zinc-500' :
+                    priority === 'critical' ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' :
+                    priority === 'high' ? 'bg-amber-500' :
                     'bg-blue-500'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-foreground truncate">{issue.title}</h4>
+                    <h4 className={cn('text-sm font-medium text-foreground truncate', isAcknowledged && 'line-through')}>{issue.title}</h4>
                     <p className="text-xs text-muted-foreground truncate">{issue.description}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0">
                     <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${
-                      issue.priority === 'critical' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                      issue.priority === 'high' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                      isAcknowledged ? 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20' :
+                      priority === 'critical' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                      priority === 'high' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                       'bg-blue-500/10 text-blue-400 border-blue-500/20'
                     }`}>
-                      {issue.priority}
+                      {priority || 'normal'}
                     </span>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -945,44 +1052,151 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
       )}
 
-      {showDailyModal && (
+      {/* Photo caption modal — shown after user selects a file */}
+      {pendingPhoto && photoPreviewUrl && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-foreground font-bold text-xl">Daily Log</h3>
-              <button onClick={() => { setShowDailyModal(false); setDailyErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-foreground font-bold text-xl">Add photo details</h3>
+              <button type="button" onClick={handleCancelPhotoModal} className="text-muted-foreground hover:text-foreground transition-colors p-1">
+                <X size={22} />
+              </button>
+            </div>
+            <div className="rounded-lg overflow-hidden bg-muted border border-border mb-4 aspect-video">
+              <img src={photoPreviewUrl} alt="Preview" className="w-full h-full object-contain" />
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Add a caption (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. North wall progress"
+                  value={photoCaption}
+                  onChange={(e) => setPhotoCaption(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
+                />
+              </div>
+              <div>
+                <label className="text-muted-foreground text-sm font-medium mb-2 block">Tag</label>
+                <div className="flex flex-wrap gap-2">
+                  {PHOTO_TAGS.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setPhotoTag(photoTag === tag ? '' : tag)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-sm font-medium transition-colors',
+                        photoTag === tag
+                          ? 'bg-[#00bcd4] text-black'
+                          : 'bg-muted border border-border text-muted-foreground hover:border-[#00bcd4]/50 hover:text-foreground'
+                      )}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-4 mt-6">
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={handleCancelPhotoModal}>
+                Cancel
+              </Button>
+              <Button type="button" className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-12" onClick={handleConfirmUploadPhoto} disabled={uploading}>
+                {uploading ? 'Uploading…' : 'Upload Photo'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDailyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-card rounded-xl p-6 w-full max-w-lg border border-border shadow-2xl my-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-foreground font-bold text-xl">Daily Site Log</h3>
+              <button onClick={() => { setShowDailyModal(false); setDailyErrors({}); setDailyForm({ workerCount: '', entries: [emptyEntry()] }); }} className="text-muted-foreground hover:text-foreground transition-colors p-1">
                 <X size={24} />
               </button>
             </div>
-            <div className="space-y-5">
-              <div>
-                <label className="text-muted-foreground text-sm font-medium mb-2 block">Workers on site</label>
-                <input
-                  type="number"
-                  min={0}
-                  placeholder="0"
-                  value={dailyForm.workerCount}
-                  onChange={(e) => {
-                    setDailyForm((p) => ({ ...p, workerCount: e.target.value }));
-                    setDailyErrors((prev) => ({ ...prev, workerCount: '' }));
-                  }}
-                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
-                />
-                {dailyErrors.workerCount && <p className="text-red-500 text-xs mt-1">{dailyErrors.workerCount}</p>}
-              </div>
-              <div>
-                <label className="text-muted-foreground text-sm font-medium mb-2 block">Notes</label>
-                <textarea
-                  placeholder="e.g. Foundation 80% complete, rain delayed work..."
-                  value={dailyForm.notes}
-                  onChange={(e) => setDailyForm((p) => ({ ...p, notes: e.target.value }))}
-                  rows={3}
-                  className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground resize-none"
-                />
-              </div>
+            {/* Date header — non-editable */}
+            <div className="text-muted-foreground text-sm font-medium mb-4 pb-3 border-b border-border">
+              {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
-            <div className="flex gap-4 mt-8">
-              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => { setShowDailyModal(false); setDailyErrors({}); }}>Cancel</Button>
+            {/* Workers on site — at top, separate from timeline */}
+            <div className="mb-6">
+              <label className="text-muted-foreground text-sm font-medium mb-2 block">Workers on site</label>
+              <input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={dailyForm.workerCount}
+                onChange={(e) => {
+                  setDailyForm((p) => ({ ...p, workerCount: e.target.value }));
+                  setDailyErrors((prev) => ({ ...prev, workerCount: '' }));
+                }}
+                className="w-full px-4 py-3 rounded-lg bg-muted border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
+              />
+              {dailyErrors.workerCount && <p className="text-red-500 text-xs mt-1">{dailyErrors.workerCount}</p>}
+            </div>
+            {/* Timeline entries */}
+            <div className="space-y-6 mb-6">
+              <label className="text-muted-foreground text-sm font-medium block">Timeline entries</label>
+              {dailyForm.entries.map((entry, idx) => (
+                <div key={idx} className="p-4 rounded-lg bg-muted/50 border border-border space-y-4">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="time"
+                      value={entry.log_time}
+                      onChange={(e) => updateDailyEntry(idx, 'log_time', e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#3b82f6] focus:border-transparent"
+                    />
+                    <div className="flex flex-wrap gap-2 flex-1">
+                      {ACTIVITY_TYPES.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => updateDailyEntry(idx, 'activity_type', t)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-full text-xs font-medium transition-colors',
+                            entry.activity_type === t
+                              ? 'bg-[#3b82f6] text-white'
+                              : 'bg-muted border border-border text-muted-foreground hover:border-[#3b82f6]/50 hover:text-foreground'
+                          )}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="What happened?"
+                    value={entry.description}
+                    onChange={(e) => updateDailyEntry(idx, 'description', e.target.value)}
+                    className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
+                  />
+                  {(entry.activity_type === 'Payment' || entry.activity_type === 'Delivery') && (
+                    <input
+                      type="text"
+                      placeholder="Amount in UGX"
+                      value={entry.amount}
+                      onChange={(e) => updateDailyEntry(idx, 'amount', e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#3b82f6] placeholder:text-muted-foreground"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={addDailyEntry}
+                    className="flex items-center gap-2 text-sm text-[#3b82f6] hover:text-[#2563eb] font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add another entry
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-4">
+              <Button type="button" variant="outline" className="flex-1 border-border hover:bg-muted hover:text-foreground text-muted-foreground h-12" onClick={() => { setShowDailyModal(false); setDailyErrors({}); setDailyForm({ workerCount: '', entries: [emptyEntry()] }); }}>Cancel</Button>
               <Button type="button" className="flex-1 bg-[#3b82f6] hover:bg-[#2563eb] text-white font-bold h-12" onClick={handleDailyLog}>Save Log</Button>
             </div>
           </div>

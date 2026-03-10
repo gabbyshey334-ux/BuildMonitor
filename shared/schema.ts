@@ -58,6 +58,7 @@ export const profiles = pgTable("profiles", {
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   expenseState: text("expense_state"), // 'awaiting_price' | 'awaiting_confirmation'
   expensePendingData: jsonb("expense_pending_data").default('{}'),
+  pendingMaterialUpdate: jsonb("pending_material_update"), // { project_id, material_name, quantity, unit } for YES/NO confirmation
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   lastActiveAt: timestamp("last_active_at", { withTimezone: true }),
@@ -234,6 +235,7 @@ export const dailyLogs = pgTable("daily_logs", {
   notes: text("notes"),
   weatherCondition: text("weather_condition"),
   photoUrls: jsonb("photo_urls"), // JSON array of URLs
+  activityEntries: jsonb("activity_entries").default('[]'), // [{ log_time, activity_type, description, amount? }]
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => [index("idx_daily_logs_project_id").on(table.projectId)]);
 

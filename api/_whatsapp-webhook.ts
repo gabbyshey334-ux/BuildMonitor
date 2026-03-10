@@ -102,6 +102,27 @@ interface ExpensePendingData {
   project_options?: { id: string; name: string; location?: string }[];
 }
 
+interface PendingMaterialUpdate {
+  project_id: string;
+  material_name: string;
+  quantity: number;
+  unit?: string;
+}
+
+const MATERIAL_KEYWORDS = [
+  'cement', 'sand', 'gravel', 'bricks', 'iron bars', 'steel', 'timber', 'wood',
+  'poles', 'tiles', 'paint', 'roofing', 'pipes', 'wire', 'aggregate', 'ballast',
+  'blocks', 'stone',
+];
+
+function parseQuantityFromDescription(desc: string): { quantity: number; unit?: string } | null {
+  const m = desc.match(/(\d+)\s*(bags?|tonnes?|pieces?|bars?|sheets?|litres?|rolls?)?/i);
+  if (!m) return null;
+  const quantity = parseInt(m[1], 10);
+  const unit = m[2] || undefined;
+  return { quantity: isNaN(quantity) ? 1 : quantity, unit };
+}
+
 interface ParsedExpense {
   amount?: number;
   description?: string;
@@ -250,6 +271,22 @@ async function updateExpenseState(userId: string, state: ExpenseState, data?: Ex
   if (error) { console.error('[Update Expense State Error]', error); throw error; }
 }
 
+async function clearPendingMaterialUpdate(userId: string) {
+  const { error } = await supabase.from('profiles').update({
+    pending_material_update: null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', userId);
+  if (error) console.error('[Clear Pending Material Error]', error);
+}
+
+async function setPendingMaterialUpdate(userId: string, data: PendingMaterialUpdate) {
+  const { error } = await supabase.from('profiles').update({
+    pending_material_update: data,
+    updated_at: new Date().toISOString(),
+  }).eq('id', userId);
+  if (error) { console.error('[Set Pending Material Error]', error); throw error; }
+}
+
 // ─── Active Project (multi-project selection) ─────────────────────────────────
 
 async function getActiveProject(
@@ -277,6 +314,7 @@ async function getActiveProject(
   const allProjects = [...(ownedProjects || []), ...(managedProjects || [])]
     .filter((p, i, self) => i === self.findIndex((t) => t.id === p.id));
 
+  // Strict: only return projects owned or managed by userId; never query across projects.
   if (allProjects.length === 0) {
     return { project: null, needsSelection: false, projects: [] };
   }
@@ -1728,6 +1766,141 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
   }
 }
 
+// ─── Natural language fallback: unrecognized messages → AI with project context (no menu) ───
+
+async function handleNaturalLanguageQuery(
+  from: string,
+  userId: string,
+  projectId: string | null,
+  rawMessage: string
+): Promise<string> {
+  if (!projectId) {
+    return "Please select a project first. Reply with the project number from your list, or say \"list projects\" to see options.";
+  }
+
+  // Strict: only use project that belongs to this user (owner or manager).
+  const { data: project } = await supabase
+    .from('projects')
+    .select('id, name, budget, user_id, manager_id')
+    .eq('id', projectId)
+    .single();
+
+  if (!project || (project.user_id !== userId && project.manager_id !== userId)) {
+    return "Project not found. Say \"list projects\" to switch.";
+  }
+
+  // "When did I buy [material]?" / "When did I last buy [item]?" — direct expense lookup
+  const whenDidIBuyMatch = rawMessage.match(/when\s+did\s+I\s+(?:last\s+)?buy\s+(.+?)(?:\?|$)/i);
+  if (whenDidIBuyMatch) {
+    const material = whenDidIBuyMatch[1].trim();
+    if (material) {
+      const { data: lastPurchase } = await supabase
+        .from('expenses')
+        .select('description, amount, expense_date, created_at')
+        .eq('project_id', projectId)
+        .ilike('description', `%${material}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastPurchase) {
+        const dateStr = lastPurchase.expense_date || (lastPurchase.created_at || '').split('T')[0];
+        const dateFormatted = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' }) : dateStr;
+        const amount = parseFloat(String(lastPurchase.amount || 0));
+        return `You last bought ${lastPurchase.description || 'it'} on ${dateFormatted} for ${fmt(amount)} UGX.`;
+      }
+      return `I couldn't find a purchase of ${material} in this project's expense history.`;
+    }
+  }
+
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const fromDate = twoYearsAgo.toISOString().split('T')[0];
+
+  const { data: expenses } = await supabase
+    .from('expenses')
+    .select('description, amount, expense_date, created_at')
+    .eq('project_id', projectId)
+    .gte('expense_date', fromDate)
+    .order('expense_date', { ascending: false })
+    .limit(200);
+
+  const { data: materials } = await supabase
+    .from('materials_inventory')
+    .select('material_name, quantity, unit, last_updated')
+    .eq('project_id', projectId);
+
+  const { data: allExpenses } = await supabase
+    .from('expenses')
+    .select('amount')
+    .eq('project_id', projectId);
+  const totalSpent = (allExpenses || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+  const budget = parseFloat(String(project.budget || 0));
+  const remaining = Math.max(0, budget - totalSpent);
+
+  const context = {
+    projectName: project.name,
+    budgetUgx: budget,
+    spentUgx: totalSpent,
+    remainingUgx: remaining,
+    recentExpenses: (expenses || []).slice(0, 10).map((e: any) => ({
+      description: e.description,
+      amount: parseFloat(String(e.amount || 0)),
+      date: e.expense_date,
+    })),
+    materials: (materials || []).map((m: any) => ({
+      name: m.material_name,
+      quantity: m.quantity,
+      unit: m.unit || 'units',
+    })),
+  };
+
+  const systemPrompt = `You are JengaTrack, a construction assistant for this project. Answer the user naturally and helpfully.
+
+Project: ${context.projectName}
+Budget: ${fmt(context.budgetUgx)} UGX
+Spent: ${fmt(context.spentUgx)} UGX
+Remaining: ${fmt(context.remainingUgx)} UGX
+Recent expenses (use only if relevant): ${JSON.stringify(context.recentExpenses)}
+Materials inventory: ${JSON.stringify(context.materials)}
+
+Rules:
+- Use ONLY the project data above. Never invent amounts, dates, or facts not in the data.
+- If the user asks something not in the data, say you don't have that information or suggest they check the dashboard.
+- Be warm, concise, plain text, no markdown. Under 5 lines.
+- For amounts use UGX and format with commas (e.g. 1,500,000 UGX).`;
+
+  const userPrompt = `User asked: "${rawMessage}"\n\nAnswer using only the project data provided.`;
+
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent([systemPrompt, userPrompt]);
+      const text = result.response.text()?.trim();
+      if (text) return text;
+    } catch (err: any) {
+      console.error('[NaturalLanguage] Gemini failed:', err?.message);
+    }
+  }
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+      });
+      const text = completion.choices[0]?.message?.content?.trim();
+      if (text) return text;
+    } catch (err: any) {
+      console.error('[NaturalLanguage] OpenAI failed:', err?.message);
+    }
+  }
+  return "I couldn't process that right now. Try asking something like: How much have I spent? What's my remaining budget?";
+}
+
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
 // Export this so it can be called from a separate serverless cron endpoint
 
@@ -1827,6 +2000,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = profile.id;
     const onboardingState = profile.onboarding_state as OnboardingState;
     const needsOnboarding = !profile.onboarding_completed_at;
+    console.log('[webhook] userId:', userId, 'projectId:', profile.active_project_id ?? 'none');
 
     // "Start over" — reset onboarding cleanly without creating duplicate profile
     if (/start\s*over|startover/i.test(rawMessage.trim())) {
@@ -1836,6 +2010,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         onboarding_completed_at: null,
         expense_state: null,
         expense_pending_data: {},
+        pending_material_update: null,
         updated_at: new Date().toISOString(),
       }).eq('id', userId);
       await sendWelcomeMessage(From, profile.full_name);
@@ -1899,6 +2074,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const expenseState = (profile.expense_state as ExpenseState) ?? null;
     const pendingData = (profile.expense_pending_data as ExpensePendingData) || {};
 
+    // ── STEP 3.5: Handle pending material confirmation (YES/NO) ─────────────────
+    const pendingMaterial = profile.pending_material_update as PendingMaterialUpdate | null;
+    if (pendingMaterial && pendingMaterial.project_id) {
+      const trimmed = rawMessage.trim().toLowerCase();
+      const isYes = /^(yes|y)$/.test(trimmed);
+      const isNo = /^(no|n)$/.test(trimmed);
+      if (isYes || isNo) {
+        if (isYes) {
+          try {
+            const { data: existing } = await supabase
+              .from('materials_inventory')
+              .select('id, quantity, unit')
+              .eq('project_id', pendingMaterial.project_id)
+              .ilike('material_name', `%${pendingMaterial.material_name}%`)
+              .maybeSingle();
+            if (existing) {
+              const newQty = parseFloat(String(existing.quantity || 0)) + pendingMaterial.quantity;
+              await supabase
+                .from('materials_inventory')
+                .update({
+                  quantity: newQty,
+                  unit: pendingMaterial.unit || existing.unit,
+                  last_updated: new Date().toISOString(),
+                })
+                .eq('id', existing.id);
+              console.log(`[Materials] Updated ${existing.id}: +${pendingMaterial.quantity} → ${newQty}`);
+            } else {
+              await supabase
+                .from('materials_inventory')
+                .insert({
+                  project_id: pendingMaterial.project_id,
+                  material_name: pendingMaterial.material_name,
+                  quantity: pendingMaterial.quantity,
+                  unit: pendingMaterial.unit || 'units',
+                  last_updated: new Date().toISOString(),
+                });
+              console.log(`[Materials] Created ${pendingMaterial.material_name}: ${pendingMaterial.quantity}`);
+            }
+            await sendMessage(From, await ai(
+              `Tell the user you added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to their Materials & Supplies inventory. Be brief.`,
+              `Added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to Materials & Supplies.`
+            ));
+          } catch (err: any) {
+            console.error('[Materials] Insert/update failed:', err?.message);
+            await sendMessage(From, 'Could not add to inventory. Please try again from the dashboard.');
+          }
+        } else {
+          await sendMessage(From, await ai(
+            'Tell the user you skipped adding to materials. Be brief.',
+            'Skipped. Send another update anytime.'
+          ));
+        }
+        await clearPendingMaterialUpdate(userId);
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      } else {
+        await sendMessage(From, 'Please reply YES to add to Materials & Supplies, or NO to skip.');
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+    }
+
     // Handle reply to "Which project?" menu (BEFORE intent classification)
     if (expenseState === 'awaiting_project_selection') {
       if (/list.*project|my project|show.*project|all.*project|project.*list|what project/i.test(message)) {
@@ -1951,7 +2188,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get active project (or require selection for multi-project users)
+    // STRICT: Only use project from getActiveProject — never query across projects without explicit switching.
     const { project, needsSelection, projects } = await getActiveProject(userId, profile);
+    const currentProjectId = project?.id ?? null;
+    console.log('[webhook] userId:', userId, 'projectId:', currentProjectId);
 
     if (needsSelection) {
       await sendProjectSelectionMenu(From, userId, projects);
@@ -2216,78 +2456,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await upsertVendor(pendingData.project_id, pendingData.vendor, pendingData.amount);
         }
 
-        // Auto-update materials inventory if this looks like a material
-        const MATERIAL_KEYWORDS = [
-          'cement', 'sand', 'gravel', 'aggregate', 'stone', 'bricks',
-          'blocks', 'iron', 'rebar', 'steel', 'rods', 'timber', 'wood',
-          'planks', 'nails', 'screws', 'bolts', 'paint', 'tiles',
-          'roofing', 'sheets', 'pipes', 'wire', 'cable', 'glass',
-          'plaster', 'gypsum', 'hardcore', 'ballast', 'murram', 'soil',
-          'concrete', 'bitumen', 'waterproofing', 'insulation', 'foam',
-        ];
+        // Detect materials and ask for confirmation before adding to inventory
         const descLower = (pendingData.description || '').toLowerCase();
         const isMaterial = MATERIAL_KEYWORDS.some((k) => descLower.includes(k));
         const materialName = (pendingData.item || pendingData.description || '').trim();
 
-        if (isMaterial && materialName && pendingData.quantity && pendingData.quantity > 0) {
-          try {
-            const { data: existing } = await supabase
-              .from('materials_inventory')
-              .select('*')
-              .eq('project_id', pendingData.project_id)
-              .ilike('material_name', `%${materialName}%`)
-              .maybeSingle();
-
-            if (existing) {
-              const newQty = parseFloat(String(existing.quantity || 0)) + pendingData.quantity;
-              await supabase
-                .from('materials_inventory')
-                .update({
-                  quantity: newQty,
-                  unit: pendingData.unit || existing.unit,
-                  last_updated: new Date().toISOString(),
-                })
-                .eq('id', existing.id);
-              console.log(`[Materials] Updated ${existing.material_name}: +${pendingData.quantity} → ${newQty}`);
-            } else {
-              await supabase
-                .from('materials_inventory')
-                .insert({
-                  project_id: pendingData.project_id,
-                  material_name: materialName,
-                  quantity: pendingData.quantity,
-                  unit: pendingData.unit || 'units',
-                  last_updated: new Date().toISOString(),
-                });
-              console.log(`[Materials] Created ${materialName}: ${pendingData.quantity} ${pendingData.unit || 'units'}`);
-            }
-          } catch (matErr: any) {
-            console.error('[Materials] Inventory update failed:', matErr?.message);
+        let quantity = pendingData.quantity && pendingData.quantity > 0 ? pendingData.quantity : 0;
+        let unit = pendingData.unit;
+        if (!quantity && pendingData.description) {
+          const parsed = parseQuantityFromDescription(pendingData.description);
+          if (parsed) {
+            quantity = parsed.quantity;
+            unit = parsed.unit || unit;
           }
-        } else if (isMaterial && materialName && !pendingData.quantity) {
-          try {
-            const { data: existing } = await supabase
-              .from('materials_inventory')
-              .select('*')
-              .eq('project_id', pendingData.project_id)
-              .ilike('material_name', `%${materialName}%`)
-              .maybeSingle();
-
-            if (!existing) {
-              await supabase
-                .from('materials_inventory')
-                .insert({
-                  project_id: pendingData.project_id,
-                  material_name: materialName,
-                  quantity: 1,
-                  unit: 'units',
-                  last_updated: new Date().toISOString(),
-                });
-              console.log(`[Materials] Created ${materialName} with quantity 1 (no quantity parsed)`);
-            }
-          } catch (matErr: any) {
-            console.error('[Materials] Inventory insert failed:', matErr?.message);
+        }
+        if (!quantity && materialName) {
+          const parsed = parseQuantityFromDescription(pendingData.description || materialName);
+          if (parsed && parsed.quantity > 0) {
+            quantity = parsed.quantity;
+            unit = parsed.unit || unit;
           }
+        }
+        if (isMaterial && materialName && quantity > 0) {
+          await updateExpenseState(userId, null, {});
+          await setPendingMaterialUpdate(userId, {
+            project_id: pendingData.project_id!,
+            material_name: materialName,
+            quantity,
+            unit: unit || 'units',
+          });
+          const savedMsg = await ai(
+            `Tell the user their expense was saved: ${pendingData.description} — ${fmt(pendingData.amount!)} UGX. Then ask if they want to add the material to inventory.`,
+            `Saved! ${pendingData.description} — ${fmt(pendingData.amount!)} UGX logged.\n\nI noticed you bought ${quantity} ${unit || 'units'} of ${materialName}. Should I add this to your Materials & Supplies inventory? Reply YES to confirm or NO to skip.`
+          );
+          await sendMessage(From, savedMsg);
+          res.setHeader('Content-Type', 'text/xml');
+          return res.status(200).send(twimlOk);
         }
 
         await updateExpenseState(userId, null, {});
@@ -2457,6 +2661,9 @@ async function routeIntent(
   profile: any,
   projects: any[]
 ): Promise<void> {
+  const currentProjectId = project?.id ?? null;
+  console.log('[webhook] userId:', userId, 'projectId:', currentProjectId);
+
   switch (intent) {
     case 'BUDGET_QUERY':
       await handleBudgetQuery(from, project.id);
@@ -2490,13 +2697,9 @@ async function routeIntent(
       break;
     case 'GREETING':
     default: {
-      const isDataQuery = /how much|how many|what did|when did|which vendor|show me|list|total|spent|remaining|balance|last week|last month|compare|breakdown|history|analyze|analyse/i.test(rawMessage);
-      const isCapabilityQuestion = /what can|help me|how do|how does|what do you|can you|what is|what are|how to|how should|best way|explain|tell me about/i.test(rawMessage);
-      if (isDataQuery && !isCapabilityQuestion && project) {
-        await handleSmartQuery(from, project.id, rawMessage);
-      } else {
-        await handleGreeting(from, profile, project, projects, rawMessage);
-      }
+      // Route unrecognized messages to AI with project context (no rigid menu)
+      const aiResponse = await handleNaturalLanguageQuery(from, userId, project?.id ?? null, rawMessage);
+      await sendMessage(from, aiResponse);
       break;
     }
   }
