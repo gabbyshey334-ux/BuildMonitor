@@ -810,7 +810,7 @@ export default function BudgetPage() {
         result.push({
           icon: PackageOpen,
           iconColor: COLORS.yellow,
-          title: `${m.material_name} is low: ${m.quantity} ${m.unit || "units"} remaining.`,
+          title: `${m.name} is low: ${m.quantity} ${m.unit || "units"} remaining.`,
           subtitle: "Low Stock",
           dotColor: COLORS.yellow,
           timestamp: "Now",
@@ -1017,7 +1017,8 @@ export default function BudgetPage() {
 
         {/* BOTTOM ROW — Cost Trend */}
         <CostTrendChart
-          allData={costTrendDataRaw}
+
+allData={costTrendDataRaw}
           period={costTrendPeriod}
           lastWeekSpend={lastWeekSpent}
           lastWeekKey={lastWeekKey}

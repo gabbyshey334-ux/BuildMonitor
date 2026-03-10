@@ -602,27 +602,69 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
         const materialName = String(item.name).toLowerCase().trim();
         const qty = parseFloat(String(item.quantity || 0));
         if (qty <= 0) continue;
+        const itemUnitCost = parseFloat(String(item.amount || 0)) / (qty || 1);
+        const itemTotalCost = parseFloat(String(item.amount || 0));
+        const now = new Date().toISOString();
 
         const { data: existing } = await supabase
           .from('materials_inventory')
-          .select('id, quantity')
+          .select('id, quantity, unit_cost, total_cost')
           .eq('project_id', projectId)
-          .eq('material_name', materialName)
+          .eq('name', materialName)
           .maybeSingle();
 
         const newQty = parseFloat(String(existing?.quantity || 0)) + qty;
 
         if (existing) {
+          const newTotalCost = parseFloat(String(existing.total_cost || 0)) + itemTotalCost;
           await supabase.from('materials_inventory')
-            .update({ quantity: newQty, last_updated: new Date().toISOString() })
+            .update({
+              quantity: newQty,
+              unit_cost: itemUnitCost || parseFloat(String(existing.unit_cost || 0)),
+              total_cost: newTotalCost,
+              last_purchased_at: now,
+              updated_at: now,
+            })
             .eq('id', existing.id);
-        } else {
-          await supabase.from('materials_inventory').insert({
+          await supabase.from('material_transactions').insert({
+            material_id: existing.id,
             project_id: projectId,
-            material_name: materialName,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity: qty,
+            unit_cost: itemUnitCost,
+            total_cost: itemTotalCost,
+            description: `Receipt: ${materialName} +${qty}`,
+            source: 'whatsapp',
+          });
+        } else {
+          const { data: inserted } = await supabase.from('materials_inventory').insert({
+            project_id: projectId,
+            user_id: userId,
+            name: materialName,
             quantity: qty,
             unit: item.unit || 'units',
-          });
+            unit_cost: itemUnitCost,
+            total_cost: itemTotalCost,
+            source: 'whatsapp',
+            last_purchased_at: now,
+            updated_at: now,
+          })
+            .select('id')
+            .single();
+          if (inserted?.id) {
+            await supabase.from('material_transactions').insert({
+              material_id: inserted.id,
+              project_id: projectId,
+              user_id: userId,
+              transaction_type: 'purchase',
+              quantity: qty,
+              unit_cost: itemUnitCost,
+              total_cost: itemTotalCost,
+              description: `Receipt: ${materialName}`,
+              source: 'whatsapp',
+            });
+          }
         }
         console.log('[OCR Materials] Inventory updated:', materialName, '+', qty);
       }
@@ -1403,6 +1445,7 @@ async function handleExpenseLog(
 
 async function handleMaterialLog(
   from: string,
+  userId: string,
   projectId: string,
   extracted: Record<string, unknown>,
   rawMessage: string
@@ -1412,6 +1455,9 @@ async function handleMaterialLog(
   let unit = String(extracted.unit || 'units').trim();
   const action = String(extracted.action || 'bought').toLowerCase();
   const vendor = String(extracted.vendor || '').trim();
+  const amount = typeof extracted.amount === 'number' ? extracted.amount : parseFloat(String(extracted.amount || '0')) || 0;
+  const unitCost = amount && qty > 0 ? amount / qty : 0;
+  const totalCost = amount || (qty * unitCost);
 
   const qm = rawMessage.match(/(\d+(?:,\d+)*)\s*(bags?|kg|tons?|pieces?|trips?|units?)\s+(?:of\s+)?([a-z\s]+)/i);
   if (qm) {
@@ -1444,61 +1490,141 @@ async function handleMaterialLog(
   // Get all existing materials for fuzzy matching
   const { data: allMaterials } = await supabase
     .from('materials_inventory')
-    .select('id, material_name, quantity, unit')
+    .select('id, name, quantity, unit, low_stock_threshold')
     .eq('project_id', projectId);
 
   let materialName = item.toLowerCase().trim() || 'material';
 
   if (allMaterials && allMaterials.length > 0 && materialName !== 'material') {
     const fuzzyMatch = allMaterials.find((m: any) =>
-      m.material_name === materialName ||
-      m.material_name.includes(materialName) ||
-      materialName.includes(m.material_name) ||
+      m.name === materialName ||
+      m.name.includes(materialName) ||
+      materialName.includes(m.name) ||
       materialName.split(' ').some((word: string) =>
-        word.length > 3 && m.material_name.includes(word)
+        word.length > 3 && m.name.includes(word)
       )
     );
     if (fuzzyMatch) {
-      console.log('[MaterialLog] Fuzzy matched:', materialName, '→', fuzzyMatch.material_name);
-      materialName = fuzzyMatch.material_name;
+      console.log('[MaterialLog] Fuzzy matched:', materialName, '→', fuzzyMatch.name);
+      materialName = fuzzyMatch.name;
     }
   }
 
-  const { data: existing } = await supabase
-    .from('materials_inventory')
-    .select('id, quantity')
-    .eq('project_id', projectId)
-    .eq('material_name', materialName)
-    .maybeSingle();
+  const now = new Date().toISOString();
 
-  const delta = effectiveAction === 'used' ? -Math.abs(qty) : Math.abs(qty);
-  const newQty = Math.max(0, parseFloat(String(existing?.quantity || 0)) + delta);
+  if (effectiveAction === 'used') {
+    const { data: existing } = await supabase
+      .from('materials_inventory')
+      .select('id, quantity, unit, low_stock_threshold')
+      .eq('project_id', projectId)
+      .ilike('name', materialName)
+      .maybeSingle();
 
-  if (existing) {
-    await supabase.from('materials_inventory')
-      .update({ quantity: newQty, last_updated: new Date().toISOString() })
+    if (!existing) {
+      await sendMessage(from, `No material matching "${materialName}" in inventory. Add it first by logging a purchase.`);
+      return;
+    }
+
+    const usedQty = Math.abs(qty);
+    const currentQty = parseFloat(String(existing.quantity || 0));
+    const newQty = Math.max(0, currentQty - usedQty);
+    const lowThreshold = existing.low_stock_threshold != null ? parseFloat(String(existing.low_stock_threshold)) : 5;
+
+    await supabase
+      .from('materials_inventory')
+      .update({
+        quantity: newQty,
+        last_used_at: now,
+        updated_at: now,
+      })
       .eq('id', existing.id);
-  } else {
-    await supabase.from('materials_inventory').insert({
+
+    await supabase.from('material_transactions').insert({
+      material_id: existing.id,
       project_id: projectId,
-      material_name: materialName,
-      quantity: Math.max(0, newQty),
-      unit,
+      user_id: userId,
+      transaction_type: 'usage',
+      quantity: -usedQty,
+      unit_cost: 0,
+      total_cost: 0,
+      description: `Used ${usedQty} ${unit} of ${materialName}`,
+      source: 'whatsapp',
     });
+
+    let reply = `✅ Updated! Used ${usedQty} ${unit} of ${materialName}. Remaining stock: ${newQty} ${unit}.`;
+    if (newQty <= lowThreshold) {
+      reply += ` ⚠️ Low stock (threshold: ${lowThreshold}). Consider restocking.`;
+    }
+    await sendMessage(from, reply);
+    return;
   }
 
-  if (effectiveAction !== 'used' && vendor) await upsertVendor(projectId, vendor, 0);
+  // Purchase: UPSERT on (project_id, name)
+  const { data: existing } = await supabase
+    .from('materials_inventory')
+    .select('id, quantity, unit_cost, total_cost')
+    .eq('project_id', projectId)
+    .eq('name', materialName)
+    .maybeSingle();
 
-  const msg = await ai(
-    `Tell the user their materials inventory was updated:
-    Material: ${materialName}
-    Action: ${effectiveAction === 'used' ? 'used ' + qty : 'added ' + qty} ${unit}
-    Current stock: ${newQty} ${unit}
-    ${newQty <= 5 && effectiveAction === 'used' ? 'IMPORTANT: Warn them stock is critically low at only ' + newQty + ' ' + unit + ' remaining.' : ''}
-    Tell them to check Materials & Supplies page.`,
-    `Inventory updated — ${materialName}: ${newQty} ${unit} remaining. Check Materials & Supplies page.`
-  );
-  await sendMessage(from, msg);
+  let materialId: string;
+  if (existing) {
+    const newQty = parseFloat(String(existing.quantity || 0)) + qty;
+    const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
+    await supabase
+      .from('materials_inventory')
+      .update({
+        quantity: newQty,
+        unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
+        total_cost: newTotalCost,
+        last_purchased_at: now,
+        updated_at: now,
+      })
+      .eq('id', existing.id);
+    materialId = existing.id;
+  } else {
+    const { data: inserted } = await supabase
+      .from('materials_inventory')
+      .insert({
+        project_id: projectId,
+        user_id: userId,
+        name: materialName,
+        quantity: qty,
+        unit: unit || 'units',
+        unit_cost: unitCost,
+        total_cost: totalCost,
+        source: 'whatsapp',
+        last_purchased_at: now,
+        updated_at: now,
+      })
+      .select('id')
+      .single();
+    materialId = inserted?.id;
+  }
+
+  if (materialId) {
+    const { data: row } = await supabase
+      .from('materials_inventory')
+      .select('quantity')
+      .eq('id', materialId)
+      .single();
+    const newTotal = row ? parseFloat(String(row.quantity || 0)) : qty;
+    await supabase.from('material_transactions').insert({
+      material_id: materialId,
+      project_id: projectId,
+      user_id: userId,
+      transaction_type: 'purchase',
+      quantity: qty,
+      unit_cost: unitCost,
+      total_cost: totalCost,
+      description: `Added ${qty} ${unit} of ${materialName}`,
+      source: 'whatsapp',
+    });
+    const reply = `✅ Logged! Added ${qty} ${unit} of ${materialName} to your Materials & Supplies. Current stock: ${newTotal} ${unit}.`;
+    await sendMessage(from, reply);
+  }
+
+  if (vendor) await upsertVendor(projectId, vendor, 0);
 }
 
 async function handleLaborLog(
@@ -1623,12 +1749,43 @@ async function handleWeatherDelay(
   await sendMessage(from, msg);
 }
 
-async function handleMaterialQuery(from: string, projectId: string): Promise<void> {
+async function handleMaterialQuery(from: string, projectId: string, message: string): Promise<void> {
+  // Try to extract a specific material name (e.g. "how many bricks do I have" -> "bricks")
+  const materialKeyword = message
+    .replace(/how (?:much|many)|do (?:i|we) have|in (?:my )?inventory|current stock|stock (?:left|of)|remaining/i, '')
+    .replace(/\?|\./g, '')
+    .trim()
+    .toLowerCase();
+  const words = materialKeyword.split(/\s+/).filter((w) => w.length > 2 && !/^(the|and|for|have|has|get)$/.test(w));
+  const keyword = words.length > 0 ? words.join(' ') : null;
+
+  if (keyword) {
+    const { data: materials } = await supabase
+      .from('materials_inventory')
+      .select('name, quantity, unit, last_purchased_at, last_used_at')
+      .eq('project_id', projectId)
+      .ilike('name', `%${keyword}%`)
+      .limit(5);
+
+    if (materials && materials.length > 0) {
+      const m = materials[0];
+      const qty = parseFloat(String(m.quantity || 0));
+      const unit = m.unit || 'units';
+      const lastPurchased = m.last_purchased_at
+        ? new Date(m.last_purchased_at).toLocaleDateString(undefined, { dateStyle: 'medium' })
+        : 'not recorded';
+      const reply = `You have ${qty} ${unit} of ${m.name}. Last purchased: ${lastPurchased}.`;
+      await sendMessage(from, reply);
+      return;
+    }
+  }
+
+  // List all materials
   const { data: materials } = await supabase
     .from('materials_inventory')
-    .select('material_name, quantity, unit')
+    .select('name, quantity, unit, last_purchased_at')
     .eq('project_id', projectId)
-    .order('material_name');
+    .order('name');
 
   if (!materials || materials.length === 0) {
     const msg = await ai(
@@ -1640,7 +1797,7 @@ async function handleMaterialQuery(from: string, projectId: string): Promise<voi
   }
 
   const lines = materials.map((m: any) =>
-    `• ${m.material_name}: ${m.quantity} ${m.unit || 'units'}`
+    `• ${m.name}: ${m.quantity} ${m.unit || 'units'}`
   ).join('\n');
 
   const msg = await ai(
@@ -1681,7 +1838,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
 
   const { data: materials } = await supabase
     .from('materials_inventory')
-    .select('material_name, quantity, unit, last_updated')
+    .select('name, quantity, unit, last_updated, updated_at')
     .eq('project_id', projectId);
 
   let vendors: { name: string; total_spent: number }[] = [];
@@ -1714,10 +1871,10 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     })),
     vendors,
     materialsInventory: (materials || []).map((m: any) => ({
-      name: m.material_name,
+      name: m.name,
       currentStock: m.quantity,
       unit: m.unit || 'units',
-      lastUpdated: m.last_updated,
+      lastUpdated: m.updated_at || m.last_updated,
     })),
   };
 
@@ -1826,7 +1983,7 @@ async function handleNaturalLanguageQuery(
 
   const { data: materials } = await supabase
     .from('materials_inventory')
-    .select('material_name, quantity, unit, last_updated')
+    .select('name, quantity, unit, last_updated, updated_at')
     .eq('project_id', projectId);
 
   const { data: allExpenses } = await supabase
@@ -1848,7 +2005,7 @@ async function handleNaturalLanguageQuery(
       date: e.expense_date,
     })),
     materials: (materials || []).map((m: any) => ({
-      name: m.material_name,
+      name: m.name,
       quantity: m.quantity,
       unit: m.unit || 'units',
     })),
@@ -2087,30 +2244,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .from('materials_inventory')
               .select('id, quantity, unit')
               .eq('project_id', pendingMaterial.project_id)
-              .ilike('material_name', `%${pendingMaterial.material_name}%`)
+              .ilike('name', `%${pendingMaterial.material_name}%`)
               .maybeSingle();
             if (existing) {
               const newQty = parseFloat(String(existing.quantity || 0)) + pendingMaterial.quantity;
+              const now = new Date().toISOString();
               await supabase
                 .from('materials_inventory')
                 .update({
                   quantity: newQty,
                   unit: pendingMaterial.unit || existing.unit,
-                  last_updated: new Date().toISOString(),
+                  last_purchased_at: now,
+                  updated_at: now,
                 })
                 .eq('id', existing.id);
               console.log(`[Materials] Updated ${existing.id}: +${pendingMaterial.quantity} → ${newQty}`);
+              await supabase.from('material_transactions').insert({
+                material_id: existing.id,
+                project_id: pendingMaterial.project_id,
+                user_id: userId,
+                transaction_type: 'purchase',
+                quantity: pendingMaterial.quantity,
+                unit_cost: 0,
+                total_cost: 0,
+                source: 'whatsapp',
+                description: `Added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} via WhatsApp`,
+              });
             } else {
-              await supabase
+              const now = new Date().toISOString();
+              const { data: inserted } = await supabase
                 .from('materials_inventory')
                 .insert({
                   project_id: pendingMaterial.project_id,
-                  material_name: pendingMaterial.material_name,
+                  user_id: userId,
+                  name: pendingMaterial.material_name,
                   quantity: pendingMaterial.quantity,
                   unit: pendingMaterial.unit || 'units',
-                  last_updated: new Date().toISOString(),
-                });
+                  last_purchased_at: now,
+                  updated_at: now,
+                })
+                .select('id')
+                .single();
               console.log(`[Materials] Created ${pendingMaterial.material_name}: ${pendingMaterial.quantity}`);
+              if (inserted?.id) {
+                await supabase.from('material_transactions').insert({
+                  material_id: inserted.id,
+                  project_id: pendingMaterial.project_id,
+                  user_id: userId,
+                  transaction_type: 'purchase',
+                  quantity: pendingMaterial.quantity,
+                  unit_cost: 0,
+                  total_cost: 0,
+                  source: 'whatsapp',
+                  description: `Added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} via WhatsApp`,
+                });
+              }
             }
             await sendMessage(From, await ai(
               `Tell the user you added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to their Materials & Supplies inventory. Be brief.`,
@@ -2481,7 +2669,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await updateExpenseState(userId, null, {});
           await setPendingMaterialUpdate(userId, {
             project_id: pendingData.project_id!,
-            material_name: materialName,
+            name: materialName,
             quantity,
             unit: unit || 'units',
           });
@@ -2675,7 +2863,7 @@ async function routeIntent(
       await handleExpenseLog(from, userId, project.id, extracted, rawMessage);
       break;
     case 'MATERIAL_LOG':
-      await handleMaterialLog(from, project.id, extracted, rawMessage);
+      await handleMaterialLog(from, userId, project.id, extracted, rawMessage);
       break;
     case 'LABOR_LOG':
       await handleLaborLog(from, project.id, extracted, rawMessage);
@@ -2687,7 +2875,7 @@ async function routeIntent(
       await handleWeatherDelay(from, project.id, extracted, rawMessage);
       break;
     case 'MATERIAL_QUERY':
-      await handleMaterialQuery(from, project.id);
+      await handleMaterialQuery(from, project.id, rawMessage);
       break;
     case 'SMART_QUERY':
       await handleSmartQuery(from, project.id, rawMessage);

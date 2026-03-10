@@ -1384,7 +1384,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       .from(materialsInventory)
       .where(eq(materialsInventory.projectId, projectId));
     const inventory = materialsRows.map((r) => ({
-      material_name: r.materialName,
+      name: r.name,
       quantity: parseFloat(r.quantity?.toString() || '0'),
       unit: r.unit || '',
     }));
@@ -1666,7 +1666,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       ? Object.entries(weatherCounts).sort((a, b) => b[1] - a[1])[0][0]
       : null;
     const mostUsedMaterial = inventory.length > 0
-      ? inventory.reduce((a, b) => (b.quantity > a.quantity ? b : a), inventory[0])?.material_name ?? null
+      ? inventory.reduce((a, b) => (b.quantity > a.quantity ? b : a), inventory[0])?.name ?? null
       : null;
     const recentHighlight = allLogs[0]?.notes?.trim() || null;
 
@@ -1767,7 +1767,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       inventorySection: {
         items: materialsRows.map((r, i) => ({
           id: r.id,
-          name: r.materialName,
+          name: r.name,
           unit: r.unit || 'units',
           currentStock: parseFloat(r.quantity?.toString() || '0'),
           totalStock: Math.max(parseFloat(r.quantity?.toString() || '0'), 100),
@@ -1775,7 +1775,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
           consumptionVsEstimate: 0,
         })),
         usage: inventory.map((m) => ({
-          material: m.material_name,
+          material: m.name,
           used: 0,
           remaining: m.quantity,
         })),
@@ -1899,22 +1899,22 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
 
     type InventoryItem = {
       id: string;
-      material_name: string;
+      name: string;
       quantity: number;
       unit: string;
       last_updated: string | null;
     };
     const byKey = new Map<string, InventoryItem>();
 
-    function addRow(id: string, material_name: string, quantity: number, unit: string, last_updated: string | null) {
-      const name = (material_name || '').trim().toLowerCase();
+    function addRow(id: string, nameVal: string, quantity: number, unit: string, last_updated: string | null) {
+      const name = (nameVal || '').trim().toLowerCase();
       if (!name) return;
       const qty = parseFloat(String(quantity)) || 0;
       const existing = byKey.get(name);
       const existingTime = existing?.last_updated ? new Date(existing.last_updated).getTime() : 0;
       const newTime = last_updated ? new Date(last_updated).getTime() : 0;
       if (!existing || newTime > existingTime) {
-        byKey.set(name, { id, material_name: material_name || name, quantity: qty, unit: unit || 'units', last_updated });
+        byKey.set(name, { id, name: nameVal || name, quantity: qty, unit: unit || 'units', last_updated });
       }
     }
 
@@ -1926,7 +1926,7 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
     for (const r of materialsDrizzle) {
       addRow(
         r.id,
-        r.materialName || '',
+        r.name || '',
         parseFloat(r.quantity?.toString() || '0'),
         r.unit ?? 'units',
         r.lastUpdated ? new Date(r.lastUpdated).toISOString() : null
@@ -1936,14 +1936,14 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
     // 2) Supabase materials_inventory (WhatsApp bot writes here)
     const { data: rowsSupabase, error: supabaseError } = await supabase
       .from('materials_inventory')
-      .select('id, material_name, quantity, unit, last_updated')
+      .select('id, name, quantity, unit, last_updated')
       .eq('project_id', projectId)
-      .order('material_name', { ascending: true });
+      .order('name', { ascending: true });
     if (!supabaseError && rowsSupabase && rowsSupabase.length > 0) {
       for (const r of rowsSupabase) {
         addRow(
           r.id,
-          r.material_name || '',
+          r.name || '',
           parseFloat(String(r.quantity || 0)),
           r.unit || 'units',
           r.last_updated || null
@@ -1952,11 +1952,11 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
     }
 
     const inventory: InventoryItem[] = Array.from(byKey.values()).sort((a, b) =>
-      a.material_name.localeCompare(b.material_name)
+      a.name.localeCompare(b.name)
     );
     const lowStockThreshold = 5;
     const lowStock = inventory.filter((m) => m.quantity <= lowStockThreshold).map((m) => ({
-      material_name: m.material_name,
+      name: m.name,
       quantity: m.quantity,
       unit: m.unit,
     }));
@@ -2221,12 +2221,12 @@ router.get('/projects/:projectId/trends', requireAuth, async (req: Request, res:
       trend: 'stable' as const,
     };
     const materialsRows = await db
-      .select({ materialName: materialsInventory.materialName, quantity: materialsInventory.quantity, unit: materialsInventory.unit })
+      .select({ name: materialsInventory.name, quantity: materialsInventory.quantity, unit: materialsInventory.unit })
       .from(materialsInventory)
       .where(eq(materialsInventory.projectId, projectId));
     const materials = {
       mostUsed: materialsRows
-        .map((r) => ({ name: r.materialName, quantity: parseFloat(String(r.quantity || 0)), unit: r.unit ?? '' }))
+        .map((r) => ({ name: r.name, quantity: parseFloat(String(r.quantity || 0)), unit: r.unit ?? '' }))
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 10),
       topVendors: [] as { name: string; total: number }[],

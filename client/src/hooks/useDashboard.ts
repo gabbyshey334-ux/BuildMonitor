@@ -52,8 +52,8 @@ export interface ProjectSummaryResponse {
     byCategory: Array<{ category: string; total: number }>;
   };
   materials: {
-    inventory: Array<{ material_name: string; quantity: number; unit: string }>;
-    lowStock: Array<{ material_name: string; quantity: number; unit: string }>;
+    inventory: Array<{ name: string; quantity: number; unit: string }>;
+    lowStock: Array<{ name: string; quantity: number; unit: string }>;
   };
   dailyLog: {
     todayActive: boolean;
@@ -181,13 +181,20 @@ export interface ProjectMaterialsResponse {
   success: boolean;
   inventory: Array<{
     id: string;
-    material_name: string;
+    name: string;
     quantity: number;
     unit: string;
     last_updated: string | null;
+    updated_at: string | null;
+    unit_cost: number | null;
+    total_cost: number | null;
+    low_stock_threshold: number;
+    last_purchased_at: string | null;
+    last_used_at: string | null;
+    source: string;
   }>;
-  lowStock: Array<{ material_name: string; quantity: number; unit: string }>;
-  usage: Array<{ material_name: string; used: number; received: number }>;
+  lowStock: Array<{ name: string; quantity: number; unit: string; low_stock_threshold?: number }>;
+  usage: Array<{ name: string; used: number; received: number }>;
   summary: {
     totalItems: number;
     lowStockCount: number;

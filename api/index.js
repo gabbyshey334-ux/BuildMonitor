@@ -179,7 +179,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         if (projectRow) {
           const { data: materialsData, error: materialsError } = await supabase
             .from('materials_inventory')
-            .select('id, material_name, quantity, unit')
+            .select('id, name, quantity, unit')
             .eq('project_id', projectId);
           if (materialsError) console.error('[Summary] Supabase materials_inventory error:', materialsError);
           materialsRows = materialsData || [];
@@ -241,7 +241,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         if (projectRow) {
           try {
             const matResult = await dbConnection.execute(sql`
-              SELECT id, material_name, quantity, unit
+              SELECT id, name, quantity, unit
               FROM materials_inventory
               WHERE project_id = ${projectId}
             `);
@@ -319,7 +319,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         const qty = parseFloat(String(row.quantity || 0));
         return {
           id: row.id,
-          name: row.material_name || 'Material',
+          name: row.name || 'Material',
           unit: row.unit || 'units',
           currentStock: qty,
           totalStock: qty,
@@ -328,7 +328,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         };
       });
       const usage = materialsRows.map((row) => ({
-        material: row.material_name || 'Material',
+        material: row.name || 'Material',
         used: 0,
         remaining: parseFloat(String(row.quantity || 0)),
       }));
@@ -1069,7 +1069,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
   }
 });
 
-// GET /api/projects/:projectId/materials — Materials & Inventory page (Supabase + DB merge so dashboard and WhatsApp materials both show)
+// GET /api/projects/:projectId/materials — Materials & Inventory page
 app.get('/api/projects/:projectId/materials', (req, res, next) => {
   requireAuth(req, res, async () => {
     const projectId = req.params.projectId;
@@ -1096,63 +1096,44 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
-      const MATERIALS_TABLE = 'materials_inventory';
-      console.log('[Materials] GET /api/projects/:projectId/materials — querying table:', MATERIALS_TABLE);
-
-      const byKey = new Map();
-      function addRow(id, material_name, quantity, unit, last_updated) {
-        const name = (material_name || '').trim().toLowerCase();
-        if (!name) return;
-        const qty = parseFloat(String(quantity)) || 0;
-        const existing = byKey.get(name);
-        const existingTime = existing?.last_updated ? new Date(existing.last_updated).getTime() : 0;
-        const newTime = last_updated ? new Date(last_updated).getTime() : 0;
-        if (!existing || newTime > existingTime) {
-          byKey.set(name, { id, material_name: material_name || name, quantity: qty, unit: unit || 'units', last_updated: last_updated || null });
-        }
-      }
-
       const { data: rows, error } = await supabase
-        .from(MATERIALS_TABLE)
-        .select('id, material_name, quantity, unit, last_updated')
+        .from('materials_inventory')
+        .select('id, project_id, name, quantity, unit, last_updated, created_at, user_id, unit_cost, total_cost, low_stock_threshold, last_purchased_at, last_used_at, source, notes, updated_at')
         .eq('project_id', projectId)
-        .order('material_name', { ascending: true });
-      if (!error && rows && rows.length > 0) {
-        for (const r of rows) {
-          addRow(r.id, r.material_name, r.quantity, r.unit, r.last_updated);
-        }
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error('[Materials GET]', error.message);
+        return res.status(500).json({ success: false, error: error.message || 'Failed to load materials' });
       }
 
-      const dbConnection = initializeDatabase();
-      if (dbConnection) {
-        try {
-          const matResult = await dbConnection.execute(sql`
-            SELECT id, material_name, quantity, unit, last_updated
-            FROM materials_inventory
-            WHERE project_id = ${projectId}
-            ORDER BY material_name
-          `);
-          const dbRows = Array.isArray(matResult) ? matResult : (matResult?.rows || []);
-          for (const r of dbRows) {
-            if (r && (r.id != null || r.material_name != null)) {
-              addRow(r.id, r.material_name, r.quantity, r.unit, r.last_updated);
-            }
-          }
-        } catch (dbErr) {
-          console.warn('[Materials] DB fallback query failed:', dbErr?.message);
-        }
-      }
-
-      const inventory = Array.from(byKey.values()).sort((a, b) => (a.material_name || '').localeCompare(b.material_name || ''));
-      const lowStock = inventory.filter((m) => m.quantity <= 5).map((m) => ({
-        material_name: m.material_name,
+      const inventory = (rows || []).map((r) => ({
+        id: r.id,
+        project_id: r.project_id,
+        name: r.name,
+        quantity: parseFloat(String(r.quantity || 0)),
+        unit: r.unit || 'units',
+        last_updated: r.last_updated || r.updated_at || null,
+        created_at: r.created_at || null,
+        user_id: r.user_id || null,
+        unit_cost: r.unit_cost != null ? parseFloat(String(r.unit_cost)) : null,
+        total_cost: r.total_cost != null ? parseFloat(String(r.total_cost)) : null,
+        low_stock_threshold: r.low_stock_threshold != null ? parseFloat(String(r.low_stock_threshold)) : 5,
+        last_purchased_at: r.last_purchased_at || null,
+        last_used_at: r.last_used_at || null,
+        source: r.source || 'manual',
+        notes: r.notes || null,
+        updated_at: r.updated_at || null,
+      }));
+      const lowStockThresholdDefault = 5;
+      const lowStock = inventory.filter((m) => m.quantity <= (m.low_stock_threshold ?? lowStockThresholdDefault)).map((m) => ({
+        name: m.name,
         quantity: m.quantity,
         unit: m.unit,
+        low_stock_threshold: m.low_stock_threshold,
       }));
-      const usage = [];
       const lastUpdated = inventory.length
         ? inventory.reduce((latest, m) => {
-            const t = m.last_updated ? new Date(m.last_updated).getTime() : 0;
+            const t = (m.updated_at || m.last_updated) ? new Date(m.updated_at || m.last_updated).getTime() : 0;
             return t > latest ? t : latest;
           }, 0)
         : null;
@@ -1166,7 +1147,7 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
         success: true,
         inventory,
         lowStock,
-        usage,
+        usage: [],
         summary,
       });
     } catch (err) {
@@ -1174,6 +1155,202 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
       return res.status(500).json({ success: false, error: err.message || 'Failed to load materials' });
     }
   });
+});
+
+// POST /api/projects/:projectId/materials — Add or upsert material (match on project_id + name)
+app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+
+    const { name, quantity, unit, unit_cost, total_cost, source } = req.body || {};
+    const nameStr = typeof name === 'string' ? name.trim() : '';
+    if (!nameStr) return res.status(400).json({ success: false, error: 'name is required' });
+    const qty = parseFloat(String(quantity ?? 0)) || 0;
+    const unitCost = unit_cost != null ? parseFloat(String(unit_cost)) : 0;
+    const totalCost = total_cost != null ? parseFloat(String(total_cost)) : qty * unitCost;
+    const sourceStr = source === 'whatsapp' || source === 'dashboard' ? source : 'manual';
+    const now = new Date().toISOString();
+
+    const { data: existing } = await supabase
+      .from('materials_inventory')
+      .select('id, quantity, unit_cost, total_cost')
+      .eq('project_id', projectId)
+      .eq('name', nameStr)
+      .maybeSingle();
+
+    let materialId;
+    if (existing) {
+      const newQty = parseFloat(String(existing.quantity || 0)) + qty;
+      const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
+      const { data: updated, error: updateErr } = await supabase
+        .from('materials_inventory')
+        .update({
+          quantity: newQty,
+          unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
+          total_cost: newTotalCost,
+          last_purchased_at: now,
+          updated_at: now,
+        })
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+      if (updateErr) {
+        console.error('[Materials POST update]', updateErr.message);
+        return res.status(500).json({ success: false, error: updateErr.message });
+      }
+      materialId = updated?.id ?? existing.id;
+    } else {
+      const { data: inserted, error: insertErr } = await supabase
+        .from('materials_inventory')
+        .insert({
+          project_id: projectId,
+          user_id: userId,
+          name: nameStr,
+          quantity: qty,
+          unit: unit || 'units',
+          unit_cost: unitCost,
+          total_cost: totalCost,
+          source: sourceStr,
+          last_purchased_at: now,
+          updated_at: now,
+        })
+        .select('id')
+        .single();
+      if (insertErr) {
+        console.error('[Materials POST insert]', insertErr.message);
+        return res.status(500).json({ success: false, error: insertErr.message });
+      }
+      materialId = inserted?.id;
+    }
+
+    if (materialId) {
+      await supabase.from('material_transactions').insert({
+        material_id: materialId,
+        project_id: projectId,
+        user_id: userId,
+        transaction_type: 'purchase',
+        quantity: qty,
+        unit_cost: unitCost,
+        total_cost: totalCost,
+        description: `Added ${qty} ${unit || 'units'} of ${nameStr}`,
+        source: sourceStr,
+      });
+    }
+
+    return res.status(201).json({ success: true, id: materialId });
+  } catch (err) {
+    console.error('[Materials POST]', err.message, err.stack);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to save material' });
+  }
+});
+
+// PATCH /api/projects/:projectId/materials/:id — Update material quantity/costs
+app.patch('/api/projects/:projectId/materials/:id', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const materialId = req.params.id;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: row } = await supabase
+      .from('materials_inventory')
+      .select('id, project_id, user_id')
+      .eq('id', materialId)
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (!row) return res.status(404).json({ success: false, error: 'Material not found' });
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(403).json({ success: false, error: 'Not allowed' });
+
+    const { quantity, unit_cost, total_cost } = req.body || {};
+    const updates = { updated_at: new Date().toISOString() };
+    if (quantity != null) updates.quantity = parseFloat(String(quantity));
+    if (unit_cost != null) updates.unit_cost = parseFloat(String(unit_cost));
+    if (total_cost != null) updates.total_cost = parseFloat(String(total_cost));
+
+    const { data: updated, error: updateErr } = await supabase
+      .from('materials_inventory')
+      .update(updates)
+      .eq('id', materialId)
+      .eq('project_id', projectId)
+      .select()
+      .single();
+    if (updateErr) {
+      console.error('[Materials PATCH]', updateErr.message);
+      return res.status(500).json({ success: false, error: updateErr.message });
+    }
+
+    await supabase.from('material_transactions').insert({
+      material_id: materialId,
+      project_id: projectId,
+      user_id: userId,
+      transaction_type: 'adjustment',
+      quantity: updates.quantity ?? 0,
+      unit_cost: updates.unit_cost ?? 0,
+      total_cost: updates.total_cost ?? 0,
+      description: 'Updated via dashboard',
+      source: 'dashboard',
+    });
+
+    return res.json({ success: true, material: updated });
+  } catch (err) {
+    console.error('[Materials PATCH]', err.message, err.stack);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to update material' });
+  }
+});
+
+// DELETE /api/projects/:projectId/materials/:id
+app.delete('/api/projects/:projectId/materials/:id', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const materialId = req.params.id;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+
+    const { data: row, error: delErr } = await supabase
+      .from('materials_inventory')
+      .delete()
+      .eq('id', materialId)
+      .eq('project_id', projectId)
+      .select('id')
+      .single();
+    if (delErr || !row) {
+      return res.status(404).json({ success: false, error: 'Material not found or already deleted' });
+    }
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('[Materials DELETE]', err.message, err.stack);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to delete material' });
+  }
 });
 
 // GET /api/projects/:projectId/daily — Daily Accountability page
@@ -1364,7 +1541,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 
       const { data: materialRows } = await supabase
         .from('materials_inventory')
-        .select('material_name, quantity, unit')
+        .select('name, quantity, unit')
         .eq('project_id', projectId)
         .order('quantity', { ascending: false })
         .limit(5);
@@ -1424,7 +1601,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
         : 'stable';
 
       const mostUsed = materials.map((m) => ({
-        name: m.material_name || '',
+        name: m.name || '',
         quantity: parseFloat(String(m.quantity || 0)),
         unit: m.unit || 'units',
       }));
@@ -1440,7 +1617,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
       }
       const lowStockMaterials = materials.filter((m) => parseFloat(String(m.quantity || 0)) <= 5);
       for (const m of lowStockMaterials) {
-        alerts.push({ type: 'low_stock', message: `${m.material_name} low on stock (${m.quantity} ${m.unit})`, severity: 'medium', date: new Date().toISOString().split('T')[0] });
+        alerts.push({ type: 'low_stock', message: `${m.name} low on stock (${m.quantity} ${m.unit})`, severity: 'medium', date: new Date().toISOString().split('T')[0] });
       }
 
       return res.json({

@@ -211,7 +211,7 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
 export const materialsInventory = pgTable("materials_inventory", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
-  materialName: text("material_name").notNull(),
+  name: text("name").notNull(),
   quantity: decimal("quantity", { precision: 15, scale: 2 }).notNull(),
   unit: text("unit"),
   lastUpdated: timestamp("last_updated", { withTimezone: true }).defaultNow(),

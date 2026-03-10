@@ -235,8 +235,9 @@ export default function MaterialsPage() {
             <div className="grid gap-3">
               {inventory.map((m) => {
                 const qty = m.quantity;
-                const isLowStock = qty <= 5;
-                const isGoodStock = qty > 20;
+                const threshold = m.low_stock_threshold ?? 5;
+                const isLowStock = qty <= threshold;
+                const isGoodStock = qty > Math.max(threshold * 2, 20);
                 
                 // Color logic
                 let statusColor = "bg-amber-500"; // Medium/Warning default
@@ -259,20 +260,32 @@ export default function MaterialsPage() {
                           <Package className="w-5 h-5" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-foreground text-lg">{m.material_name}</h3>
-                          <p className="text-xs text-muted-foreground">Last updated: {formatDate(m.last_updated)}</p>
+                          <h3 className="font-bold text-foreground text-lg">{m.name}</h3>
+                          <p className="text-xs text-muted-foreground">Last updated: {formatDate(m.updated_at || m.last_updated)}</p>
+                          {(m.unit_cost != null && m.unit_cost > 0) && (
+                            <p className="text-xs text-muted-foreground">Unit cost: {m.unit_cost.toLocaleString()} · Total: {m.total_cost != null ? m.total_cost.toLocaleString() : '—'}</p>
+                          )}
+                          {m.last_purchased_at && (
+                            <p className="text-xs text-muted-foreground">Last purchased: {formatDate(m.last_purchased_at)}</p>
+                          )}
+                          {m.source && m.source !== 'manual' && (
+                            <p className="text-xs text-muted-foreground capitalize">Source: {m.source}</p>
+                          )}
                         </div>
                       </div>
                       
                       <div className="flex items-center gap-4">
                         {isLowStock && (
                           <div className="px-3 py-1 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold uppercase tracking-wide animate-pulse">
-                            Low Stock
+                            Low Stock {threshold > 0 ? `(≤${threshold})` : ''}
                           </div>
                         )}
                         <div className="text-right">
                           <span className="text-2xl font-bold text-foreground tabular-nums">{m.quantity.toLocaleString()}</span>
                           <span className="text-sm text-muted-foreground ml-1 font-medium">{m.unit}</span>
+                          {(m.total_cost != null && m.total_cost > 0) && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{m.total_cost.toLocaleString()} total</p>
+                          )}
                         </div>
                       </div>
                     </div>
