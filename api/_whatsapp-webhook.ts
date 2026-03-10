@@ -2669,7 +2669,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await updateExpenseState(userId, null, {});
           await setPendingMaterialUpdate(userId, {
             project_id: pendingData.project_id!,
-            name: materialName,
+            material_name: materialName,
             quantity,
             unit: unit || 'units',
           });

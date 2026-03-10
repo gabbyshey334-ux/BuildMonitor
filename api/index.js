@@ -566,6 +566,31 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 });
 
 // POST /api/projects/:projectId/expenses — Log expense from dashboard
+// If body includes item + quantity (or description parses as material), also upserts materials_inventory.
+const MATERIAL_KEYWORDS = [
+  'cement', 'sand', 'gravel', 'bricks', 'iron bars', 'steel', 'timber', 'wood',
+  'poles', 'tiles', 'paint', 'roofing', 'pipes', 'wire', 'aggregate', 'ballast',
+  'blocks', 'stone',
+];
+function parseMaterialFromDescription(desc) {
+  if (!desc || typeof desc !== 'string') return null;
+  const m = desc.trim().match(/^(\d+(?:\.\d+)?)\s*(bags?|tonnes?|pieces?|bars?|sheets?|litres?|rolls?|units?)?\s*(?:of\s+)?(.+)$/i);
+  if (m) {
+    const qty = parseFloat(m[1]);
+    const unit = (m[2] || 'units').toLowerCase();
+    const item = m[3].trim();
+    if (item && !isNaN(qty) && qty > 0) return { quantity: qty, unit: unit || 'units', item };
+  }
+  const fallback = desc.match(/(\d+)\s*(bags?|pieces?|units?|kg|tons?)?/i);
+  if (fallback) {
+    const item = desc.replace(fallback[0], '').replace(/\s*(?:for|@|at)\s*[\d,.]+\s*$/i, '').trim();
+    if (item.length > 1 && MATERIAL_KEYWORDS.some((k) => item.toLowerCase().includes(k))) {
+      return { quantity: parseFloat(fallback[1]), unit: (fallback[2] || 'units').toLowerCase(), item };
+    }
+  }
+  return null;
+}
+
 app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
   try {
     const projectId = req.params.projectId;
@@ -622,6 +647,87 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
         error: error.message || 'Failed to log expense',
       });
     }
+
+    // If expense looks like a material purchase, upsert materials_inventory so Materials page shows it
+    let quantity = body.quantity != null ? parseFloat(String(body.quantity)) : NaN;
+    let unit = body.unit && String(body.unit).trim() ? String(body.unit).trim() : 'units';
+    let itemName = body.item && String(body.item).trim() ? String(body.item).trim() : null;
+    if ((!itemName || isNaN(quantity) || quantity <= 0) && description) {
+      const parsed = parseMaterialFromDescription(description);
+      if (parsed) {
+        quantity = parsed.quantity;
+        unit = parsed.unit || unit;
+        itemName = parsed.item;
+      }
+    }
+    if (itemName && quantity > 0) {
+      const now = new Date().toISOString();
+      const unitCost = amount && quantity > 0 ? amount / quantity : 0;
+      const totalCost = amount || quantity * unitCost;
+      const nameNorm = itemName.toLowerCase().trim();
+      const { data: existing } = await supabase
+        .from('materials_inventory')
+        .select('id, quantity, unit_cost, total_cost')
+        .eq('project_id', projectId)
+        .eq('name', nameNorm)
+        .maybeSingle();
+      if (existing) {
+        const newQty = parseFloat(String(existing.quantity || 0)) + quantity;
+        const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
+        await supabase
+          .from('materials_inventory')
+          .update({
+            quantity: newQty,
+            unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
+            total_cost: newTotalCost,
+            last_purchased_at: now,
+            updated_at: now,
+          })
+          .eq('id', existing.id);
+        await supabase.from('material_transactions').insert({
+          material_id: existing.id,
+          project_id: projectId,
+          user_id: userId,
+          transaction_type: 'purchase',
+          quantity,
+          unit_cost: unitCost,
+          total_cost: totalCost,
+          description: `Dashboard: ${description || itemName}`,
+          source: 'dashboard',
+        });
+      } else {
+        const { data: inserted } = await supabase
+          .from('materials_inventory')
+          .insert({
+            project_id: projectId,
+            user_id: userId,
+            name: nameNorm,
+            quantity,
+            unit: unit || 'units',
+            unit_cost: unitCost,
+            total_cost: totalCost,
+            source: 'dashboard',
+            last_purchased_at: now,
+            updated_at: now,
+          })
+          .select('id')
+          .single();
+        if (inserted && inserted.id) {
+          await supabase.from('material_transactions').insert({
+            material_id: inserted.id,
+            project_id: projectId,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity,
+            unit_cost: unitCost,
+            total_cost: totalCost,
+            description: `Dashboard: ${description || itemName}`,
+            source: 'dashboard',
+          });
+        }
+      }
+    }
+
     return res.status(201).json({ success: true, expense: expense || {} });
   } catch (err) {
     console.error('[POST expenses] Unexpected error:', err?.message, err?.stack || '');
