@@ -210,6 +210,22 @@ async function sendOptions(to: string, message: string, options: string[]): Prom
 
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
 
+/** Parse amount from text: handles 150K, 1.5M, 2B, million, billion, and plain numbers. */
+function parseAmount(text: string): number {
+  const clean = text.replace(/,/g, '').trim();
+  const bMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
+  const mMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
+  const kMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Kk](?:$|\b)/);
+  const wordBillion = clean.match(/(\d+(?:\.\d+)?)\s*billion/i);
+  const wordMillion = clean.match(/(\d+(?:\.\d+)?)\s*million/i);
+  const numMatch = clean.match(/(\d+(?:\.\d+)?)/);
+  if (bMatch || wordBillion) return parseFloat((bMatch || wordBillion)![1]) * 1_000_000_000;
+  if (mMatch || wordMillion) return parseFloat((mMatch || wordMillion)![1]) * 1_000_000;
+  if (kMatch) return parseFloat(kMatch[1]) * 1_000;
+  if (numMatch) return parseFloat(numMatch[1]);
+  return 0;
+}
+
 function detectLanguage(text: string): string {
   const t = text.toLowerCase();
   if (/mpa|nze|nno|sseminti|emisumaali|okulunda|nsimba|abasajja|bajja|nfunyeyo|mugezi|hali|jangu|genda|kola|nkola|leeta|sente|eggulo|enkya/i.test(t)) return 'Luganda';
@@ -454,15 +470,7 @@ async function handleStartDateInput(userId: string, to: string, body: string) {
 async function handleBudgetInput(userId: string, to: string, body: string) {
   let budget: number | undefined;
   if (!/skip/i.test(body)) {
-    // Handle "150M", "150 million", "150,000,000", "185 million"
-    const mMatch = body.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
-    const bMatch = body.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
-    const wordMillion = body.match(/(\d+(?:\.\d+)?)\s*million/i);
-    const wordBillion = body.match(/(\d+(?:\.\d+)?)\s*billion/i);
-    const numMatch = body.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/);
-    if (mMatch || wordMillion) budget = parseFloat((mMatch || wordMillion)![1]) * 1_000_000;
-    else if (bMatch || wordBillion) budget = parseFloat((bMatch || wordBillion)![1]) * 1_000_000_000;
-    else if (numMatch) budget = parseFloat(numMatch[1].replace(/,/g, ''));
+    budget = parseAmount(body);
   }
   await updateOnboardingState(userId, 'confirmation', { budget });
 
@@ -899,19 +907,23 @@ function preClassifyIntent(message: string): IntentResult | null {
 
   // BUDGET_UPDATE — must be at top so "add 10M to budget" is caught before other budget patterns
   if (/edit.*budget|update.*budget|add.*budget|increase.*budget|change.*budget|set.*budget|new.*budget/i.test(m)) {
-    const mMatch = message.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
-    const bMatch = message.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
-    const numMatch = message.match(/(\d+(?:,\d{3})*)/);
+    const amount = parseAmount(message);
     const isAdd = /add|increase|plus|more/i.test(m);
-    let amount = 0;
-    if (mMatch) amount = parseFloat(mMatch[1]) * 1_000_000;
-    else if (bMatch) amount = parseFloat(bMatch[1]) * 1_000_000_000;
-    else if (numMatch) amount = parseFloat(numMatch[1].replace(/,/g, ''));
     return { intent: 'BUDGET_UPDATE', extracted: { amount, action: isAdd ? 'add' : 'set' } };
   }
 
-  // MATERIAL_QUERY — inventory/stock questions (before generic budget query)
-  if (/how much|how many|do (i|we) have|in.*inventory|current stock|stock.*left|remaining.*material/i.test(m) && !/budget|spent|expense|cost/i.test(m)) {
+  // Force EXPENSE_LOG when user explicitly says log/add/record expense
+  if (/log\s+this\s+expense|add\s+expense|record\s+expense|log\s+expense/i.test(m)) {
+    return { intent: 'EXPENSE_LOG', extracted: { description: message.trim() } };
+  }
+
+  // MATERIAL_QUERY — inventory/stock questions; exclude worker-related and require material context
+  if (
+    /how much|how many|do (i|we) have|in.*inventory|current stock|stock.*left|remaining.*material/i.test(m) &&
+    !/budget|spent|expense|cost/i.test(m) &&
+    !/worker|staff|people|men|mason|labourer|laborer|came|on site|show up/i.test(m) &&
+    (MATERIAL_KEYWORDS.some(k => m.includes(k)) || /inventory|stock|material|supply|supplies/i.test(m))
+  ) {
     return { intent: 'MATERIAL_QUERY', extracted: {} };
   }
 
@@ -930,10 +942,10 @@ function preClassifyIntent(message: string): IntentResult | null {
     return { intent: 'GREETING', extracted: {} };
   }
 
-  // EXPENSE patterns
+  // EXPENSE patterns — use parseAmount so 150K → 150000
   if (/bought|paid|spent|purchased|cost|price|buying|pay|expense/i.test(m) && /\d/.test(m)) {
-    const amountMatch = message.match(/(\d+(?:,\d{3})*(?:\.\d{2})?)/g);
-    const amounts = amountMatch ? amountMatch.map((a) => parseFloat(a.replace(/,/g, ''))) : [];
+    const amountMatches = message.match(/(\d+(?:\.\d+)?\s*[KkMmBb]?|\d{1,3}(?:,\d{3})*(?:\.\d+)?)/g);
+    const amounts = amountMatches ? amountMatches.map((a) => parseAmount(a)) : [];
     const amount = amounts.length > 0 ? Math.max(...amounts) : 0;
 
     const itemMatch = message.match(/(?:bought|paid|spent|purchased)\s+(?:\d+\s+\w+\s+)?(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+at|\s+from|\s*$)/i);
@@ -952,17 +964,22 @@ function preClassifyIntent(message: string): IntentResult | null {
     };
   }
 
-  // MATERIAL used patterns
+  // MATERIAL used patterns — also match "today we used 4 bricks" / "used 4 bricks"
   if (/used|consumed|applied|finished\s+using/i.test(m) && /\d/.test(m)) {
-    const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?)/i);
+    const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?|bricks?|rods?|bars?)/i);
     const itemMatch = message.match(/(?:used|consumed)\s+\d+\s+\w+\s+(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+on|\s*$)/i);
+    const usedEndMatch = message.match(/(?:used|consumed|update)\s+.*?(\d+)\s+(bags?|kg|bricks?|pieces?|units?|rods?|bars?|sheets?)\s*[,.]?\s*$/i);
+    const qty = qtyMatch ? parseFloat(qtyMatch[1]) : (usedEndMatch ? parseFloat(usedEndMatch[1]) : 0);
+    const unit = (qtyMatch ? qtyMatch[2] : usedEndMatch ? usedEndMatch[2] : '').toLowerCase();
+    let item = itemMatch ? itemMatch[1].trim() : '';
+    if (!item && usedEndMatch) item = usedEndMatch[2].toLowerCase(); // e.g. "4 bricks" -> bricks
     return {
       intent: 'MATERIAL_LOG',
       extracted: {
         action: 'used',
-        quantity: qtyMatch ? parseFloat(qtyMatch[1]) : 0,
-        unit: qtyMatch ? qtyMatch[2].toLowerCase() : '',
-        item: itemMatch ? itemMatch[1].trim() : '',
+        quantity: qty,
+        unit,
+        item: item || (usedEndMatch ? usedEndMatch[2].toLowerCase() : ''),
       },
     };
   }
@@ -1015,6 +1032,42 @@ function preClassifyIntent(message: string): IntentResult | null {
   return null;
 }
 
+/** Parse multi-item expense message (e.g. "10 bags cement at 30k each, 10kg nails at 4k per kg"). Returns items array or null. */
+function parseMultiItemMessage(message: string): Array<{ item: string; quantity: number; unit: string; amount: number }> | null {
+  const hasMultipleItems = (message.match(/,/g) || []).length >= 2 ||
+    /\band\b.*\band\b/i.test(message) ||
+    /\d+\s*\w+\s+at\s+\d+.*,.*\d+\s*\w+\s+at\s+\d+/i.test(message);
+  if (!hasMultipleItems) return null;
+
+  const items: Array<{ item: string; quantity: number; unit: string; amount: number }> = [];
+  const parts = message.split(/,(?!\s*\d{3})/);
+  for (const part of parts) {
+    const p = part.trim();
+    const m1 = p.match(/(\d+(?:\.\d+)?)\s*(bags?|kg|kgs?|tonnes?|pieces?|pcs?|rods?|bars?|sheets?|poles?|litres?|rolls?|units?)?\s+(?:of\s+)?([a-z][a-z\s]+?)\s+(?:at\s+|[-–]\s*)?(\d[\d,.]*[KkMmBb]?)\s*(?:each|per\s+\w+)?/i);
+    if (m1) {
+      const qty = parseFloat(m1[1]);
+      const unit = (m1[2] || 'units').toLowerCase();
+      const item = m1[3].trim();
+      const unitPrice = parseAmount(m1[4]);
+      if (qty > 0 && unitPrice > 0 && item.length > 1) {
+        items.push({ item, quantity: qty, unit, amount: qty * unitPrice });
+        continue;
+      }
+    }
+    const m2 = p.match(/(\d+(?:\.\d+)?)\s*(bags?|kg|kgs?|pieces?|pcs?|poles?|units?)?\s+(?:of\s+)?([a-z][a-z\s]+?)\s*[-–:]\s*(\d[\d,.]*[KkMmBb]?)/i);
+    if (m2) {
+      const qty = parseFloat(m2[1]);
+      const unit = (m2[2] || 'units').toLowerCase();
+      const item = m2[3].trim();
+      const total = parseAmount(m2[4]);
+      if (qty > 0 && total > 0 && item.length > 1) {
+        items.push({ item, quantity: qty, unit, amount: total });
+      }
+    }
+  }
+  return items.length >= 2 ? items : null;
+}
+
 async function classifyIntent(message: string, phoneNumber: string): Promise<IntentResult> {
   const translatedMessage = await translateToEnglish(message);
   const preClassified = preClassifyIntent(translatedMessage);
@@ -1031,10 +1084,16 @@ async function classifyIntent(message: string, phoneNumber: string): Promise<Int
   const systemPrompt = `You are a construction site assistant for African building projects.
 
 IMPORTANT: Be aggressive about classifying expense and material messages. When in doubt between EXPENSE_LOG and GREETING, choose EXPENSE_LOG if there are numbers involved.
+Amounts: 150K means 150,000 UGX, 1.5M means 1,500,000 UGX, 2B means 2,000,000,000 UGX. Always use these conversions in extracted.amount.
 
 Common patterns you MUST classify correctly:
 
 EXPENSE_LOG examples (always has numbers):
+- "10 masons worked today and I paid each 20k" → EXPENSE_LOG, amount: 200000, description: "Labour - 10 masons", quantity: 10
+- "I just bought 10 bags cement at 30k each, 10kg nails at 4k per kg, 2 timber poles 30k" → EXPENSE_LOG with items array: [{item:"cement",quantity:10,unit:"bags",amount:300000},{item:"nails",quantity:10,unit:"kg",amount:40000},{item:"timber poles",quantity:2,unit:"pieces",amount:30000}]
+- "log this expense: Bought cement for 400,000" → EXPENSE_LOG
+- "add this expense: Paid labour 150K" → EXPENSE_LOG
+- Any message with quantities AND prices → EXPENSE_LOG, never GREETING or SMART_QUERY
 - "Bought 50 bags cement for 1,900,000"
 - "Bought cement 1900000"
 - "Paid plumber 150k"
@@ -1043,6 +1102,7 @@ EXPENSE_LOG examples (always has numbers):
 - "cement 38000 per bag"
 - "purchased tiles 450,000"
 - MULTI-ITEM: "I bought 10 bags cement at 30k each and 5 wood poles at 10k each" → return items: [{item:"cement",quantity:10,unit:"bags",amount:300000},{item:"wood poles",quantity:5,unit:"pieces",amount:50000}]
+CRITICAL: For multi-item messages with commas listing different things each with a price, ALWAYS return intent EXPENSE_LOG with items array. Parse each item separately. 30k = 30000, 4k = 4000, 150k = 150000.
 
 MATERIAL_LOG examples:
 - "Received 50 bags cement from Hima"
@@ -1079,11 +1139,12 @@ WEATHER_DELAY examples:
 - "No work, flooding"
 
 ISSUE_REPORT — use when user reports a problem, defect, or safety concern:
+- "log this alert issue - The rain ruined 10 bags cement" → ISSUE_REPORT, description: "The rain ruined 10 bags cement" (strip the command prefix)
 - "There is a foundation crack"
 - "We have a leak in the roof"
 - "Structural damage on the wall"
 - "Safety concern: loose scaffolding"
-Return severity: "critical" for emergency/urgent, "high" for major/severe, "medium" otherwise.
+Return severity: "critical" for emergency/urgent, "high" for major/severe, "medium" otherwise. In extracted.description strip any leading "log this alert issue - " type prefix.
 
 PROJECT_QUERY — use when user asks which project they are on:
 - "Which project am I working on?"
@@ -1497,6 +1558,8 @@ async function handleExpenseLog(
   let unit = String(extracted.unit || '').trim();
   let vendor = String(extracted.vendor || '').trim();
 
+  if (!amount || amount <= 0) amount = parseAmount(rawMessage);
+
   // Regex fallback for quantity
   if (!quantity) {
     const qm = rawMessage.match(/(\d+(?:,\d{3})*)\s*(bags?|kg|tons?|pieces?|trips?|units?)/i);
@@ -1579,6 +1642,22 @@ async function handleMaterialLog(
   }
   const effectiveAction = /used|consumed|for\s+foundation|for\s+/i.test(rawMessage) ? 'used' : action;
 
+  // BUG 8: Alternative extraction for "today we used 4 bricks" / "used 4 bricks, update the inventory"
+  if ((!item || item === 'material') && effectiveAction === 'used') {
+    const altMatch = rawMessage.match(/(\d+)\s+(bags?|kg|tonnes?|pieces?|bricks?|rods?|bars?|sheets?|poles?|litres?|rolls?|units?)\s+(?:of\s+)?([a-z\s]+?)(?:\s+(?:from|for|to|update|inventory)|[,.]|$)/i);
+    if (altMatch) {
+      if (!qty || qty <= 0) qty = parseFloat(altMatch[1]);
+      if (!unit || unit === 'units') unit = altMatch[2].toLowerCase();
+      if (!item) item = altMatch[3].trim();
+    }
+    const simpleMatch = rawMessage.match(/(?:used?|consumed?|update|deduct)\s+.*?(\d+)\s+(bricks?|cement|sand|gravel|timber|wood|steel|iron|tiles|paint|pipes?|wire|blocks?|poles?|nails?|aggregate|ballast)/i);
+    if (simpleMatch && (!item || item === 'material')) {
+      if (!qty || qty <= 0) qty = parseFloat(simpleMatch[1]);
+      if (!item) item = simpleMatch[2].toLowerCase();
+      if (!unit || unit === 'units') unit = /bricks?|blocks?|pieces?|poles?|sheets?|rolls?|pipes?|rods?/.test(simpleMatch[2]) ? 'pieces' : /cement|sand|gravel|aggregate|ballast/.test(simpleMatch[2]) ? 'bags' : 'units';
+    }
+  }
+
   // Fallback quantity extraction for natural language (e.g. "I have just used 5 bricks")
   if (!qty || qty <= 0) {
     const naturalMatch = rawMessage.match(
@@ -1597,6 +1676,18 @@ async function handleMaterialLog(
     if (itemMatch) item = itemMatch[2].trim();
   }
   if (!item) item = 'material';
+  if (!unit || unit === 'units') unit = 'units';
+
+  // BUG 8: Single material name with no quantity — prompt for full phrase
+  const singleWord = rawMessage.trim().toLowerCase().replace(/[.?!,]/g, '');
+  const isSingleMaterialName = singleWord.length < 30 && !/\d/.test(singleWord) &&
+    (MATERIAL_KEYWORDS.some(k => singleWord === k || singleWord.includes(k)) || ['bricks', 'cement', 'sand', 'gravel', 'timber', 'wood', 'steel', 'iron', 'tiles', 'paint', 'pipes', 'wire', 'blocks', 'poles', 'nails', 'aggregate', 'ballast'].some(k => singleWord === k));
+  if (isSingleMaterialName && (!qty || qty <= 0) && !extracted.quantity) {
+    const materialLabel = item && item !== 'material' ? item : singleWord;
+    await sendMessage(from, `How many ${materialLabel} were used? e.g. "4 bricks" or "today we used 4 bricks"`);
+    return;
+  }
+
   if (!qty || qty <= 0) qty = 1;
 
   // Garbage data prevention
@@ -1885,9 +1976,13 @@ async function handleIssueReport(
   rawMessage: string,
   lang?: string
 ): Promise<void> {
-  const description = String(extracted.description || rawMessage).trim();
-  const severity = (extracted.severity as string) || 'medium';
+  const rawDesc = String(extracted.description || rawMessage).trim();
+  const cleanedDesc = rawDesc
+    .replace(/^(log\s+)?(this\s+)?(alert\s+)?(issue|problem|bug|report)[:\s\-]*/i, '')
+    .trim();
+  const description = cleanedDesc || rawDesc;
   const title = description.length > 80 ? description.substring(0, 77) + '...' : description;
+  const severity = (extracted.severity as string) || 'medium';
 
   const { data: inserted, error } = await supabase
     .from('issues')
@@ -1993,6 +2088,49 @@ async function handleMaterialQuery(from: string, projectId: string, message: str
 // ─── SMART_QUERY: free-form questions over historical data ─────────────────────
 
 async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
+  // BUG 7: Workers on a specific date — query daily_logs directly
+  const workerDateMatch = question.match(/worker|staff|people|men|mason|came|on site/i);
+  const dateMatch = question.match(/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)|(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})|(\d{4})-(\d{2})-(\d{2})/i);
+  if (workerDateMatch && dateMatch) {
+    let logDate: string;
+    const months: Record<string, number> = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 };
+    if (dateMatch[5] && dateMatch[6] && dateMatch[7]) {
+      logDate = `${dateMatch[5]}-${dateMatch[6]}-${dateMatch[7]}`;
+    } else if (dateMatch[1] && dateMatch[2]) {
+      const month = months[dateMatch[2].toLowerCase()];
+      const day = parseInt(dateMatch[1], 10);
+      const year = new Date().getFullYear();
+      logDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    } else if (dateMatch[3] && dateMatch[4]) {
+      const month = months[dateMatch[3].toLowerCase()];
+      const day = parseInt(dateMatch[4], 10);
+      const year = new Date().getFullYear();
+      logDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    } else {
+      logDate = '';
+    }
+    if (logDate) {
+      const { data: log } = await supabase
+        .from('daily_logs')
+        .select('log_date, worker_count, notes')
+        .eq('project_id', projectId)
+        .eq('log_date', logDate)
+        .maybeSingle();
+      if (log) {
+        const wc = log.worker_count != null ? log.worker_count : 'not recorded';
+        const dateFormatted = new Date(log.log_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
+        const reply = wc !== 'not recorded'
+          ? `On ${dateFormatted}: ${wc} workers on site.${log.notes ? ` Notes: ${log.notes}` : ''}`
+          : `On ${dateFormatted}: No worker count recorded.${log.notes ? ` Notes: ${log.notes}` : ''}`;
+        await sendMessage(from, reply);
+        return;
+      }
+      const dateFormatted = new Date(logDate + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
+      await sendMessage(from, `I don't have a log for ${dateFormatted}. Check your Daily Accountability page at ${DASHBOARD_URL}/daily`);
+      return;
+    }
+  }
+
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
   const fromDate = twoYearsAgo.toISOString().split('T')[0];
@@ -2118,6 +2256,13 @@ async function handleNaturalLanguageQuery(
     return "Please select a project first. Reply with the project number from your list, or say \"list projects\" to see options.";
   }
 
+  // BUG 1/4/5: If message looks like expense-log (number + action words), don't query DB — suggest format instead
+  const hasNumber = /\d/.test(rawMessage);
+  const hasExpenseHint = /paid|spent|bought|masons|workers|labour|labor|each|per/i.test(rawMessage);
+  if (hasNumber && hasExpenseHint) {
+    return "It looks like you want to log an expense. Try: 'Paid 10 masons 20k each' or 'Bought cement for 300,000 UGX'";
+  }
+
   // Strict: only use project that belongs to this user (owner or manager).
   const { data: project } = await supabase
     .from('projects')
@@ -2204,8 +2349,11 @@ Recent expenses (use only if relevant): ${JSON.stringify(context.recentExpenses)
 Materials inventory: ${JSON.stringify(context.materials)}
 
 Rules:
-- Use ONLY the project data above. Never invent amounts, dates, or facts not in the data.
-- If the user asks something not in the data, say you don't have that information or suggest they check the dashboard.
+- You are an ACTION-TAKING construction assistant, not just a data viewer.
+- If the user wants to LOG something (expense, material, workers, issue) but you received this message as a fallback — tell them clearly what format to use and give a direct example. Never say "I don't have functionality to log". Never say "I cannot do that". Always either take the action or give the exact format needed.
+- If the user asks a DATA QUESTION about something not in the provided context (e.g. workers on a specific date), say: "I don't have that specific record. Check your Daily Accountability page at ${DASHBOARD_URL}/daily"
+- Never respond with inventory data when the user asked about workers or expenses.
+- Use ONLY the project data above when answering data questions. Never invent amounts, dates, or facts not in the data.
 - Be warm, concise, plain text, no markdown. Under 5 lines.
 - For amounts use UGX and format with commas (e.g. 1,500,000 UGX).`;
 
@@ -2749,14 +2897,63 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('[Photo] Saved to Supabase:', permanentUrl);
 
           await upsertDailyLog(project.id, { photo_urls: [permanentUrl] });
-          await sendMessage(From, await ai(
-            'Tell the user their photo was saved. Ask them to add a caption by replying with a description.',
-            'Photo saved! Add a caption by replying with a description.'
-          ));
-          await updateExpenseState(userId, 'awaiting_photo_caption', {
-            photo_url: permanentUrl,
-            project_id: project.id,
-          });
+
+          // BUG 3: Check if Body (rawMessage) contains an inline caption
+          const captionPatterns = [
+            /save (?:the )?note as[:\s]+"?([^"]+)"?/i,
+            /caption[:\s]+"?([^"]+)"?/i,
+            /note[:\s]+"?([^"]+)"?/i,
+            /tag[:\s]+"?([^"]+)"?/i,
+          ];
+          let inlineCaption: string | null = null;
+          for (const pattern of captionPatterns) {
+            const match = rawMessage.match(pattern);
+            if (match) {
+              inlineCaption = match[1].trim();
+              break;
+            }
+          }
+
+          if (inlineCaption) {
+            const today = new Date().toISOString().split('T')[0];
+            const { data: todayLog } = await supabase
+              .from('daily_logs')
+              .select('id, notes')
+              .eq('project_id', project.id)
+              .eq('log_date', today)
+              .maybeSingle();
+            if (todayLog) {
+              const updatedNotes = todayLog.notes
+                ? `${todayLog.notes}\nPhoto: ${inlineCaption}`
+                : `Photo: ${inlineCaption}`;
+              await supabase.from('daily_logs')
+                .update({ notes: updatedNotes })
+                .eq('id', todayLog.id);
+            }
+            try {
+              await supabase.from('site_photos').insert({
+                project_id: project.id,
+                user_id: userId,
+                photo_url: permanentUrl,
+                caption: inlineCaption,
+                tag: 'Other',
+                source: 'whatsapp',
+                created_at: new Date().toISOString(),
+              });
+            } catch (err: any) {
+              console.log('[Photo Caption] site_photos insert skipped:', err?.message);
+            }
+            await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`);
+          } else {
+            await sendMessage(From, await ai(
+              'Tell the user their photo was saved. Ask them to add a caption by replying with a description.',
+              'Photo saved! What caption would you like to add?'
+            ));
+            await updateExpenseState(userId, 'awaiting_photo_caption', {
+              photo_url: permanentUrl,
+              project_id: project.id,
+            });
+          }
         } catch (err: any) {
           console.error('[Photo Upload Error]', err?.message);
           await upsertDailyLog(project.id, { photo_urls: [MediaUrl0] });
@@ -3043,13 +3240,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 7: Handle awaiting_price ─────────────────────────────────────────
     if (expenseState === 'awaiting_price' && pendingData.quantity && pendingData.item) {
-      const priceMatch = rawMessage.replace(/,/g, '').match(/\d+(?:\.\d{2})?/);
-      const mMatch = rawMessage.match(/(\d+(?:\.\d+)?)\s*[Mm]/);
-      const price = mMatch
-        ? parseFloat(mMatch[1]) * 1_000_000
-        : priceMatch ? parseFloat(priceMatch[0]) : null;
+      const price = parseAmount(rawMessage);
 
-      if (price !== null && price > 0) {
+      if (price > 0) {
         const { quantity, unit, item, vendor } = pendingData;
         const unitPrice = Math.round(price / quantity!);
         const description = `${quantity} ${unit || 'units'} of ${item}`;
@@ -3094,6 +3287,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 9: GPT-4o-mini intent classification + routing ───────────────────
     const detectedLang = detectLanguage(rawMessage);
+
+    // BUG 9: Multi-item expense — parse before classifyIntent and route directly
+    const multiItems = parseMultiItemMessage(rawMessage);
+    if (multiItems && multiItems.length >= 2) {
+      const totalAmount = multiItems.reduce((s, i) => s + i.amount, 0);
+      await handleExpenseLog(From, userId, project.id, { items: multiItems, amount: totalAmount }, rawMessage, detectedLang);
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
+
     const { intent, extracted } = await classifyIntent(rawMessage, phoneNumber);
     console.log('[Intent]', intent, JSON.stringify(extracted));
 
