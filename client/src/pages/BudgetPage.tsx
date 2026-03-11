@@ -499,17 +499,17 @@ function CostTrendChart({
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1e2235",
-                border: "1px solid rgba(255,255,255,0.1)",
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
                 fontSize: "13px",
-                color: "#fff",
+                color: "hsl(var(--card-foreground))",
                 boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)"
               }}
-              itemStyle={{ color: "#fff" }}
-              labelStyle={{ color: "#9ca3af", marginBottom: "4px" }}
+              itemStyle={{ color: "hsl(var(--card-foreground))" }}
+              labelStyle={{ color: "hsl(var(--muted-foreground))", marginBottom: "4px" }}
               formatter={(value: number) => [formatUgx(value), "Spent"]}
-              cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }}
+              cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
             />
             <Line
               type="monotone"

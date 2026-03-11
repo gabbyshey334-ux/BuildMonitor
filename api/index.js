@@ -980,7 +980,12 @@ app.patch('/api/issues/:id', requireAuth, async (req, res) => {
     }
     const { status } = req.body || {};
     const updates = {};
-    if (typeof status === 'string' && status.trim()) updates.status = status.trim();
+    if (typeof status === 'string' && status.trim()) {
+      updates.status = status.trim();
+      if (updates.status === 'acknowledged') {
+        updates.acknowledged_at = new Date().toISOString();
+      }
+    }
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ success: false, error: 'No valid updates' });
     }

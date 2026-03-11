@@ -101,11 +101,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
   return (
     <div className="relative group">
-      {/* Clickable area for navigation */}
       <Link href={`/dashboard?project=${project.id}`}>
-        <a
+        <div
+          role="link"
           onClick={handleClick}
-          className="block h-full bg-card border border-border rounded-xl p-5 hover:border-border hover:scale-[1.02] transition-all duration-300 relative overflow-hidden shadow-lg"
+          className="block h-full bg-card border border-border rounded-xl p-5 hover:border-border hover:scale-[1.02] transition-all duration-300 relative overflow-hidden shadow-lg cursor-pointer"
         >
           {/* Faint Glow */}
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#00bcd4] opacity-[0.02] blur-3xl rounded-full -mr-10 -mt-10 pointer-events-none group-hover:opacity-[0.05] transition-opacity" />
@@ -175,7 +175,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
               Updated {formatRelativeTime(project.lastActivityAt)}
             </span>
           </div>
-        </a>
+        </div>
       </Link>
 
       {/* Context Menu (Separate from main click area to avoid bubbling issues if handled correctly, but positioning absolute over the card works better for UX usually. 
@@ -190,12 +190,12 @@ export function ProjectCard({ project }: ProjectCardProps) {
           <DropdownMenuContent align="end" className="bg-card border-border text-foreground">
             <DropdownMenuItem asChild>
               <Link href={`/dashboard?project=${project.id}`}>
-                <a className="cursor-pointer hover:bg-muted/50 w-full">View Dashboard</a>
+                <span className="cursor-pointer hover:bg-muted/50 w-full block">View Dashboard</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href={`/settings?project=${project.id}`}>
-                <a className="cursor-pointer hover:bg-muted/50 w-full">Edit Project</a>
+                <span className="cursor-pointer hover:bg-muted/50 w-full block">Edit Project</span>
               </Link>
             </DropdownMenuItem>
             {/* Add Delete logic if needed, or keep generic actions */}

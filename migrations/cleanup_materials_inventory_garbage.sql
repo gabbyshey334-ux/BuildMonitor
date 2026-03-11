@@ -7,7 +7,8 @@
 DELETE FROM materials_inventory
 WHERE
   LOWER(TRIM(name)) IN (
-    'material', 'item', 'thing', 'stuff', 'goods', 'product', 'units'
+    'material', 'item', 'thing', 'stuff', 'goods', 'product', 'units',
+    'cement that are worth'
   )
   OR LENGTH(TRIM(name)) < 2
   OR COALESCE(quantity, 0) <= 0;

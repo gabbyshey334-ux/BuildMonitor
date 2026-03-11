@@ -950,10 +950,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
       {/* Modals - Kept exactly as before but with dark theme wrappers if needed */}
       {showExpenseModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="log-expense-title" aria-describedby="log-expense-desc">
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-foreground font-bold text-xl">Log Expense</h3>
+              <h3 id="log-expense-title" className="text-foreground font-bold text-xl">Log Expense</h3>
+              <p id="log-expense-desc" className="sr-only">Add expense description and amount in UGX.</p>
               <button onClick={() => { setShowExpenseModal(false); setErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
@@ -997,10 +998,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       )}
 
       {showIssueModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="report-issue-title" aria-describedby="report-issue-desc">
           <div className="bg-card rounded-xl p-6 w-full max-w-md border border-border shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-foreground font-bold text-xl">Report Issue</h3>
+              <h3 id="report-issue-title" className="text-foreground font-bold text-xl">Report Issue</h3>
+              <p id="report-issue-desc" className="sr-only">Enter issue title, description, and priority.</p>
               <button onClick={() => { setShowIssueModal(false); setIssueErrors({}); }} className="text-muted-foreground hover:text-foreground transition-colors">
                 <X size={24} />
               </button>
@@ -1110,10 +1112,11 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       )}
 
       {showDailyModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="daily-log-title" aria-describedby="daily-log-desc">
           <div className="bg-card rounded-xl p-6 w-full max-w-lg border border-border shadow-2xl my-8">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-foreground font-bold text-xl">Daily Site Log</h3>
+              <h3 id="daily-log-title" className="text-foreground font-bold text-xl">Daily Site Log</h3>
+              <p id="daily-log-desc" className="sr-only">Enter workers on site and add activity entries with time, type, and description.</p>
               <button onClick={() => { setShowDailyModal(false); setDailyErrors({}); setDailyForm({ workerCount: '', entries: [emptyEntry()] }); }} className="text-muted-foreground hover:text-foreground transition-colors p-1">
                 <X size={24} />
               </button>
