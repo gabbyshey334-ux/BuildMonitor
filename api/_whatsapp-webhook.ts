@@ -210,17 +210,15 @@ async function sendOptions(to: string, message: string, options: string[]): Prom
 
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
 
-/** Parse amount from text: handles 150K, 1.5M, 2B, million, billion, and plain numbers. */
+/** Parse amount from text: handles 150K, 1.5M, 2B, and plain numbers. K=×1000, M=×1e6, B=×1e9. */
 function parseAmount(text: string): number {
   const clean = text.replace(/,/g, '').trim();
-  const bMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/i);
-  const mMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/i);
+  const bMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Bb](?:illion)?/);
+  const mMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Mm](?:illion)?/);
   const kMatch = clean.match(/(\d+(?:\.\d+)?)\s*[Kk](?:$|\b)/);
-  const wordBillion = clean.match(/(\d+(?:\.\d+)?)\s*billion/i);
-  const wordMillion = clean.match(/(\d+(?:\.\d+)?)\s*million/i);
   const numMatch = clean.match(/(\d+(?:\.\d+)?)/);
-  if (bMatch || wordBillion) return parseFloat((bMatch || wordBillion)![1]) * 1_000_000_000;
-  if (mMatch || wordMillion) return parseFloat((mMatch || wordMillion)![1]) * 1_000_000;
+  if (bMatch) return parseFloat(bMatch[1]) * 1_000_000_000;
+  if (mMatch) return parseFloat(mMatch[1]) * 1_000_000;
   if (kMatch) return parseFloat(kMatch[1]) * 1_000;
   if (numMatch) return parseFloat(numMatch[1]);
   return 0;
@@ -1085,6 +1083,7 @@ async function classifyIntent(message: string, phoneNumber: string): Promise<Int
 
 IMPORTANT: Be aggressive about classifying expense and material messages. When in doubt between EXPENSE_LOG and GREETING, choose EXPENSE_LOG if there are numbers involved.
 Amounts: 150K means 150,000 UGX, 1.5M means 1,500,000 UGX, 2B means 2,000,000,000 UGX. Always use these conversions in extracted.amount.
+CRITICAL amount parsing rules: K or k = multiply by 1,000 (4k=4000, 30k=30000, 150k=150000). M or m = multiply by 1,000,000. B or b = multiply by 1,000,000,000. Never multiply K by 10.
 
 Common patterns you MUST classify correctly:
 
