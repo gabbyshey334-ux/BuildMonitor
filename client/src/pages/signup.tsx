@@ -73,7 +73,7 @@ export default function Signup() {
       {/* LEFT COLUMN - Image Side */}
       <div className="relative w-full md:w-[45%] h-[260px] md:h-screen md:fixed md:top-0 md:left-0 bg-[#1a2e1a] overflow-hidden">
         <img 
-          src="/construction-site.jpg" 
+          src="https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=1200&auto=format&fit=crop&q=80&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNvbnN0cnVjdGlvbiUyMHNpdGV8ZW58MHx8MHx8fDA%3D" 
           alt="Construction site" 
           className="w-full h-full object-cover"
         />
