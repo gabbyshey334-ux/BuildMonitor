@@ -2003,7 +2003,7 @@ async function handleIssueReport(
   }
 
   const msg = await ai(
-    `Tell the user their issue was logged with ID ${inserted?.id}. Confirm it was recorded and they can view it on the Issues & Risks page.`,
+    `Tell the user their issue was logged and they can view it on the Issues & Risks page. Do NOT mention any ID or UUID.`,
     `Issue logged. You can view it on the Issues & Risks page.`,
     200,
     lang
@@ -2386,6 +2386,400 @@ Rules:
     }
   }
   return "I couldn't process that right now. Try asking something like: How much have I spent? What's my remaining budget?";
+}
+
+// ─── AI Agent ─────────────────────────────────────────────────────────────────
+
+interface AgentToolResult {
+  success: boolean;
+  reply: string;
+  data?: Record<string, unknown>;
+}
+
+/** Extract a {"tool":..., "params":...} JSON block from AI response text */
+function parseToolCall(text: string): { tool: string; params: any } | null {
+  const stripped = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed.tool && parsed.params !== undefined) return parsed;
+  } catch { /* continue to brace-matching */ }
+  const start = stripped.indexOf('{"tool"');
+  if (start === -1) return null;
+  let depth = 0;
+  let end = -1;
+  for (let i = start; i < stripped.length; i++) {
+    if (stripped[i] === '{') depth++;
+    else if (stripped[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+  }
+  if (end === -1) return null;
+  try {
+    const parsed = JSON.parse(stripped.substring(start, end));
+    if (parsed.tool && parsed.params !== undefined) return parsed;
+  } catch { /* not valid */ }
+  return null;
+}
+
+async function toolLogExpense(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const { description, amount, items, date, vendor } = params;
+  const expenseDate = date || new Date().toISOString().split('T')[0];
+
+  if (items && Array.isArray(items) && items.length > 0) {
+    for (const item of items) {
+      const amt = parseFloat(String(item.total || item.amount || 0));
+      const desc = item.item
+        ? `${item.quantity || 1} ${item.unit || 'units'} of ${item.item}`
+        : description || 'Expense';
+      await supabase.from('expenses').insert({
+        user_id: userId, project_id: projectId, description: desc,
+        amount: String(amt), quantity_logged: item.quantity ? String(item.quantity) : null,
+        currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
+      });
+      const itemName = String(item.item || '').toLowerCase().trim();
+      const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
+      if (isMat && item.quantity > 0 && itemName.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
+        const now = new Date().toISOString();
+        const uc = amt / (item.quantity || 1);
+        const { data: ex } = await supabase.from('materials_inventory').select('id, quantity, total_cost').eq('project_id', projectId).eq('name', itemName).maybeSingle();
+        if (ex) {
+          await supabase.from('materials_inventory').update({ quantity: parseFloat(String(ex.quantity || 0)) + item.quantity, unit_cost: uc, total_cost: parseFloat(String(ex.total_cost || 0)) + amt, last_purchased_at: now, updated_at: now }).eq('id', ex.id);
+        } else {
+          await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name: itemName, quantity: item.quantity, unit: item.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
+        }
+      }
+    }
+    const total = items.reduce((s: number, i: any) => s + parseFloat(String(i.total || i.amount || 0)), 0);
+    const lines = items.map((i: any) => `• ${i.quantity || 1} ${i.unit || 'units'} of ${i.item} — UGX ${fmt(parseFloat(String(i.total || i.amount || 0)))}`).join('\n');
+    return { success: true, reply: `✅ Logged ${items.length} items:\n${lines}\nTotal: UGX ${fmt(total)}`, data: { total } };
+  }
+
+  const amt = parseFloat(String(amount || 0));
+  if (!amt || amt <= 0) return { success: false, reply: 'Please include the amount. E.g. "Paid plumber 150k" or "Bought cement for 400,000 UGX".' };
+
+  const { error } = await supabase.from('expenses').insert({
+    user_id: userId, project_id: projectId,
+    description: description || `Expense: ${fmt(amt)} UGX`,
+    amount: String(amt), currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
+  });
+  if (error) return { success: false, reply: 'Failed to save that expense. Please try again.' };
+
+  if (vendor) await upsertVendor(projectId, vendor, amt);
+
+  if (params.item && params.quantity > 0) {
+    const itemName = String(params.item).toLowerCase().trim();
+    const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
+    if (isMat && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
+      const now = new Date().toISOString();
+      const uc = amt / params.quantity;
+      const { data: ex } = await supabase.from('materials_inventory').select('id, quantity, total_cost').eq('project_id', projectId).eq('name', itemName).maybeSingle();
+      if (ex) {
+        await supabase.from('materials_inventory').update({ quantity: parseFloat(String(ex.quantity || 0)) + params.quantity, unit_cost: uc, total_cost: parseFloat(String(ex.total_cost || 0)) + amt, last_purchased_at: now, updated_at: now }).eq('id', ex.id);
+      } else {
+        await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name: itemName, quantity: params.quantity, unit: params.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
+      }
+    }
+  }
+
+  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId);
+  const { data: proj } = await supabase.from('projects').select('budget').eq('id', projectId).single();
+  const totalSpentNow = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+  const budgetVal = parseFloat(String(proj?.budget || 0));
+  const pct = budgetVal > 0 ? Math.round((totalSpentNow / budgetVal) * 100) : 0;
+  let budgetNote = '';
+  if (pct >= 100) budgetNote = '\n🚨 Budget exceeded!';
+  else if (pct >= 80) budgetNote = `\n⚠️ Budget at ${pct}% — running low.`;
+
+  return { success: true, reply: `✅ Logged! ${description || 'Expense'} — UGX ${fmt(amt)}.${budgetNote}`, data: { amount: amt, description } };
+}
+
+async function toolLogLabor(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const { worker_count, amount, description, date } = params;
+  const wc = parseInt(String(worker_count || 0), 10) || 0;
+  const amt = parseFloat(String(amount || 0));
+
+  if (wc > 0) await upsertDailyLog(projectId, { worker_count: wc });
+  if (amt > 0) {
+    const expenseDate = date || new Date().toISOString().split('T')[0];
+    await supabase.from('expenses').insert({
+      user_id: userId, project_id: projectId,
+      description: description || `Labour — ${wc > 0 ? wc + ' workers' : 'site crew'}`,
+      amount: String(amt), currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
+    });
+  }
+
+  const parts: string[] = [];
+  if (wc > 0) parts.push(`${wc} workers logged`);
+  if (amt > 0) parts.push(`UGX ${fmt(amt)} recorded`);
+  if (parts.length === 0) return { success: false, reply: 'Please include worker count or payment amount. E.g. "6 workers today" or "Paid 10 workers 20k each".' };
+  return { success: true, reply: `✅ ${parts.join('. ')}.`, data: { worker_count: wc, amount: amt } };
+}
+
+async function toolUpdateInventory(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const { material_name, action, quantity, unit } = params;
+  if (!material_name) return { success: false, reply: 'Please specify the material name.' };
+  if (!quantity || parseFloat(String(quantity)) <= 0) return { success: false, reply: 'Please specify the quantity.' };
+  const name = String(material_name).toLowerCase().trim();
+  const qty = parseFloat(String(quantity));
+  const now = new Date().toISOString();
+  const { data: existing } = await supabase.from('materials_inventory').select('id, quantity, unit').eq('project_id', projectId).ilike('name', `%${name}%`).maybeSingle();
+
+  if (action === 'use' || action === 'used') {
+    if (!existing) return { success: false, reply: `"${material_name}" is not in your inventory yet. Log a purchase first.` };
+    const newQty = Math.max(0, parseFloat(String(existing.quantity || 0)) - qty);
+    await supabase.from('materials_inventory').update({ quantity: newQty, last_used_at: now, updated_at: now }).eq('id', existing.id);
+    const lowWarn = newQty <= 5 ? ' ⚠️ Low stock!' : '';
+    return { success: true, reply: `✅ Updated! Used ${qty} ${unit || existing.unit || 'units'} of ${material_name}. Remaining: ${newQty} ${unit || existing.unit || 'units'}.${lowWarn}`, data: { newQty } };
+  }
+  if (action === 'set') {
+    if (existing) {
+      await supabase.from('materials_inventory').update({ quantity: qty, unit: unit || existing.unit, updated_at: now }).eq('id', existing.id);
+    } else {
+      await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name, quantity: qty, unit: unit || 'units', updated_at: now });
+    }
+    return { success: true, reply: `✅ Stock set! ${material_name}: ${qty} ${unit || 'units'}.`, data: { newQty: qty } };
+  }
+  // Default: add
+  if (existing) {
+    const newQty = parseFloat(String(existing.quantity || 0)) + qty;
+    await supabase.from('materials_inventory').update({ quantity: newQty, last_purchased_at: now, updated_at: now }).eq('id', existing.id);
+    return { success: true, reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.`, data: { newQty } };
+  }
+  await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name, quantity: qty, unit: unit || 'units', source: 'whatsapp', last_purchased_at: now, updated_at: now });
+  return { success: true, reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.`, data: { newQty: qty } };
+}
+
+async function toolLogIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title, description, severity } = params;
+  if (!title) return { success: false, reply: 'Please describe the issue so I can log it.' };
+  const sev = ['low', 'medium', 'high', 'critical'].includes(String(severity || '').toLowerCase()) ? String(severity).toLowerCase() : 'medium';
+  const { error } = await supabase.from('issues').insert({
+    project_id: projectId, title: String(title).substring(0, 120),
+    description: description || title, severity: sev, status: 'open', type: 'general',
+  });
+  if (error) return { success: false, reply: 'Failed to log that issue. Please try again or report from the dashboard.' };
+  return { success: true, reply: `✅ Issue logged: "${title}" (${sev} severity). View it on the Issues & Risks page.`, data: { title, severity: sev } };
+}
+
+async function toolLogProgress(projectId: string, params: any): Promise<AgentToolResult> {
+  const { description, worker_count, date } = params;
+  if (!description) return { success: false, reply: 'Please describe the progress update.' };
+  const logTime = new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00';
+  const entry = { log_time: logTime, activity_type: 'Milestone', description };
+  const updateData: any = { notes: description, activity_entries: [entry] };
+  const wc = parseInt(String(worker_count || 0), 10);
+  if (wc > 0) updateData.worker_count = wc;
+  if (date) {
+    // Log for a specific date — insert/update directly
+    const { data: existing } = await supabase.from('daily_logs').select('id, notes, activity_entries').eq('project_id', projectId).eq('log_date', date).maybeSingle();
+    if (existing) {
+      const existingEntries = Array.isArray(existing.activity_entries) ? existing.activity_entries : [];
+      await supabase.from('daily_logs').update({ notes: existing.notes ? `${existing.notes}\n${description}` : description, activity_entries: [...existingEntries, entry], updated_at: new Date().toISOString() }).eq('id', existing.id);
+    } else {
+      await supabase.from('daily_logs').insert({ project_id: projectId, log_date: date, ...updateData });
+    }
+  } else {
+    await upsertDailyLog(projectId, updateData);
+  }
+  return { success: true, reply: `✅ Progress logged! "${description}" added to your daily timeline.`, data: { description } };
+}
+
+async function toolSwitchProject(userId: string, params: any, allProjects: any[]): Promise<AgentToolResult> {
+  const { project_name_or_id } = params;
+  if (!project_name_or_id) return { success: false, reply: 'Please specify the project name.' };
+  const search = String(project_name_or_id).toLowerCase().trim();
+  const matched = allProjects.find((p: any) => {
+    const pname = String(p.name).toLowerCase();
+    return p.id === project_name_or_id || pname === search || pname.includes(search) || search.includes(pname.split(' ')[0]);
+  });
+  if (!matched) {
+    const names = allProjects.map((p: any) => p.name).join(', ');
+    return { success: false, reply: `No project found matching "${project_name_or_id}". Your projects: ${names || 'none'}. Say "list projects" to see options.` };
+  }
+  await supabase.from('profiles').update({ active_project_id: matched.id, active_project_set_at: new Date().toISOString() }).eq('id', userId);
+  return { success: true, reply: `✅ Switched to "${matched.name}". How can I help with this project?`, data: { projectId: matched.id, projectName: matched.name } };
+}
+
+async function toolUpdateDailyLog(projectId: string, params: any): Promise<AgentToolResult> {
+  const { date, worker_count, notes, milestones } = params;
+  const wc = worker_count != null ? parseInt(String(worker_count), 10) : null;
+  const updateData: any = {};
+  if (wc && wc > 0) updateData.worker_count = wc;
+  if (notes) updateData.notes = notes;
+  if (milestones) updateData.milestones = milestones;
+  if (Object.keys(updateData).length === 0) return { success: false, reply: 'Nothing to update. Specify worker count, notes, or milestones.' };
+  const logDate = date || new Date().toISOString().split('T')[0];
+  const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', logDate).maybeSingle();
+  if (existing) {
+    if (notes && existing.notes) updateData.notes = `${existing.notes}\n${notes}`;
+    await supabase.from('daily_logs').update({ ...updateData, updated_at: new Date().toISOString() }).eq('id', existing.id);
+  } else {
+    await supabase.from('daily_logs').insert({ project_id: projectId, log_date: logDate, ...updateData });
+  }
+  const parts: string[] = [];
+  if (wc && wc > 0) parts.push(`${wc} workers`);
+  if (notes) parts.push('notes saved');
+  if (milestones) parts.push('milestones recorded');
+  return { success: true, reply: `✅ Daily log updated! ${parts.join(', ')}.`, data: updateData };
+}
+
+async function runAgent(
+  userId: string,
+  projectId: string,
+  rawMessage: string,
+  profile: any,
+  allProjects: any[]
+): Promise<string> {
+  const [projectRes, expensesRes, materialsRes, dailyLogsRes, issuesRes] = await Promise.all([
+    supabase.from('projects').select('id, name, budget, status, start_date').eq('id', projectId).single(),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(20),
+    supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, last_purchased_at').eq('project_id', projectId),
+    supabase.from('daily_logs').select('log_date, worker_count, notes').eq('project_id', projectId).order('log_date', { ascending: false }).limit(7),
+    supabase.from('issues').select('title, severity, status').eq('project_id', projectId).in('status', ['open', 'acknowledged']).order('created_at', { ascending: false }).limit(20),
+  ]);
+
+  const project = projectRes.data;
+  const recentExpenses = (expensesRes.data || []).map((e: any) => ({
+    description: e.description, amount: parseFloat(String(e.amount || 0)), date: e.expense_date,
+  }));
+  const materials = (materialsRes.data || []).map((m: any) => ({
+    name: m.name, stock: m.quantity, unit: m.unit, unitCostUgx: m.unit_cost, lastPurchased: m.last_purchased_at,
+  }));
+  const dailyLogs = (dailyLogsRes.data || []).map((l: any) => ({
+    date: l.log_date, workers: l.worker_count, notes: l.notes,
+  }));
+  const openIssues = (issuesRes.data || []).map((i: any) => ({
+    title: i.title, severity: i.severity, status: i.status,
+  }));
+
+  const totalSpent = recentExpenses.reduce((s, e) => s + e.amount, 0);
+  const budget = parseFloat(String(project?.budget || 0));
+  const today = new Date().toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const userName = profile?.full_name && profile.full_name !== 'WhatsApp User'
+    ? profile.full_name.split(' ')[0]
+    : 'Site Manager';
+
+  const contextBlock = JSON.stringify({
+    project: { name: project?.name, budgetUgx: budget, spentUgx: totalSpent, remainingUgx: Math.max(0, budget - totalSpent), status: project?.status },
+    recentExpenses,
+    materialsInventory: materials,
+    recentDailyLogs: dailyLogs,
+    openIssues,
+    userProjects: allProjects.map((p: any) => ({ name: p.name })),
+  });
+
+  const systemPrompt = `You are JengaTrack, an intelligent construction project assistant with full database access. You can read data AND take actions.
+
+TODAY: ${today}
+USER: ${userName}
+ACTIVE PROJECT: ${project?.name || 'Unknown'}
+
+PROJECT DATA (use this to answer all questions):
+${contextBlock}
+
+AVAILABLE TOOLS — return ONLY a JSON object (no extra text, no explanation) to take an action:
+{"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"optional material name","quantity":optional_number,"unit":"optional"}}
+{"tool":"log_expense","params":{"description":"multi-item purchase","amount":total_number,"items":[{"item":"name","quantity":number,"unit":"bags/kg/etc","unit_price":number,"total":number}]}}
+{"tool":"log_labor","params":{"worker_count":number,"amount":number_or_0,"description":"...","date":"YYYY-MM-DD"}}
+{"tool":"update_inventory","params":{"material_name":"...","action":"add|use|set","quantity":number,"unit":"..."}}
+{"tool":"log_issue","params":{"title":"...","description":"...","severity":"low|medium|high|critical"}}
+{"tool":"log_progress","params":{"description":"...","worker_count":number_optional,"date":"YYYY-MM-DD"}}
+{"tool":"switch_project","params":{"project_name_or_id":"exact project name from userProjects list"}}
+{"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
+
+WHEN TO USE TOOLS vs PLAIN TEXT:
+- LOG/RECORD/ADD/BUY/PAY/UPDATE → use the appropriate tool, return ONLY the JSON
+- QUESTION/QUERY/HOW MUCH/STATUS CHECK → answer in plain text from PROJECT DATA above
+- "any alerts / issues / problems / risks?" → read openIssues from data, reply in plain text — NEVER call log_issue
+- "switch to X / work on X / change project to X" → call switch_project immediately
+
+CRITICAL RULES:
+1. "workers/masons/labourers/staff/guys/men on site" are PEOPLE. Use log_labor (if paid) or update_daily_log (just count). NEVER update_inventory for people.
+2. "any alerts/issues" is a QUESTION — read openIssues from the data above and reply as plain text. Do NOT create a new issue.
+3. K=1,000 | M=1,000,000 | B=1,000,000,000. 4K=4,000. 30k=30,000. 150K=150,000. 1.5M=1,500,000.
+4. NEVER include UUIDs, raw database IDs, or internal field names in replies.
+5. NEVER say "I cannot", "I don't have that functionality", or "please use the format".
+6. ONE reply only. Plain text. No markdown asterisks or bold. Under 6 lines.
+7. Dates shown to user must be human readable: "March 16, 2026" not "2026-03-16".
+8. Currency always UGX. Format with commas: 1,500,000 UGX.
+9. If genuinely unsure what the user wants, ask ONE short clarifying question.
+10. "paid 3 workers 25k each" → log_labor with amount=75000 (3 × 25,000).
+11. "edit/update the daily log for X workers" → update_daily_log, not log_labor.`;
+
+  const userPrompt = `User message: "${rawMessage}"
+
+If an action is needed → return ONLY the JSON tool call, nothing else.
+If a question → answer in plain text using the project data above.`;
+
+  let rawResponse: string | null = null;
+
+  if (gemini && process.env.GEMINI_API_KEY) {
+    try {
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const result = await model.generateContent(`${systemPrompt}\n\n${userPrompt}`);
+      rawResponse = result.response.text()?.trim() || null;
+      console.log('[Agent] Gemini:', rawResponse?.substring(0, 120));
+    } catch (err: any) {
+      console.error('[Agent] Gemini failed:', err?.message);
+    }
+  }
+
+  if (!rawResponse && process.env.OPENAI_API_KEY) {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 400,
+      });
+      rawResponse = completion.choices[0]?.message?.content?.trim() || null;
+      console.log('[Agent] OpenAI:', rawResponse?.substring(0, 120));
+    } catch (err: any) {
+      console.error('[Agent] OpenAI failed:', err?.message);
+    }
+  }
+
+  if (!rawResponse) {
+    return "Having trouble right now. Try: 'Log cement for 400k', 'How much have I spent?', or 'List projects'.";
+  }
+
+  const toolCall = parseToolCall(rawResponse);
+  if (!toolCall) {
+    return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
+  }
+
+  console.log('[Agent] Executing tool:', toolCall.tool, JSON.stringify(toolCall.params).substring(0, 100));
+
+  let result: AgentToolResult;
+  switch (toolCall.tool) {
+    case 'log_expense':
+      result = await toolLogExpense(userId, projectId, toolCall.params);
+      break;
+    case 'log_labor':
+      result = await toolLogLabor(userId, projectId, toolCall.params);
+      break;
+    case 'update_inventory':
+      result = await toolUpdateInventory(userId, projectId, toolCall.params);
+      break;
+    case 'log_issue':
+      result = await toolLogIssue(projectId, toolCall.params);
+      break;
+    case 'log_progress':
+      result = await toolLogProgress(projectId, toolCall.params);
+      break;
+    case 'switch_project':
+      result = await toolSwitchProject(userId, toolCall.params, allProjects);
+      break;
+    case 'update_daily_log':
+      result = await toolUpdateDailyLog(projectId, toolCall.params);
+      break;
+    default:
+      console.log('[Agent] Unknown tool:', toolCall.tool);
+      return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || "Got it! What else can I help with?";
+  }
+
+  return result.reply;
 }
 
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
@@ -2838,26 +3232,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 5: Handle media ──────────────────────────────────────────────────
     if (hasMedia && MediaUrl0) {
       if (isVoiceNote) {
-        await sendMessage(From, await ai(
-          'Tell the user you received their voice note and are transcribing it. One short line.',
-          'Voice note received! Transcribing now...'
-        ));
         const transcribed = await processVoiceNote(MediaUrl0);
         if (transcribed) {
-          await sendMessage(From, await ai(
-            `Tell the user you transcribed their voice note as: "${transcribed}" and you are processing it now.`,
-            `Got it: "${transcribed}"\nProcessing now...`
-          ));
-          const { intent, extracted } = await classifyIntent(transcribed, phoneNumber);
+          let actionReply: string;
           if (!project) {
-            await sendMessage(From, await ai(
-              'Tell the user they need a project first. Tell them to type "hey jenga" to create one.',
-              'You need a project first. Type "hey jenga" to create one.'
-            ));
+            actionReply = "You need a project first. Type 'hey jenga' to create one.";
           } else {
-            const voiceLang = detectLanguage(transcribed);
-            await routeIntent(intent, extracted, transcribed, From, userId, project, profile, projects || [], voiceLang);
+            actionReply = await runAgent(userId, project.id, transcribed, profile, projects || []);
           }
+          const summary = transcribed.length > 60 ? transcribed.substring(0, 57) + '...' : transcribed;
+          await sendMessage(From, `Transcribed ✅ "${summary}"\n\n${actionReply}`);
         } else {
           await sendMessage(From, await ai(
             'Tell the user you could not transcribe their voice note clearly. Ask them to try again with clearer audio or type their update instead.',
@@ -3284,43 +3668,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // ── STEP 9: GPT-4o-mini intent classification + routing ───────────────────
-    const detectedLang = detectLanguage(rawMessage);
-
-    // BUG 9: Multi-item expense — parse before classifyIntent and route directly
-    const multiItems = parseMultiItemMessage(rawMessage);
-    if (multiItems && multiItems.length >= 2) {
-      const totalAmount = multiItems.reduce((s, i) => s + i.amount, 0);
-      await handleExpenseLog(From, userId, project.id, { items: multiItems, amount: totalAmount }, rawMessage, detectedLang);
-      res.setHeader('Content-Type', 'text/xml');
-      return res.status(200).send(twimlOk);
-    }
-
-    const { intent, extracted } = await classifyIntent(rawMessage, phoneNumber);
-    console.log('[Intent]', intent, JSON.stringify(extracted));
-
-    const lines = rawMessage.split('\n')
-      .map((l: string) => l.replace(/^[•\-\*\d\.]\s*/, '').trim())
-      .filter((l: string) => l.length > 5);
-
-    if (lines.length > 1) {
-      let processedCount = 0;
-      for (const line of lines) {
-        const lineResult = preClassifyIntent(line);
-        if (lineResult && lineResult.intent !== 'GREETING') {
-          const lineLang = detectLanguage(line);
-          await routeIntent(lineResult.intent, lineResult.extracted, line, From, userId, project, profile, projects || [], lineLang);
-          processedCount++;
-        }
-      }
-      if (processedCount > 0) {
-        console.log('[MultiIntent] Processing', processedCount, 'lines');
-        res.setHeader('Content-Type', 'text/xml');
-        return res.status(200).send(twimlOk);
-      }
-    }
-
-    await routeIntent(intent, extracted, rawMessage, From, userId, project, profile, projects || [], detectedLang);
+    // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
+    console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
+    const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
+    await sendMessage(From, agentReply);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
