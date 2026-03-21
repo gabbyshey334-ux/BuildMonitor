@@ -233,6 +233,8 @@ export const dailyLogs = pgTable("daily_logs", {
   logDate: date("log_date").notNull(),
   workerCount: integer("worker_count"),
   notes: text("notes"),
+  milestones: text("milestones"),
+  milestoneCount: integer("milestone_count").default(0),
   weatherCondition: text("weather_condition"),
   photoUrls: jsonb("photo_urls"), // JSON array of URLs
   activityEntries: jsonb("activity_entries").default('[]'), // [{ log_time, activity_type, description, amount? }]

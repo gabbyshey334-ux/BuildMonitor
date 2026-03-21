@@ -1006,8 +1006,8 @@ app.patch('/api/issues/:id', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/daily-logs — Daily site log: { project_id, log_date, worker_count, entries }
-// Stores worker_count on daily_logs row and entries in activity_entries JSONB.
+// POST /api/daily-logs — Daily site log: { project_id, log_date, worker_count, entries, milestones, milestone_count, notes }
+// Upserts on (project_id, log_date). Journal fields: milestones, milestone_count, notes.
 app.post('/api/daily-logs', requireAuth, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id;
@@ -1019,7 +1019,7 @@ app.post('/api/daily-logs', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { project_id, log_date, worker_count, entries } = req.body;
+    const { project_id, log_date, worker_count, entries, milestones, milestone_count, notes } = req.body;
     const projectId = project_id;
     if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
@@ -1031,20 +1031,33 @@ app.post('/api/daily-logs', requireAuth, async (req, res) => {
       description: e.description || '',
       amount: e.amount != null ? parseFloat(e.amount) : null,
     })) : [];
-    const { data: existing } = await supabase.from('daily_logs').select('id, notes, activity_entries').eq('project_id', projectId).eq('log_date', today).maybeSingle();
+    const { data: existing } = await supabase
+      .from('daily_logs')
+      .select('id, notes, activity_entries, worker_count')
+      .eq('project_id', projectId)
+      .eq('log_date', today)
+      .maybeSingle();
     if (existing) {
       const updateData = {
         worker_count: worker_count != null ? worker_count : existing.worker_count,
         updated_at: new Date().toISOString(),
       };
       if (activityEntries.length > 0) updateData.activity_entries = activityEntries;
+      if (milestones !== undefined) updateData.milestones = milestones == null ? null : String(milestones).trim();
+      if (milestone_count !== undefined) {
+        const mc = parseInt(String(milestone_count), 10);
+        updateData.milestone_count = Number.isFinite(mc) ? mc : 0;
+      }
+      if (notes !== undefined) updateData.notes = notes == null ? '' : String(notes).trim();
       await supabase.from('daily_logs').update(updateData).eq('id', existing.id);
     } else {
       await supabase.from('daily_logs').insert({
         project_id: projectId,
         log_date: today,
         worker_count: worker_count != null ? worker_count : null,
-        notes: '',
+        notes: notes != null ? String(notes).trim() : '',
+        milestones: milestones != null ? String(milestones).trim() : null,
+        milestone_count: milestone_count != null ? (parseInt(String(milestone_count), 10) || 0) : 0,
         activity_entries: activityEntries.length > 0 ? activityEntries : [],
         created_at: new Date().toISOString(),
       });
