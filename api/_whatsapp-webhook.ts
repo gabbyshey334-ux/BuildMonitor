@@ -917,7 +917,8 @@ function preClassifyIntent(message: string): IntentResult | null {
 
   // MATERIAL_QUERY — inventory/stock questions; exclude worker-related and require material context
   if (
-    /how much|how many|do (i|we) have|in.*inventory|current stock|stock.*left|remaining.*material/i.test(m) &&
+    /how (much|many).*(?:do|did) (?:i|we) have|current stock|stock.*left/i.test(m) &&
+    !/when did|last buy|last time|per bag|per unit|per kg|price|quote|should i|advice|recommend/i.test(m) &&
     !/budget|spent|expense|cost/i.test(m) &&
     !/worker|staff|people|men|mason|labourer|laborer|came|on site|show up/i.test(m) &&
     (MATERIAL_KEYWORDS.some(k => m.includes(k)) || /inventory|stock|material|supply|supplies/i.test(m))
@@ -926,8 +927,13 @@ function preClassifyIntent(message: string): IntentResult | null {
   }
 
   // SWITCH_PROJECT — must be before greeting check so it's always caught
-  if (/switch|change project|other project|different project|wanna switch|want to switch/i.test(m)) {
-    return { intent: 'SWITCH_PROJECT', extracted: {} };
+  if (
+    /switch|change.*project|other project|different project|wanna switch|want to switch|work on.*project|record for.*project|switch to.*mode|let.*work on|move to.*project|i want.*work on|want us to work|have data.*for.*project/i.test(m) &&
+    !/how much|budget|spent|expense|material|cement|sand|workers|bought|paid/i.test(m)
+  ) {
+    const nameMatch = message.match(/(?:on|for|to|switch to|work on|the)\s+([A-Za-z][A-Za-z\s]+?)(?:\s+project|\s+mode|$)/i);
+    const mentionedName = nameMatch ? nameMatch[1].trim() : null;
+    return { intent: 'SWITCH_PROJECT', extracted: { project_name: mentionedName } };
   }
 
   if (/list.*project|my project|show.*project|all.*project|project.*list|what project/i.test(m)) {
@@ -1006,7 +1012,11 @@ function preClassifyIntent(message: string): IntentResult | null {
   }
 
   // ISSUE_REPORT patterns (problem, crack, damage, leak, etc.)
-  if (/there is|there's|we have|we've got|foundation crack|wall crack|crack|leak|damage|broken|problem|issue|defect|structural|safety concern/i.test(m) && /crack|leak|damage|broken|problem|issue|defect|structural/i.test(m)) {
+  if (
+    /there is|there's|we have|we've got|foundation crack|wall crack|crack|leak|damage|broken|problem|issue|defect|structural|safety concern/i.test(m) &&
+    /crack|leak|damage|broken|problem|issue|defect|structural/i.test(m) &&
+    !/any alerts|any issues|are there any|what issues|show.*issues|list.*issues|do we have any|should i know/i.test(m)
+  ) {
     const severity = /emergency|critical|urgent|serious|dangerous|immediate/i.test(m) ? 'critical' : /major|severe|significant/i.test(m) ? 'high' : 'medium';
     return { intent: 'ISSUE_REPORT', extracted: { description: message, severity } };
   }
@@ -3925,6 +3935,30 @@ async function routeIntent(
     case 'SMART_QUERY':
       await handleSmartQuery(from, project.id, rawMessage);
       break;
+    case 'SWITCH_PROJECT': {
+      const mentionedName = extracted.project_name as string | null;
+      if (mentionedName && projects.length > 0) {
+        const match = projects.find((p: any) =>
+          p.name.toLowerCase().includes(mentionedName.toLowerCase()) ||
+          mentionedName.toLowerCase().includes(p.name.toLowerCase().split(' ')[0])
+        );
+        if (match) {
+          await supabase.from('profiles').update({
+            active_project_id: match.id,
+            active_project_set_at: new Date().toISOString(),
+          }).eq('id', userId);
+          await sendMessage(from, `Switched to ${match.name}! What would you like to update?`);
+          break;
+        }
+      }
+      // No name match or no mention — show selection menu
+      if (projects.length > 0) {
+        await sendProjectSelectionMenu(from, userId, projects);
+      } else {
+        await sendMessage(from, 'You only have one project. Say "list projects" to see it.');
+      }
+      break;
+    }
     case 'LIST_PROJECTS':
       await handleListProjects(from, userId);
       break;
