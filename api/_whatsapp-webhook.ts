@@ -2144,9 +2144,14 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
+  // Rolling windows
   const last7Start = new Date(today);
   last7Start.setDate(today.getDate() - 7);
   const last7StartStr = last7Start.toISOString().split('T')[0];
+
+  const last30Start = new Date(today);
+  last30Start.setDate(today.getDate() - 30);
+  const last30StartStr = last30Start.toISOString().split('T')[0];
 
   const dayOfWeek = today.getDay();
   const lastMondayCal = new Date(today);
@@ -2171,7 +2176,26 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
   let periodEnd: string = todayStr;
   let periodLabel = '';
 
-  if (/last 7 days|past 7 days|7 days|past week/i.test(q)) {
+  const isPurchaseQuery = /what did (i|we) buy|things i purchased|things we purchased|purchases|purchased|bought|buy\b/i.test(q);
+  const wantsDetailed = /detailed|detail|breakdown|itemize|items|list|everything|show me/i.test(q) || isPurchaseQuery;
+
+  // last N days (rolling window, inclusive of today)
+  const lastNDaysMatch = q.match(/(?:last|past)\s+(\d{1,3})\s+days\b|\b(\d{1,3})\s+days\b/);
+  const nDaysRaw = lastNDaysMatch ? (lastNDaysMatch[1] || lastNDaysMatch[2]) : null;
+  const nDays = nDaysRaw ? parseInt(nDaysRaw, 10) : NaN;
+
+  if (!isNaN(nDays) && nDays >= 1 && nDays <= 365 && /(last|past)\s+\d{1,3}\s+days|\b\d{1,3}\s+days\b/.test(q)) {
+    const start = new Date(today);
+    start.setDate(today.getDate() - (nDays - 1));
+    periodStart = start.toISOString().split('T')[0];
+    periodEnd = todayStr;
+    periodLabel = `the last ${nDays} days`;
+  } else if (/a month ago|one month ago|month ago/i.test(q)) {
+    // Interpret "a month ago" as a rolling 30-day window ending today
+    periodStart = last30StartStr;
+    periodEnd = todayStr;
+    periodLabel = 'the last 30 days';
+  } else if (/last 7 days|past 7 days|past week/i.test(q)) {
     periodStart = last7StartStr;
     periodEnd = todayStr;
     periodLabel = 'the last 7 days';
@@ -2191,6 +2215,11 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     periodStart = lastMonthStart;
     periodEnd = lastMonthEnd;
     periodLabel = 'last month';
+  } else if (isPurchaseQuery) {
+    // If user asks "what did I buy" without a period, default to last 30 days
+    periodStart = last30StartStr;
+    periodEnd = todayStr;
+    periodLabel = 'the last 30 days';
   }
 
   if (periodStart) {
@@ -2223,10 +2252,60 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       })
       .join('\n');
 
-    const reply =
-      `Spending for ${periodLabel}:\n\n` +
-      `Total: UGX ${fmt(periodTotal)}\n\n` +
-      `Breakdown by date:\n${breakdownLines}`;
+    // Optional: group by a simplified item key to answer "things I purchased"
+    const normalizeKey = (desc: string) => {
+      return String(desc || '')
+        .toLowerCase()
+        .replace(/ugx|shs|shillings?/g, '')
+        .replace(/\b\d+(?:[.,]\d+)?\b/g, '')
+        .replace(/[^\w\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .slice(0, 6)
+        .join(' ') || 'unknown';
+    };
+    const byItem: Record<string, { total: number; count: number }> = {};
+    for (const e of periodExpenses) {
+      const key = normalizeKey(e.description);
+      const amt = parseFloat(String(e.amount || 0));
+      byItem[key] = byItem[key] || { total: 0, count: 0 };
+      byItem[key].total += amt;
+      byItem[key].count += 1;
+    }
+    const topItemsLines = Object.entries(byItem)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 10)
+      .map(([k, v]) => `- ${k}: UGX ${fmt(v.total)} (${v.count})`)
+      .join('\n');
+
+    const lineItemsLines = wantsDetailed
+      ? (periodExpenses.slice(0, 40).map((e: any) => {
+          const d = e.expense_date ? new Date(e.expense_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown date';
+          const desc = (e.description || 'Expense').toString().trim();
+          const amt = parseFloat(String(e.amount || 0));
+          return `- ${d}: ${desc} — UGX ${fmt(amt)}`;
+        }).join('\n'))
+      : '';
+
+    const replyParts: string[] = [];
+    replyParts.push(`Spending for ${periodLabel} (from ${periodStart} to ${periodEnd}):`);
+    replyParts.push(`Total: UGX ${fmt(periodTotal)}`);
+    replyParts.push('');
+    replyParts.push('Breakdown by date:');
+    replyParts.push(breakdownLines);
+    if (isPurchaseQuery || wantsDetailed) {
+      replyParts.push('');
+      replyParts.push('Top items (grouped):');
+      replyParts.push(topItemsLines || '- (no item descriptions found)');
+    }
+    if (wantsDetailed && lineItemsLines) {
+      replyParts.push('');
+      replyParts.push('Recent line items:');
+      replyParts.push(lineItemsLines);
+    }
+
+    const reply = replyParts.join('\n');
 
     await sendMessage(from, reply);
     return;
