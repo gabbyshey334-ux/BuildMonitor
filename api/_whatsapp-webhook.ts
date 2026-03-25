@@ -2627,6 +2627,97 @@ async function toolCreateTask(projectId: string, params: any): Promise<AgentTool
   return { success: true, reply: `✅ Task created: "${title}" (${taskStatus}). View on your dashboard.`, data: { title, status: taskStatus } };
 }
 
+async function toolUpdateTask(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title_keyword, status, new_title } = params;
+  if (!title_keyword) return { success: false, reply: 'Please specify which task to update.' };
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, title, status')
+    .eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!task) return { success: false, reply: `No task found matching "${title_keyword}". Check your task list and try again.` };
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (status) {
+    const s = String(status).toLowerCase();
+    if (!['pending', 'in_progress', 'completed'].includes(s)) {
+      return { success: false, reply: 'Status must be pending, in_progress, or completed.' };
+    }
+    updates.status = s;
+    if (s === 'completed') updates.completed_at = new Date().toISOString();
+  }
+  if (new_title) updates.title = String(new_title).trim();
+  const { error } = await supabase.from('tasks').update(updates).eq('id', task.id);
+  if (error) return { success: false, reply: 'Failed to update the task. Please try again.' };
+  const displayStatus = updates.status || task.status;
+  return { success: true, reply: `✅ Task "${task.title}" updated to *${displayStatus}*.`, data: { title: task.title, status: displayStatus } };
+}
+
+async function toolDeleteTask(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title_keyword } = params;
+  if (!title_keyword) return { success: false, reply: 'Please specify which task to delete.' };
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, title')
+    .eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!task) return { success: false, reply: `No task found matching "${title_keyword}".` };
+  const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+  if (error) return { success: false, reply: 'Failed to delete the task. Please try again.' };
+  return { success: true, reply: `🗑️ Task "${task.title}" deleted.`, data: { title: task.title } };
+}
+
+async function toolUpdateIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title_keyword, severity, description } = params;
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to update.' };
+  const { data: issue } = await supabase
+    .from('issues')
+    .select('id, title, severity, description')
+    .eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (severity) {
+    const s = String(severity).toLowerCase();
+    if (!['low', 'medium', 'high', 'critical'].includes(s)) {
+      return { success: false, reply: 'Severity must be low, medium, high, or critical.' };
+    }
+    updates.severity = s;
+  }
+  if (description) updates.description = String(description).trim();
+  const { error } = await supabase.from('issues').update(updates).eq('id', issue.id);
+  if (error) return { success: false, reply: 'Failed to update the issue. Please try again.' };
+  const parts: string[] = [];
+  if (updates.severity) parts.push(`severity → *${updates.severity}*`);
+  if (updates.description) parts.push('description updated');
+  return { success: true, reply: `✅ Issue "${issue.title}" updated: ${parts.join(', ')}.`, data: { title: issue.title } };
+}
+
+async function toolDeleteIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title_keyword } = params;
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to delete.' };
+  const { data: issue } = await supabase
+    .from('issues')
+    .select('id, title')
+    .eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
+  const { error } = await supabase.from('issues').delete().eq('id', issue.id);
+  if (error) return { success: false, reply: 'Failed to delete the issue. Please try again.' };
+  return { success: true, reply: `🗑️ Issue "${issue.title}" removed from the project.`, data: { title: issue.title } };
+}
+
 async function toolLogExpense(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
   const { description, amount, items, date, vendor } = params;
   const expenseDate = date || new Date().toISOString().split('T')[0];
@@ -2948,8 +3039,8 @@ You can do EVERYTHING the dashboard does, and more:
 1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending trends by month/vendor/category
 2. Materials: add/use/set inventory, check stock levels, identify low-stock items, calculate quantities needed
 3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues: log new issues, acknowledge issues, resolve/close issues, list all open/acknowledged issues
-5. Tasks: create tasks and milestones, mark as complete, list pending tasks
+4. Issues: log new issues, acknowledge issues, resolve/close issues, update severity/description of existing issues, delete issues, list all open/acknowledged issues
+5. Tasks: create tasks and milestones, update/complete/edit tasks, delete tasks, list pending tasks
 6. Projects: create new projects, update budget/name/description/status, archive/complete projects, switch between projects
 7. Profile: update your name, WhatsApp number, or language preference
 8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, material usage rates
@@ -2972,6 +3063,10 @@ You can do EVERYTHING the dashboard does, and more:
 {"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
 {"tool":"create_task","params":{"title":"...","status":"pending|completed"}}
+{"tool":"update_task","params":{"title_keyword":"part of task title","status":"pending|in_progress|completed","new_title":"optional new title"}}
+{"tool":"delete_task","params":{"title_keyword":"part of task title"}}
+{"tool":"update_issue","params":{"title_keyword":"part of issue title","severity":"low|medium|high|critical","description":"optional updated description"}}
+{"tool":"delete_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
 
 ━━━ DECISION GUIDE ━━━
@@ -2983,6 +3078,10 @@ You can do EVERYTHING the dashboard does, and more:
 • "create a new project / start a new project" → call create_project
 • "acknowledge the X issue" → call acknowledge_issue
 • "edit/correct the X expense" → call edit_expense; "delete/remove the X expense" → call delete_expense
+• "mark task X as done / complete task X" → call update_task with status=completed
+• "delete task X" → call delete_task
+• "change severity of X issue / update the X issue" → call update_issue
+• "delete issue X / remove issue X" → call delete_issue
 • "mark project as done/completed/on hold" → call update_project with the correct status
 • General construction question → answer from your expertise as a construction professional
 
@@ -3101,6 +3200,18 @@ You can do EVERYTHING the dashboard does, and more:
       break;
     case 'create_task':
       result = await toolCreateTask(projectId, toolCall.params);
+      break;
+    case 'update_task':
+      result = await toolUpdateTask(projectId, toolCall.params);
+      break;
+    case 'delete_task':
+      result = await toolDeleteTask(projectId, toolCall.params);
+      break;
+    case 'update_issue':
+      result = await toolUpdateIssue(projectId, toolCall.params);
+      break;
+    case 'delete_issue':
+      result = await toolDeleteIssue(projectId, toolCall.params);
       break;
     case 'switch_project':
       result = await toolSwitchProject(userId, toolCall.params, allProjects);
@@ -3390,6 +3501,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Handle photo caption reply (after photo saved, before intent routing)
     if (expenseState === 'awaiting_photo_caption' && pendingData.photo_url) {
+      // If the message looks like a real action/intent rather than a caption, escape to the agent
+      const looksLikeIntent =
+        /\d/.test(rawMessage) &&
+        /log|paid|bought|spent|expense|worker|cement|sand|gravel|steel|iron|update|switch|task|issue|progress|budget|record|create|delete|edit/i.test(rawMessage);
+      if (looksLikeIntent) {
+        await updateExpenseState(userId, null, {});
+        // Fall through to agent (STEP 9) below
+      } else {
       const caption = rawMessage.trim();
       const today = new Date().toISOString().split('T')[0];
 
@@ -3433,6 +3552,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ));
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
+      } // end else (not looksLikeIntent)
     }
 
     // Handle reply to "Which project?" menu (BEFORE intent classification)
@@ -3476,11 +3596,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
-        const projectList = options.map((p: any, i: number) => `${i + 1}. ${p.name}`).join('\n');
-        await sendMessage(From, await ai(
-          `Ask the user to reply with a number. List: ${projectList}`,
-          `Please reply with a number:\n\n${projectList}`
-        ));
+        // No number/name match — auto-select the first project so the user isn't stuck,
+        // then run the agent with their original message.
+        const defaultProject = options[0];
+        if (defaultProject) {
+          await supabase.from('profiles').update({
+            active_project_id: defaultProject.id,
+            active_project_set_at: new Date().toISOString(),
+            expense_state: null,
+            expense_pending_data: {},
+          }).eq('id', userId);
+          const agentReply = await runAgent(userId, defaultProject.id, rawMessage, profile, options || []);
+          await sendMessage(From, `📌 Active project set to *${defaultProject.name}*.\n\n${agentReply}`);
+        } else {
+          await sendProjectSelectionMenu(From, userId, options);
+        }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -3727,13 +3857,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         /^[123]$/.test(rawMessage.trim()) ||
         /^(yes|ok|no|log it|confirm|edit|cancel|save)$/i.test(rawMessage.trim());
 
-      const newIntent = preClassifyIntent(rawMessage);
-      const looksLikeNewIntent = newIntent !== null && newIntent.intent !== 'GREETING';
-
-      if (!isConfirmationResponse && looksLikeNewIntent) {
-        console.log('[AutoClear] Stale confirmation cleared, processing new intent');
+      if (!isConfirmationResponse) {
+        // Any non-confirmation message clears stale state and goes straight to the agent
+        console.log('[AutoClear] Non-confirmation message, clearing state and routing to agent');
         await updateExpenseState(userId, null, {});
-        // Fall through to intent routing below
+        // Fall through to STEP 9 (runAgent) below
       } else {
       // CRITICAL: Do not process expense confirmation during onboarding
       if (!profile.onboarding_completed_at) {
