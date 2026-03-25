@@ -2140,74 +2140,100 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     }
   }
 
-  // ── Date ranges for period spend questions (calendar weeks Mon–Sun; calendar months) ──
+  // ── Period spend: compute ranges in code, query + reply without AI (avoids date reasoning errors) ──
   const today = new Date();
-  const todayDay = today.getDay(); // 0 = Sunday, 1 = Monday …
+  const todayStr = today.toISOString().split('T')[0];
 
-  // Current week: Monday–Sunday (this calendar week)
-  const daysFromMonday = todayDay === 0 ? 6 : todayDay - 1;
-  const thisWeekMonday = new Date(today);
-  thisWeekMonday.setDate(today.getDate() - daysFromMonday);
-  thisWeekMonday.setHours(0, 0, 0, 0);
-  const thisWeekSunday = new Date(thisWeekMonday);
-  thisWeekSunday.setDate(thisWeekMonday.getDate() + 6);
-  thisWeekSunday.setHours(23, 59, 59, 999);
+  const last7Start = new Date(today);
+  last7Start.setDate(today.getDate() - 7);
+  const last7StartStr = last7Start.toISOString().split('T')[0];
 
-  // Last week: Monday–Sunday of the previous calendar week
-  const lastMonday = new Date(thisWeekMonday);
-  lastMonday.setDate(thisWeekMonday.getDate() - 7);
-  lastMonday.setHours(0, 0, 0, 0);
-  const lastSunday = new Date(lastMonday);
-  lastSunday.setDate(lastMonday.getDate() + 6);
-  lastSunday.setHours(23, 59, 59, 999);
+  const dayOfWeek = today.getDay();
+  const lastMondayCal = new Date(today);
+  lastMondayCal.setDate(today.getDate() - dayOfWeek - 6);
+  const lastSundayCal = new Date(lastMondayCal);
+  lastSundayCal.setDate(lastMondayCal.getDate() + 6);
+  const lastWeekStartStr = lastMondayCal.toISOString().split('T')[0];
+  const lastWeekEndStr = lastSundayCal.toISOString().split('T')[0];
+
+  const thisMondayCal = new Date(today);
+  thisMondayCal.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const thisWeekStartStr = thisMondayCal.toISOString().split('T')[0];
+
+  const thisMonthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+
+  const lastMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const lastMonthStart = lastMonthDate.toISOString().split('T')[0];
+  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0).toISOString().split('T')[0];
+
+  const q = question.toLowerCase();
+  let periodStart: string | null = null;
+  let periodEnd: string = todayStr;
+  let periodLabel = '';
+
+  if (/last 7 days|past 7 days|7 days|past week/i.test(q)) {
+    periodStart = last7StartStr;
+    periodEnd = todayStr;
+    periodLabel = 'the last 7 days';
+  } else if (/last week|previous week/i.test(q)) {
+    periodStart = lastWeekStartStr;
+    periodEnd = lastWeekEndStr;
+    periodLabel = `last week (${lastWeekStartStr} to ${lastWeekEndStr})`;
+  } else if (/this week|current week/i.test(q)) {
+    periodStart = thisWeekStartStr;
+    periodEnd = todayStr;
+    periodLabel = 'this week';
+  } else if (/this month|current month/i.test(q)) {
+    periodStart = thisMonthStart;
+    periodEnd = todayStr;
+    periodLabel = 'this month';
+  } else if (/last month|previous month/i.test(q)) {
+    periodStart = lastMonthStart;
+    periodEnd = lastMonthEnd;
+    periodLabel = 'last month';
+  }
+
+  if (periodStart) {
+    const { data: periodExpenses } = await supabase
+      .from('expenses')
+      .select('description, amount, expense_date')
+      .eq('project_id', projectId)
+      .gte('expense_date', periodStart)
+      .lte('expense_date', periodEnd)
+      .order('expense_date', { ascending: false });
+
+    const periodTotal = (periodExpenses || []).reduce((s, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+
+    if (!periodExpenses || periodExpenses.length === 0) {
+      await sendMessage(from, `No expenses recorded for ${periodLabel}.`);
+      return;
+    }
+
+    const byDate: Record<string, number> = {};
+    for (const e of periodExpenses) {
+      const d = e.expense_date || 'Unknown';
+      byDate[d] = (byDate[d] || 0) + parseFloat(String(e.amount || 0));
+    }
+
+    const breakdownLines = Object.entries(byDate)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([date, amt]) => {
+        const formatted = new Date(date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
+        return `- ${formatted}: UGX ${fmt(amt)}`;
+      })
+      .join('\n');
+
+    const reply =
+      `Spending for ${periodLabel}:\n\n` +
+      `Total: UGX ${fmt(periodTotal)}\n\n` +
+      `Breakdown by date:\n${breakdownLines}`;
+
+    await sendMessage(from, reply);
+    return;
+  }
 
   const pad2 = (n: number) => String(n).padStart(2, '0');
   const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-
-  const lastWeekStart = toYMD(lastMonday);
-  const lastWeekEnd = toYMD(lastSunday);
-  const thisWeekStart = toYMD(thisWeekMonday);
-  const thisWeekEnd = toYMD(thisWeekSunday);
-
-  const y = today.getFullYear();
-  const m = today.getMonth();
-  const thisMonthStartD = new Date(y, m, 1);
-  const thisMonthEndD = new Date(y, m + 1, 0);
-  const lastMonthStartD = new Date(y, m - 1, 1);
-  const lastMonthEndD = new Date(y, m, 0);
-
-  const thisMonthStart = toYMD(thisMonthStartD);
-  const thisMonthEnd = toYMD(thisMonthEndD);
-  const lastMonthStart = toYMD(lastMonthStartD);
-  const lastMonthEnd = toYMD(lastMonthEndD);
-
-  const isLastWeekQuery = /last week|past week|previous week/i.test(question);
-  const isThisWeekQuery = /this week|current week/i.test(question);
-  const isLastMonthQuery = /last month|past month|previous month/i.test(question);
-  const isThisMonthQuery = /this month|current month/i.test(question);
-
-  let expenseRangeStart: string | null = null;
-  let expenseRangeEnd: string | null = null;
-  let queryPeriodLabel = '';
-
-  if (isLastWeekQuery) {
-    expenseRangeStart = lastWeekStart;
-    expenseRangeEnd = lastWeekEnd;
-    queryPeriodLabel = `last week (${lastWeekStart} to ${lastWeekEnd}, Monday–Sunday)`;
-  } else if (isThisWeekQuery) {
-    expenseRangeStart = thisWeekStart;
-    expenseRangeEnd = thisWeekEnd;
-    queryPeriodLabel = `this week (${thisWeekStart} to ${thisWeekEnd}, Monday–Sunday)`;
-  } else if (isLastMonthQuery) {
-    expenseRangeStart = lastMonthStart;
-    expenseRangeEnd = lastMonthEnd;
-    queryPeriodLabel = `last month (${lastMonthStart} to ${lastMonthEnd})`;
-  } else if (isThisMonthQuery) {
-    expenseRangeStart = thisMonthStart;
-    expenseRangeEnd = thisMonthEnd;
-    queryPeriodLabel = `this month (${thisMonthStart} to ${thisMonthEnd})`;
-  }
-
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
   const fromDate = toYMD(twoYearsAgo);
@@ -2218,33 +2244,21 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     .eq('id', projectId)
     .single();
 
-  let expensesQuery = supabase
+  const { data: expenses } = await supabase
     .from('expenses')
     .select('description, amount, expense_date, created_at')
-    .eq('project_id', projectId);
-  if (expenseRangeStart && expenseRangeEnd) {
-    expensesQuery = expensesQuery.gte('expense_date', expenseRangeStart).lte('expense_date', expenseRangeEnd);
-  } else {
-    expensesQuery = expensesQuery.gte('expense_date', fromDate);
-  }
-  const { data: expenses } = await expensesQuery
+    .eq('project_id', projectId)
+    .gte('expense_date', fromDate)
     .order('expense_date', { ascending: false })
     .limit(500);
 
-  let dailyLogsQuery = supabase
+  const { data: dailyLogs } = await supabase
     .from('daily_logs')
     .select('log_date, worker_count, notes')
-    .eq('project_id', projectId);
-  if (expenseRangeStart && expenseRangeEnd) {
-    dailyLogsQuery = dailyLogsQuery.gte('log_date', expenseRangeStart).lte('log_date', expenseRangeEnd);
-  } else {
-    dailyLogsQuery = dailyLogsQuery.gte('log_date', fromDate);
-  }
-  const { data: dailyLogs } = await dailyLogsQuery
+    .eq('project_id', projectId)
+    .gte('log_date', fromDate)
     .order('log_date', { ascending: false })
     .limit(500);
-
-  const filteredTotal = (expenses || []).reduce((sum, e: any) => sum + parseFloat(String(e.amount || 0)), 0);
 
   const { data: materials } = await supabase
     .from('materials_inventory')
@@ -2287,18 +2301,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       lastUpdated: m.updated_at || m.last_updated,
     })),
   };
-  if (expenseRangeStart && expenseRangeEnd) {
-    dataContext.precomputedTotal = filteredTotal;
-    dataContext.dateRangeStart = expenseRangeStart;
-    dataContext.dateRangeEnd = expenseRangeEnd;
-    dataContext.queryPeriodLabel = queryPeriodLabel;
-  }
-
-  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using the provided project data where relevant. If the question is about general construction knowledge, techniques, materials, or best practices, answer from your own expertise as a construction professional. Only say you cannot find information if the question requires specific project data (like exact amounts or dates) that is not in the provided data. Use UGX for all amounts. Be concise and friendly (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).
-
-When the JSON includes precomputedTotal, dateRangeStart, and dateRangeEnd: the precomputedTotal field is the exact correct total already calculated in code for expenses within that date range (inclusive). ALWAYS use precomputedTotal as the total for that period — never re-add the expense line amounts yourself as you will get it wrong. Report precomputedTotal as the total and you may briefly summarize individual expenses if helpful.
-
-CRITICAL: Plain text only. No markdown. No asterisks (*), no bold (**text**), no bullet points using *, no numbered lists with periods. Use plain dashes (-) for lists if needed. WhatsApp does not render markdown — asterisks will show as literal characters.`;
+  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using the provided project data where relevant. If the question is about general construction knowledge, techniques, materials, or best practices, answer from your own expertise as a construction professional. Only say you cannot find information if the question requires specific project data (like exact amounts or dates) that is not in the provided data. Use UGX for all amounts. Be concise and friendly. Plain text only. No markdown. No asterisks, no bold (**), no bullet symbols (*). Use dashes (-) for lists. WhatsApp shows asterisks as raw characters. (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
