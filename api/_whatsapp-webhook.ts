@@ -2429,6 +2429,146 @@ function parseToolCall(text: string): { tool: string; params: any } | null {
   return null;
 }
 
+// ─── Tool: update_profile ─────────────────────────────────────────────────────
+async function toolUpdateProfile(userId: string, params: any): Promise<AgentToolResult> {
+  const { full_name, whatsapp_number, preferred_language } = params;
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (full_name) updates.full_name = String(full_name).trim();
+  if (whatsapp_number) {
+    const cleaned = String(whatsapp_number).replace(/\s/g, '').trim();
+    if (!/^\+\d{7,15}$/.test(cleaned)) {
+      return { success: false, reply: 'Please use a valid international format for your number, e.g. +256701234567.' };
+    }
+    updates.whatsapp_number = cleaned;
+  }
+  if (preferred_language) {
+    const lang = String(preferred_language).toLowerCase().trim();
+    if (!['en', 'lg', 'sw'].includes(lang)) {
+      return { success: false, reply: 'Supported languages are: en (English), lg (Luganda), sw (Swahili).' };
+    }
+    updates.preferred_language = lang;
+  }
+  if (Object.keys(updates).length === 1) {
+    return { success: false, reply: "Please tell me what to update — your name, WhatsApp number, or language preference." };
+  }
+  const { error } = await supabase.from('profiles').update(updates).eq('id', userId);
+  if (error) return { success: false, reply: 'Failed to update your profile. Please try again.' };
+  const parts: string[] = [];
+  if (updates.full_name) parts.push(`name updated to "${updates.full_name}"`);
+  if (updates.whatsapp_number) parts.push(`WhatsApp number updated to ${updates.whatsapp_number}`);
+  if (updates.preferred_language) parts.push(`language set to ${updates.preferred_language}`);
+  return { success: true, reply: `✅ Profile updated! ${parts.join(', ')}.`, data: updates };
+}
+
+// ─── Tool: create_project ─────────────────────────────────────────────────────
+async function toolCreateProject(userId: string, params: any): Promise<AgentToolResult> {
+  const { name, budget, description, location } = params;
+  if (!name || String(name).trim().length < 2) {
+    return { success: false, reply: 'Please provide a project name (at least 2 characters).' };
+  }
+  const budgetVal = budget ? parseFloat(String(budget)) : 0;
+  const desc = description || location || null;
+  const { data: newProject, error } = await supabase.from('projects').insert({
+    name: String(name).trim(),
+    description: desc,
+    budget: budgetVal > 0 ? budgetVal : null,
+    user_id: userId,
+    status: 'active',
+    currency: 'UGX',
+    channel_type: 'direct',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).select('id, name').single();
+  if (error || !newProject) return { success: false, reply: `Failed to create the project. ${error?.message || 'Please try again.'}` };
+  await supabase.from('profiles').update({
+    active_project_id: newProject.id,
+    active_project_set_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', userId);
+  return {
+    success: true,
+    reply: `✅ Project created! *${newProject.name}* is now your active project${budgetVal > 0 ? ` with a budget of UGX ${fmt(budgetVal)}` : ''}. You can start logging expenses, materials, and daily updates. View it at ${DASHBOARD_URL}/dashboard`,
+    data: { projectId: newProject.id, projectName: newProject.name },
+  };
+}
+
+// ─── Tool: acknowledge_issue ──────────────────────────────────────────────────
+async function toolAcknowledgeIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const { title_keyword } = params;
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to acknowledge (part of its title).' };
+  const { data: issues } = await supabase.from('issues').select('id, title').eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`).eq('status', 'open').limit(1);
+  if (!issues || issues.length === 0) {
+    return { success: false, reply: `No open issue found matching "${title_keyword}". It may already be acknowledged or resolved.` };
+  }
+  const issue = issues[0];
+  await supabase.from('issues').update({
+    status: 'acknowledged',
+    acknowledged_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', issue.id);
+  return { success: true, reply: `✅ Issue acknowledged: "${issue.title}". It will show as acknowledged on the Issues & Risks page.`, data: { title: issue.title } };
+}
+
+// ─── Tool: edit_expense ───────────────────────────────────────────────────────
+async function toolEditExpense(projectId: string, params: any): Promise<AgentToolResult> {
+  const { description_keyword, new_amount, new_description, date } = params;
+  if (!description_keyword) {
+    return { success: false, reply: 'Please say which expense to edit (part of the description), e.g. "edit the cement expense".' };
+  }
+  const query = supabase.from('expenses').select('id, description, amount, expense_date')
+    .eq('project_id', projectId)
+    .ilike('description', `%${description_keyword}%`)
+    .order('expense_date', { ascending: false })
+    .limit(1);
+  const { data: expenses } = await query;
+  if (!expenses || expenses.length === 0) {
+    return { success: false, reply: `No expense found matching "${description_keyword}". Check the Budgets & Costs page for the exact name.` };
+  }
+  const expense = expenses[0];
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (new_amount != null && parseFloat(String(new_amount)) > 0) updates.amount = String(parseFloat(String(new_amount)));
+  if (new_description) updates.description = String(new_description).trim();
+  if (date) updates.expense_date = date;
+  if (Object.keys(updates).length === 1) {
+    return { success: false, reply: 'Please specify the new amount, description, or date for this expense.' };
+  }
+  const { error } = await supabase.from('expenses').update(updates).eq('id', expense.id);
+  if (error) return { success: false, reply: 'Failed to update that expense. Please try again.' };
+  const oldAmt = parseFloat(String(expense.amount || 0));
+  const newAmt = updates.amount ? parseFloat(updates.amount) : oldAmt;
+  const parts: string[] = [];
+  if (updates.amount) parts.push(`amount changed from UGX ${fmt(oldAmt)} → UGX ${fmt(newAmt)}`);
+  if (updates.description) parts.push(`description updated to "${updates.description}"`);
+  if (updates.expense_date) parts.push(`date changed to ${new Date(updates.expense_date + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+  return { success: true, reply: `✅ Expense updated! "${expense.description}" — ${parts.join(', ')}. Dashboard will reflect the change.`, data: { id: expense.id } };
+}
+
+// ─── Tool: delete_expense ─────────────────────────────────────────────────────
+async function toolDeleteExpense(projectId: string, params: any): Promise<AgentToolResult> {
+  const { description_keyword } = params;
+  if (!description_keyword) {
+    return { success: false, reply: 'Please specify which expense to delete (part of the description), e.g. "delete the cement expense".' };
+  }
+  const { data: expenses } = await supabase.from('expenses').select('id, description, amount, expense_date')
+    .eq('project_id', projectId)
+    .ilike('description', `%${description_keyword}%`)
+    .order('expense_date', { ascending: false })
+    .limit(1);
+  if (!expenses || expenses.length === 0) {
+    return { success: false, reply: `No expense found matching "${description_keyword}". Check the Budgets & Costs page for the exact name.` };
+  }
+  const expense = expenses[0];
+  const amt = parseFloat(String(expense.amount || 0));
+  const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+  if (error) return { success: false, reply: 'Failed to delete that expense. Please try again.' };
+  return {
+    success: true,
+    reply: `✅ Deleted! Expense "${expense.description}" — UGX ${fmt(amt)} has been removed. Your budget and dashboard have been updated.`,
+    data: { deleted: expense.description, amount: amt },
+  };
+}
+
 async function toolUpdateProject(projectId: string, params: any): Promise<AgentToolResult> {
   const { budget, name, description, status } = params;
   const updateData: any = { updated_at: new Date().toISOString() };
@@ -2805,14 +2945,15 @@ ${contextBlock}
 
 ━━━ YOUR CAPABILITIES ━━━
 You can do EVERYTHING the dashboard does, and more:
-1. Finance: log expenses (single/multi-item/labor), update project budget, analyse spending trends by month/vendor/category
+1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending trends by month/vendor/category
 2. Materials: add/use/set inventory, check stock levels, identify low-stock items, calculate quantities needed
 3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues: log new issues, acknowledge, resolve existing ones, list all open issues
+4. Issues: log new issues, acknowledge issues, resolve/close issues, list all open/acknowledged issues
 5. Tasks: create tasks and milestones, mark as complete, list pending tasks
-6. Projects: update budget/name/description/status, switch between projects, list all projects
-7. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, material usage rates
-8. Construction knowledge: mixing ratios, quantity calculations, best practices, cost estimation formulas, structural advice
+6. Projects: create new projects, update budget/name/description/status, archive/complete projects, switch between projects
+7. Profile: update your name, WhatsApp number, or language preference
+8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, material usage rates
+9. Construction knowledge: mixing ratios, quantity calculations, best practices, cost estimation formulas, structural advice
 
 ━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
@@ -2820,19 +2961,29 @@ You can do EVERYTHING the dashboard does, and more:
 {"tool":"log_labor","params":{"worker_count":number,"amount":number,"description":"...","date":"YYYY-MM-DD"}}
 {"tool":"update_inventory","params":{"material_name":"...","action":"add|use|set","quantity":number,"unit":"..."}}
 {"tool":"log_issue","params":{"title":"...","description":"...","severity":"low|medium|high|critical"}}
+{"tool":"acknowledge_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"resolve_issue","params":{"title_keyword":"part of issue title","resolution_note":"optional"}}
+{"tool":"edit_expense","params":{"description_keyword":"part of existing expense desc","new_amount":number,"new_description":"optional","date":"YYYY-MM-DD optional"}}
+{"tool":"delete_expense","params":{"description_keyword":"part of existing expense description"}}
 {"tool":"log_progress","params":{"description":"...","worker_count":number,"date":"YYYY-MM-DD"}}
 {"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
 {"tool":"update_project","params":{"budget":number,"name":"...","description":"...","status":"active|completed|paused"}}
+{"tool":"create_project","params":{"name":"...","budget":number,"description":"optional location or notes"}}
+{"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
 {"tool":"create_task","params":{"title":"...","status":"pending|completed"}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
 
 ━━━ DECISION GUIDE ━━━
-• User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE → return the JSON tool call only
+• User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
 • User asks a QUESTION, wants analysis, or asks "show me..." → answer directly from the database above
 • "any alerts / issues / problems?" → list from issues.open above as plain text. NEVER call log_issue.
 • "switch to X / work on X project" → call switch_project immediately
+• "update my name / change my number / change language" → call update_profile
+• "create a new project / start a new project" → call create_project
+• "acknowledge the X issue" → call acknowledge_issue
+• "edit/correct the X expense" → call edit_expense; "delete/remove the X expense" → call delete_expense
+• "mark project as done/completed/on hold" → call update_project with the correct status
 • General construction question → answer from your expertise as a construction professional
 
 ━━━ CRITICAL RULES ━━━
@@ -2918,8 +3069,17 @@ You can do EVERYTHING the dashboard does, and more:
     case 'log_issue':
       result = await toolLogIssue(projectId, toolCall.params);
       break;
+    case 'acknowledge_issue':
+      result = await toolAcknowledgeIssue(projectId, toolCall.params);
+      break;
     case 'resolve_issue':
       result = await toolResolveIssue(projectId, toolCall.params);
+      break;
+    case 'edit_expense':
+      result = await toolEditExpense(projectId, toolCall.params);
+      break;
+    case 'delete_expense':
+      result = await toolDeleteExpense(projectId, toolCall.params);
       break;
     case 'log_progress':
       result = await toolLogProgress(projectId, toolCall.params);
@@ -2929,6 +3089,12 @@ You can do EVERYTHING the dashboard does, and more:
       break;
     case 'update_project':
       result = await toolUpdateProject(projectId, toolCall.params);
+      break;
+    case 'create_project':
+      result = await toolCreateProject(userId, toolCall.params);
+      break;
+    case 'update_profile':
+      result = await toolUpdateProfile(userId, toolCall.params);
       break;
     case 'log_weather_delay':
       result = await toolLogWeatherDelay(projectId, toolCall.params);
