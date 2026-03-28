@@ -2078,34 +2078,10 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
           return t > latest ? t : latest;
         }, 0)
       : null;
-
-    // Fetch material transactions to log per day
-    const { data: txRows } = await supabase
-      .from('material_transactions')
-      .select('id, material_id, transaction_type, quantity, unit_cost, total_cost, description, source, created_at, materials_inventory(name, unit)')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-
-    const transactions = (txRows || []).map((t: any) => ({
-      id: t.id,
-      material_id: t.material_id,
-      material_name: t.materials_inventory?.name || 'Unknown',
-      unit: t.materials_inventory?.unit || 'units',
-      transaction_type: t.transaction_type,
-      quantity: parseFloat(String(t.quantity || 0)),
-      unit_cost: t.unit_cost ? parseFloat(String(t.unit_cost)) : 0,
-      total_cost: t.total_cost ? parseFloat(String(t.total_cost)) : 0,
-      description: t.description || '',
-      source: t.source || 'manual',
-      created_at: t.created_at,
-      date: t.created_at ? t.created_at.substring(0, 10) : new Date().toISOString().substring(0, 10),
-    }));
-
     res.json({
       success: true,
       inventory,
       lowStock,
-      transactions,
       usage: [],
       summary: {
         totalItems: inventory.length,
@@ -2116,6 +2092,309 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
   } catch (error) {
     console.error('[Project Materials] Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch materials' });
+  }
+});
+
+function utcDateKeyFromMs(ms: number): string {
+  return new Date(ms).toISOString().split('T')[0];
+}
+
+/**
+ * GET /api/projects/:projectId/materials/daily
+ * Query: date=YYYY-MM-DD (optional). Without date: heatmap (60d) + stats. With date: entries for that day.
+ */
+router.get('/projects/:projectId/materials/daily', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const dateParam = req.query.date as string | undefined;
+    const dateStr = dateParam ? String(dateParam).substring(0, 10) : null;
+
+    if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const dayStart = new Date(`${dateStr}T00:00:00.000Z`);
+      const dayEnd = new Date(`${dateStr}T23:59:59.999Z`);
+      const rows = await db
+        .select({
+          id: materialTransactions.id,
+          quantity: materialTransactions.quantity,
+          transactionType: materialTransactions.transactionType,
+          description: materialTransactions.description,
+          source: materialTransactions.source,
+          createdAt: materialTransactions.createdAt,
+          materialName: materialsInventory.name,
+          unit: materialsInventory.unit,
+        })
+        .from(materialTransactions)
+        .innerJoin(materialsInventory, eq(materialTransactions.materialId, materialsInventory.id))
+        .where(
+          and(
+            eq(materialTransactions.projectId, projectId),
+            gte(materialTransactions.createdAt, dayStart),
+            lte(materialTransactions.createdAt, dayEnd),
+          ),
+        )
+        .orderBy(desc(materialTransactions.createdAt));
+      const entries = rows.map((r) => ({
+        id: r.id,
+        material_name: r.materialName,
+        unit: r.unit || 'units',
+        quantity: parseFloat(String(r.quantity || 0)),
+        transaction_type: r.transactionType,
+        description: r.description,
+        source: r.source,
+        created_at: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      }));
+      return res.json({ success: true, date: dateStr, entries });
+    }
+
+    const last60: string[] = [];
+    for (let i = 59; i >= 0; i--) {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - i);
+      last60.push(d.toISOString().split('T')[0]);
+    }
+
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setUTCDate(sixtyDaysAgo.getUTCDate() - 59);
+    sixtyDaysAgo.setUTCHours(0, 0, 0, 0);
+
+    const txRows = await db
+      .select({ createdAt: materialTransactions.createdAt })
+      .from(materialTransactions)
+      .where(
+        and(
+          eq(materialTransactions.projectId, projectId),
+          gte(materialTransactions.createdAt, sixtyDaysAgo),
+        ),
+      );
+
+    const countByDate: Record<string, number> = {};
+    for (const t of txRows) {
+      if (!t.createdAt) continue;
+      const k = utcDateKeyFromMs(new Date(t.createdAt).getTime());
+      countByDate[k] = (countByDate[k] || 0) + 1;
+    }
+
+    const heatmap = last60.map((date) => ({
+      date,
+      active: (countByDate[date] || 0) > 0,
+      entryCount: countByDate[date] || 0,
+    }));
+
+    let totalDaysWithMaterials = 0;
+    try {
+      const [row] = await db
+        .select({
+          c: sql<number>`cast(count(distinct ((${materialTransactions.createdAt} at time zone 'utc')::date)) as int)`,
+        })
+        .from(materialTransactions)
+        .where(eq(materialTransactions.projectId, projectId));
+      totalDaysWithMaterials = row?.c ?? 0;
+    } catch {
+      totalDaysWithMaterials = Object.keys(countByDate).length;
+    }
+
+    const streakSince = new Date();
+    streakSince.setUTCDate(streakSince.getUTCDate() - 400);
+    const streakRows = await db
+      .select({ createdAt: materialTransactions.createdAt })
+      .from(materialTransactions)
+      .where(
+        and(
+          eq(materialTransactions.projectId, projectId),
+          gte(materialTransactions.createdAt, streakSince),
+        ),
+      );
+    const dateSet = new Set<string>();
+    for (const t of streakRows) {
+      if (t.createdAt) dateSet.add(utcDateKeyFromMs(new Date(t.createdAt).getTime()));
+    }
+    let currentStreak = 0;
+    for (let i = 0; i < 366; i++) {
+      const expected = new Date();
+      expected.setUTCDate(expected.getUTCDate() - i);
+      const expectedStr = expected.toISOString().split('T')[0];
+      if (dateSet.has(expectedStr)) currentStreak++;
+      else break;
+    }
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayCount = countByDate[todayStr] || 0;
+
+    res.json({
+      success: true,
+      heatmap,
+      stats: {
+        totalDaysWithMaterials,
+        currentStreak,
+        todayLogged: todayCount > 0,
+        todayEntryCount: todayCount,
+      },
+    });
+  } catch (error) {
+    console.error('[Materials daily GET]', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch material daily data' });
+  }
+});
+
+/**
+ * POST /api/projects/:projectId/materials/daily
+ * Body: { log_date?: YYYY-MM-DD, entries: [{ name, quantity, unit?, transaction_type: 'purchase'|'usage' }] }
+ */
+router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.params.projectId;
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const { log_date, entries } = req.body || {};
+    const logDate = String(log_date || new Date().toISOString().split('T')[0]).substring(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate)) {
+      return res.status(400).json({ success: false, error: 'Invalid log_date' });
+    }
+    const createdAtIso = new Date(`${logDate}T12:00:00.000Z`).toISOString();
+    const list = Array.isArray(entries) ? entries : [];
+    if (list.length === 0) {
+      return res.status(400).json({ success: false, error: 'Add at least one material line' });
+    }
+
+    const now = new Date().toISOString();
+    let saved = 0;
+
+    for (const raw of list) {
+      const e = raw as Record<string, unknown>;
+      const nameRaw = String(e.name || '').trim();
+      const materialName = nameRaw.toLowerCase();
+      const qty = parseFloat(String(e.quantity ?? '').replace(/,/g, ''));
+      if (!materialName || !Number.isFinite(qty) || qty <= 0) continue;
+      const unit = String(e.unit || 'units').trim() || 'units';
+      const t = String(e.transaction_type || 'purchase').toLowerCase();
+      const transactionType = t === 'usage' ? 'usage' : 'purchase';
+
+      if (transactionType === 'purchase') {
+        const { data: existing } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity, unit_cost, total_cost')
+          .eq('project_id', projectId)
+          .eq('name', materialName)
+          .maybeSingle();
+
+        let materialId: string | undefined;
+        if (existing) {
+          const newQty = parseFloat(String(existing.quantity || 0)) + qty;
+          const uc = parseFloat(String(existing.unit_cost || 0));
+          const newTotalCost = parseFloat(String(existing.total_cost || 0)) + qty * uc;
+          await supabase
+            .from('materials_inventory')
+            .update({
+              quantity: newQty,
+              total_cost: newTotalCost,
+              last_purchased_at: createdAtIso,
+              updated_at: now,
+              user_id: userId,
+            })
+            .eq('id', existing.id);
+          materialId = existing.id;
+          await supabase.from('material_transactions').insert({
+            material_id: materialId,
+            project_id: projectId,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity: qty,
+            unit_cost: uc,
+            total_cost: qty * uc,
+            description: `Received ${qty} ${unit} of ${nameRaw}`,
+            source: 'dashboard',
+            created_at: createdAtIso,
+          });
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from('materials_inventory')
+            .insert({
+              project_id: projectId,
+              user_id: userId,
+              name: materialName,
+              quantity: qty,
+              unit,
+              unit_cost: 0,
+              total_cost: 0,
+              source: 'dashboard',
+              last_purchased_at: createdAtIso,
+              updated_at: now,
+            })
+            .select('id')
+            .single();
+          if (insErr || !inserted?.id) continue;
+          materialId = inserted.id;
+          await supabase.from('material_transactions').insert({
+            material_id: materialId,
+            project_id: projectId,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity: qty,
+            unit_cost: 0,
+            total_cost: 0,
+            description: `Received ${qty} ${unit} of ${nameRaw}`,
+            source: 'dashboard',
+            created_at: createdAtIso,
+          });
+        }
+        saved++;
+      } else {
+        const { data: existing } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity, unit, low_stock_threshold')
+          .eq('project_id', projectId)
+          .ilike('name', materialName)
+          .maybeSingle();
+        if (!existing) {
+          return res.status(400).json({
+            success: false,
+            error: `No inventory match for "${nameRaw}". Log a purchase first or check spelling.`,
+          });
+        }
+        const usedQty = qty;
+        const currentQty = parseFloat(String(existing.quantity || 0));
+        const newQty = Math.max(0, currentQty - usedQty);
+        await supabase
+          .from('materials_inventory')
+          .update({
+            quantity: newQty,
+            last_used_at: createdAtIso,
+            updated_at: now,
+            user_id: userId,
+          })
+          .eq('id', existing.id);
+        await supabase.from('material_transactions').insert({
+          material_id: existing.id,
+          project_id: projectId,
+          user_id: userId,
+          transaction_type: 'usage',
+          quantity: -usedQty,
+          unit_cost: 0,
+          total_cost: 0,
+          description: `Used ${usedQty} ${unit} of ${nameRaw}`,
+          source: 'dashboard',
+          created_at: createdAtIso,
+        });
+        saved++;
+      }
+    }
+
+    if (saved === 0) {
+      return res.status(400).json({ success: false, error: 'No valid entries to save' });
+    }
+    res.status(201).json({ success: true, saved, log_date: logDate });
+  } catch (error) {
+    console.error('[Materials daily POST]', error);
+    res.status(500).json({ success: false, error: 'Failed to save material log' });
   }
 });
 

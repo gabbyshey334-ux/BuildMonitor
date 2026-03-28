@@ -195,20 +195,6 @@ export interface ProjectMaterialsResponse {
   }>;
   lowStock: Array<{ name: string; quantity: number; unit: string; low_stock_threshold?: number }>;
   usage: Array<{ name: string; used: number; received: number }>;
-  transactions?: Array<{
-    id: string;
-    material_id: string;
-    material_name: string;
-    unit: string;
-    transaction_type: string;
-    quantity: number;
-    unit_cost: number;
-    total_cost: number;
-    description: string;
-    source: string;
-    created_at: string;
-    date: string;
-  }>;
   summary: {
     totalItems: number;
     lowStockCount: number;
@@ -231,6 +217,60 @@ export function useProjectMaterials(projectId: string | null | undefined) {
     staleTime: 30000,
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
+  });
+}
+
+export interface MaterialsDailySummaryResponse {
+  success: boolean;
+  heatmap: Array<{ date: string; active: boolean; entryCount: number }>;
+  stats: {
+    totalDaysWithMaterials: number;
+    currentStreak: number;
+    todayLogged: boolean;
+    todayEntryCount: number;
+  };
+}
+
+export interface MaterialsDailyDateResponse {
+  success: boolean;
+  date: string;
+  entries: Array<{
+    id: string;
+    material_name: string;
+    unit: string;
+    quantity: number;
+    transaction_type: string;
+    description: string | null;
+    source: string | null;
+    created_at: string | null;
+  }>;
+}
+
+export function useMaterialsDailySummary(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["materials-daily-summary", projectId],
+    queryFn: async (): Promise<MaterialsDailySummaryResponse> => {
+      const res = await apiRequest("GET", `/api/projects/${projectId}/materials/daily`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to load materials calendar");
+      return data as MaterialsDailySummaryResponse;
+    },
+    enabled: !!projectId,
+    staleTime: 15000,
+  });
+}
+
+export function useMaterialsForDate(projectId: string | null | undefined, date: string | null) {
+  return useQuery({
+    queryKey: ["materials-daily-date", projectId, date],
+    queryFn: async (): Promise<MaterialsDailyDateResponse> => {
+      const res = await apiRequest("GET", `/api/projects/${projectId}/materials/daily?date=${date}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Failed to load day");
+      return data as MaterialsDailyDateResponse;
+    },
+    enabled: !!projectId && !!date,
+    staleTime: 10000,
   });
 }
 
