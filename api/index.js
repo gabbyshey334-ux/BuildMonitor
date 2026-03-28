@@ -1369,6 +1369,338 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
   });
 });
 
+function utcDateKeyFromIso(iso) {
+  if (!iso) return '';
+  return new Date(iso).toISOString().split('T')[0];
+}
+
+// GET /api/projects/:projectId/materials/daily — Vercel: same as Express (materials calendar + by-date entries)
+app.get('/api/projects/:projectId/materials/daily', (req, res, next) => {
+  requireAuth(req, res, async () => {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL;
+      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !supabaseServiceKey) {
+        return res.status(500).json({ success: false, error: 'Server not configured' });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+      const { data: projectRow, error: projectError } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('id', projectId)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (projectError || !projectRow) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+
+      const dateParam = req.query.date;
+      const dateStr = dateParam ? String(dateParam).substring(0, 10) : null;
+
+      if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const dayStart = `${dateStr}T00:00:00.000Z`;
+        const dayEnd = `${dateStr}T23:59:59.999Z`;
+        const { data: txs, error: txErr } = await supabase
+          .from('material_transactions')
+          .select('id, material_id, quantity, transaction_type, description, source, created_at')
+          .eq('project_id', projectId)
+          .gte('created_at', dayStart)
+          .lte('created_at', dayEnd)
+          .order('created_at', { ascending: false });
+        if (txErr) {
+          console.error('[materials/daily GET date]', txErr.message);
+          if (txErr.code === '42P01' || /material_transactions/i.test(txErr.message)) {
+            return res.json({ success: true, date: dateStr, entries: [] });
+          }
+          return res.status(500).json({ success: false, error: txErr.message || 'Failed to load day' });
+        }
+        const ids = [...new Set((txs || []).map((t) => t.material_id).filter(Boolean))];
+        let nameById = {};
+        if (ids.length > 0) {
+          const { data: inv } = await supabase.from('materials_inventory').select('id, name, unit').in('id', ids);
+          (inv || []).forEach((r) => {
+            nameById[r.id] = r;
+          });
+        }
+        const entries = (txs || []).map((t) => {
+          const inv = nameById[t.material_id];
+          return {
+            id: t.id,
+            material_name: inv?.name || 'Unknown',
+            unit: inv?.unit || 'units',
+            quantity: parseFloat(String(t.quantity || 0)),
+            transaction_type: t.transaction_type,
+            description: t.description,
+            source: t.source,
+            created_at: t.created_at,
+          };
+        });
+        return res.json({ success: true, date: dateStr, entries });
+      }
+
+      const last60 = [];
+      for (let i = 59; i >= 0; i--) {
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - i);
+        last60.push(d.toISOString().split('T')[0]);
+      }
+      const sixtyDaysAgo = new Date();
+      sixtyDaysAgo.setUTCDate(sixtyDaysAgo.getUTCDate() - 59);
+      sixtyDaysAgo.setUTCHours(0, 0, 0, 0);
+
+      const { data: txRows, error: heatErr } = await supabase
+        .from('material_transactions')
+        .select('created_at')
+        .eq('project_id', projectId)
+        .gte('created_at', sixtyDaysAgo.toISOString());
+      if (heatErr) {
+        console.error('[materials/daily GET heatmap]', heatErr.message);
+        if (heatErr.code === '42P01' || /material_transactions/i.test(heatErr.message)) {
+          const heatmap = last60.map((date) => ({ date, active: false, entryCount: 0 }));
+          return res.json({
+            success: true,
+            heatmap,
+            stats: {
+              totalDaysWithMaterials: 0,
+              currentStreak: 0,
+              todayLogged: false,
+              todayEntryCount: 0,
+            },
+          });
+        }
+        return res.status(500).json({ success: false, error: heatErr.message || 'Failed to load materials calendar' });
+      }
+
+      const countByDate = {};
+      for (const t of txRows || []) {
+        if (!t.created_at) continue;
+        const k = utcDateKeyFromIso(t.created_at);
+        countByDate[k] = (countByDate[k] || 0) + 1;
+      }
+      const heatmap = last60.map((date) => ({
+        date,
+        active: (countByDate[date] || 0) > 0,
+        entryCount: countByDate[date] || 0,
+      }));
+
+      const since400 = new Date();
+      since400.setUTCDate(since400.getUTCDate() - 400);
+      const { data: streakTx } = await supabase
+        .from('material_transactions')
+        .select('created_at')
+        .eq('project_id', projectId)
+        .gte('created_at', since400.toISOString());
+      const dateSet = new Set();
+      for (const t of streakTx || []) {
+        if (t.created_at) dateSet.add(utcDateKeyFromIso(t.created_at));
+      }
+      let currentStreak = 0;
+      for (let i = 0; i < 366; i++) {
+        const expected = new Date();
+        expected.setUTCDate(expected.getUTCDate() - i);
+        const expectedStr = expected.toISOString().split('T')[0];
+        if (dateSet.has(expectedStr)) currentStreak++;
+        else break;
+      }
+
+      const { data: allForCount } = await supabase
+        .from('material_transactions')
+        .select('created_at')
+        .eq('project_id', projectId)
+        .limit(8000);
+      const allDates = new Set();
+      for (const t of allForCount || []) {
+        if (t.created_at) allDates.add(utcDateKeyFromIso(t.created_at));
+      }
+      const totalDaysWithMaterials = allDates.size;
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayCount = countByDate[todayStr] || 0;
+
+      return res.json({
+        success: true,
+        heatmap,
+        stats: {
+          totalDaysWithMaterials,
+          currentStreak,
+          todayLogged: todayCount > 0,
+          todayEntryCount: todayCount,
+        },
+      });
+    } catch (err) {
+      console.error('[materials/daily GET]', err?.message, err?.stack);
+      return res.status(500).json({ success: false, error: err?.message || 'Failed to load materials calendar' });
+    }
+  });
+});
+
+// POST /api/projects/:projectId/materials/daily — Vercel (log_date + entries[])
+app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+
+    const { log_date, entries } = req.body || {};
+    const logDate = String(log_date || new Date().toISOString().split('T')[0]).substring(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate)) {
+      return res.status(400).json({ success: false, error: 'Invalid log_date' });
+    }
+    const createdAtIso = new Date(`${logDate}T12:00:00.000Z`).toISOString();
+    const list = Array.isArray(entries) ? entries : [];
+    if (list.length === 0) {
+      return res.status(400).json({ success: false, error: 'Add at least one material line' });
+    }
+
+    const now = new Date().toISOString();
+    let saved = 0;
+
+    for (const raw of list) {
+      const nameRaw = typeof raw.name === 'string' ? raw.name.trim() : '';
+      const materialName = nameRaw.toLowerCase();
+      const qty = parseFloat(String(raw.quantity ?? '').replace(/,/g, ''));
+      if (!materialName || !Number.isFinite(qty) || qty <= 0) continue;
+      const unit = String(raw.unit || 'units').trim() || 'units';
+      const t = String(raw.transaction_type || 'purchase').toLowerCase();
+      const transactionType = t === 'usage' ? 'usage' : 'purchase';
+
+      if (transactionType === 'purchase') {
+        const { data: existing } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity, unit_cost, total_cost')
+          .eq('project_id', projectId)
+          .eq('name', materialName)
+          .maybeSingle();
+
+        let materialId;
+        if (existing) {
+          const newQty = parseFloat(String(existing.quantity || 0)) + qty;
+          const uc = parseFloat(String(existing.unit_cost || 0));
+          const newTotalCost = parseFloat(String(existing.total_cost || 0)) + qty * uc;
+          await supabase
+            .from('materials_inventory')
+            .update({
+              quantity: newQty,
+              total_cost: newTotalCost,
+              last_purchased_at: createdAtIso,
+              updated_at: now,
+              user_id: userId,
+            })
+            .eq('id', existing.id);
+          materialId = existing.id;
+          await supabase.from('material_transactions').insert({
+            material_id: materialId,
+            project_id: projectId,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity: qty,
+            unit_cost: uc,
+            total_cost: qty * uc,
+            description: `Received ${qty} ${unit} of ${nameRaw}`,
+            source: 'dashboard',
+            created_at: createdAtIso,
+          });
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from('materials_inventory')
+            .insert({
+              project_id: projectId,
+              user_id: userId,
+              name: materialName,
+              quantity: qty,
+              unit,
+              unit_cost: 0,
+              total_cost: 0,
+              source: 'dashboard',
+              last_purchased_at: createdAtIso,
+              updated_at: now,
+            })
+            .select('id')
+            .single();
+          if (insErr || !inserted?.id) continue;
+          materialId = inserted.id;
+          await supabase.from('material_transactions').insert({
+            material_id: materialId,
+            project_id: projectId,
+            user_id: userId,
+            transaction_type: 'purchase',
+            quantity: qty,
+            unit_cost: 0,
+            total_cost: 0,
+            description: `Received ${qty} ${unit} of ${nameRaw}`,
+            source: 'dashboard',
+            created_at: createdAtIso,
+          });
+        }
+        saved++;
+      } else {
+        const { data: existing } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity, unit')
+          .eq('project_id', projectId)
+          .ilike('name', materialName)
+          .maybeSingle();
+        if (!existing) {
+          return res.status(400).json({
+            success: false,
+            error: `No inventory match for "${nameRaw}". Log a purchase first or check spelling.`,
+          });
+        }
+        const usedQty = qty;
+        const currentQty = parseFloat(String(existing.quantity || 0));
+        const newQty = Math.max(0, currentQty - usedQty);
+        await supabase
+          .from('materials_inventory')
+          .update({
+            quantity: newQty,
+            last_used_at: createdAtIso,
+            updated_at: now,
+            user_id: userId,
+          })
+          .eq('id', existing.id);
+        await supabase.from('material_transactions').insert({
+          material_id: existing.id,
+          project_id: projectId,
+          user_id: userId,
+          transaction_type: 'usage',
+          quantity: -usedQty,
+          unit_cost: 0,
+          total_cost: 0,
+          description: `Used ${usedQty} ${unit} of ${nameRaw}`,
+          source: 'dashboard',
+          created_at: createdAtIso,
+        });
+        saved++;
+      }
+    }
+
+    if (saved === 0) {
+      return res.status(400).json({ success: false, error: 'No valid entries to save' });
+    }
+    return res.status(201).json({ success: true, saved, log_date: logDate });
+  } catch (err) {
+    console.error('[materials/daily POST]', err?.message, err?.stack);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to save material log' });
+  }
+});
+
 // POST /api/projects/:projectId/materials — Add or upsert material (match on project_id + name)
 app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => {
   try {
