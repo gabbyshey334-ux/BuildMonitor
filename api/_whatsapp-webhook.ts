@@ -2437,13 +2437,6 @@ async function handleNaturalLanguageQuery(
     return "Please select a project first. Reply with the project number from your list, or say \"list projects\" to see options.";
   }
 
-  // BUG 1/4/5: If message looks like expense-log (number + action words), don't query DB — suggest format instead
-  const hasNumber = /\d/.test(rawMessage);
-  const hasExpenseHint = /paid|spent|bought|masons|workers|labour|labor|each|per/i.test(rawMessage);
-  if (hasNumber && hasExpenseHint) {
-    return "It looks like you want to log an expense. Try: 'Paid 10 masons 20k each' or 'Bought cement for 300,000 UGX'";
-  }
-
   // Strict: only use project that belongs to this user (owner or manager).
   const { data: project } = await supabase
     .from('projects')
@@ -2478,96 +2471,13 @@ async function handleNaturalLanguageQuery(
     }
   }
 
-  const twoYearsAgo = new Date();
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-  const fromDate = twoYearsAgo.toISOString().split('T')[0];
-
-  const { data: expenses } = await supabase
-    .from('expenses')
-    .select('description, amount, expense_date, created_at')
-    .eq('project_id', projectId)
-    .gte('expense_date', fromDate)
-    .order('expense_date', { ascending: false })
-    .limit(200);
-
-  const { data: materials } = await supabase
-    .from('materials_inventory')
-    .select('name, quantity, unit, last_updated, updated_at')
-    .eq('project_id', projectId);
-
-  const { data: allExpenses } = await supabase
-    .from('expenses')
-    .select('amount')
-    .eq('project_id', projectId);
-  const totalSpent = (allExpenses || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
-  const budget = parseFloat(String(project.budget || 0));
-  const remaining = Math.max(0, budget - totalSpent);
-
-  const context = {
-    projectName: project.name,
-    budgetUgx: budget,
-    spentUgx: totalSpent,
-    remainingUgx: remaining,
-    recentExpenses: (expenses || []).slice(0, 10).map((e: any) => ({
-      description: e.description,
-      amount: parseFloat(String(e.amount || 0)),
-      date: e.expense_date,
-    })),
-    materials: (materials || []).map((m: any) => ({
-      name: m.name,
-      quantity: m.quantity,
-      unit: m.unit || 'units',
-    })),
-  };
-
-  const systemPrompt = `You are JengaTrack, a construction assistant for this project. Answer the user naturally and helpfully.
-
-Project: ${context.projectName}
-Budget: ${fmt(context.budgetUgx)} UGX
-Spent: ${fmt(context.spentUgx)} UGX
-Remaining: ${fmt(context.remainingUgx)} UGX
-Recent expenses (use only if relevant): ${JSON.stringify(context.recentExpenses)}
-Materials inventory: ${JSON.stringify(context.materials)}
-
-Rules:
-- You are an ACTION-TAKING construction assistant, not just a data viewer.
-- If the user wants to LOG something (expense, material, workers, issue) but you received this message as a fallback — tell them clearly what format to use and give a direct example. Never say "I don't have functionality to log". Never say "I cannot do that". Always either take the action or give the exact format needed.
-- If the user asks a DATA QUESTION about something not in the provided context (e.g. workers on a specific date), say: "I don't have that specific record. Check your Daily Accountability page at ${DASHBOARD_URL}/daily"
-- Never respond with inventory data when the user asked about workers or expenses.
-- Use ONLY the project data above when answering data questions. Never invent amounts, dates, or facts not in the data.
-- Be warm, concise, plain text, no markdown. Under 5 lines.
-- For amounts use UGX and format with commas (e.g. 1,500,000 UGX).`;
-
-  const userPrompt = `User asked: "${rawMessage}"\n\nAnswer using only the project data provided.`;
-
-  if (gemini && process.env.GEMINI_API_KEY) {
-    try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-      const result = await model.generateContent([systemPrompt, userPrompt]);
-      const text = result.response.text()?.trim();
-      if (text) return text;
-    } catch (err: any) {
-      console.error('[NaturalLanguage] Gemini failed:', err?.message);
-    }
-  }
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 300,
-      });
-      const text = completion.choices[0]?.message?.content?.trim();
-      if (text) return text;
-    } catch (err: any) {
-      console.error('[NaturalLanguage] OpenAI failed:', err?.message);
-    }
-  }
-  return "I couldn't process that right now. Try asking something like: How much have I spent? What's my remaining budget?";
+  const { data: profileFull } = await supabase.from('profiles').select('*').eq('id', userId).single();
+  const { data: ownedProjects } = await supabase.from('projects').select('id, name').eq('user_id', userId);
+  const { data: managedProjects } = await supabase.from('projects').select('id, name').eq('manager_id', userId);
+  const merged = [...(ownedProjects || []), ...(managedProjects || [])].filter(
+    (p, i, self) => i === self.findIndex((t) => t.id === p.id)
+  );
+  return await runAgent(userId, projectId, rawMessage, profileFull || {}, merged);
 }
 
 // ─── AI Agent ─────────────────────────────────────────────────────────────────
@@ -3099,21 +3009,34 @@ async function runAgent(
   profile: any,
   allProjects: any[]
 ): Promise<string> {
-  // ── Load comprehensive DB context in parallel ──────────────────────────────
-  const [projectRes, expensesRes, materialsRes, vendorsRes, dailyLogsRes, issuesRes, tasksRes] = await Promise.all([
+  // ── Load comprehensive DB context in parallel (full expense history for analytics) ──
+  const [
+    projectRes,
+    expensesRecentRes,
+    expensesFullRes,
+    materialsRes,
+    vendorsRes,
+    dailyLogsRes,
+    issuesRes,
+    tasksRes,
+    materialTxRes,
+  ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(100),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(120),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(5000),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
-    supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries').eq('project_id', projectId).order('log_date', { ascending: false }).limit(30),
+    supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
     supabase.from('issues').select('title, description, severity, status, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(40),
-    supabase.from('tasks').select('title, status, completed_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(20),
+    supabase.from('tasks').select('title, status, completed_at, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(50),
+    supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
   ]);
 
-  // ── Map raw DB rows → clean context objects ────────────────────────────────
   const project = projectRes.data;
-  const allExpenses = (expensesRes.data || []).map((e: any) => ({
-    description: e.description, amount: parseFloat(String(e.amount || 0)), date: e.expense_date,
+  const allExpenses = (expensesFullRes.data || []).map((e: any) => ({
+    description: e.description,
+    amount: parseFloat(String(e.amount || 0)),
+    date: e.expense_date as string,
   }));
   const materials = (materialsRes.data || []).map((m: any) => ({
     name: m.name, stock: m.quantity, unit: m.unit, unitCostUgx: m.unit_cost,
@@ -3126,20 +3049,84 @@ async function runAgent(
       }))
     : [];
   const dailyLogs = (dailyLogsRes.data || []).map((l: any) => ({
-    date: l.log_date, workers: l.worker_count, notes: l.notes, milestones: l.milestones,
+    date: l.log_date,
+    workers: l.worker_count,
+    notes: l.notes,
+    milestones: l.milestones,
+    weatherCondition: l.weather_condition,
   }));
   const allIssues = (issuesRes.data || []).map((i: any) => ({
     title: i.title, severity: i.severity, status: i.status, date: i.created_at?.split('T')[0],
   }));
   const tasks = (!tasksRes.error && tasksRes.data)
-    ? tasksRes.data.map((t: any) => ({ title: t.title, status: t.status }))
+    ? tasksRes.data.map((t: any) => ({ title: t.title, status: t.status, completedAt: t.completed_at }))
+    : [];
+  const materialTransactions = (!materialTxRes.error && materialTxRes.data)
+    ? materialTxRes.data.map((r: any) => ({
+        type: r.transaction_type,
+        quantity: r.quantity,
+        unitCostUgx: r.unit_cost,
+        totalCostUgx: r.total_cost,
+        description: r.description,
+        at: r.created_at,
+      }))
     : [];
 
-  // ── Compute analytics from raw data ───────────────────────────────────────
-  const totalSpent = allExpenses.reduce((s, e) => s + e.amount, 0);
-  const budget = parseFloat(String(project?.budget || 0));
-  const remaining = Math.max(0, budget - totalSpent);
-  const pctUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+  // ── Pre-compute analytics in code (period totals, categories, burn) ───────
+  const now = new Date();
+  const pad2 = (n: number) => String(n).padStart(2, '0');
+  const isoDate = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  const todayStr = isoDate(now);
+
+  const startOf7Days = new Date(now);
+  startOf7Days.setDate(now.getDate() - 6);
+  const startOf30Days = new Date(now);
+  startOf30Days.setDate(now.getDate() - 29);
+  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  const dayOfWeek = now.getDay();
+  const startOfThisWeek = new Date(now);
+  startOfThisWeek.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const startOfLastWeek = new Date(startOfThisWeek);
+  startOfLastWeek.setDate(startOfThisWeek.getDate() - 7);
+  const endOfLastWeek = new Date(startOfThisWeek);
+  endOfLastWeek.setDate(startOfThisWeek.getDate() - 1);
+
+  const inRange = (e: { date: string }, from: Date, to: Date) =>
+    e.date >= isoDate(from) && e.date <= isoDate(to);
+  const sumRange = (from: Date, to: Date) =>
+    Math.round(allExpenses.filter((e) => inRange(e, from, to)).reduce((s, e) => s + e.amount, 0));
+
+  const spendLast7Days = sumRange(startOf7Days, now);
+  const spendLast30Days = sumRange(startOf30Days, now);
+  const spendThisMonth = sumRange(startOfThisMonth, now);
+  const spendLastMonth = sumRange(startOfLastMonth, endOfLastMonth);
+  const spendThisWeek = sumRange(startOfThisWeek, now);
+  const spendLastWeek = sumRange(startOfLastWeek, endOfLastWeek);
+  const momChange = spendLastMonth > 0 ? Math.round(((spendThisMonth - spendLastMonth) / spendLastMonth) * 100) : null;
+
+  const spendByCategory: Record<string, number> = {};
+  for (const e of allExpenses) {
+    const desc = (e.description || '').toLowerCase();
+    let cat = 'Other';
+    if (/cement|sand|gravel|ballast|aggregate|stone|block|brick/i.test(desc)) cat = 'Materials';
+    else if (/labor|labour|worker|mason|casual|wage|salary/i.test(desc)) cat = 'Labour';
+    else if (/transport|fuel|petrol|diesel|truck|lorry|delivery/i.test(desc)) cat = 'Transport';
+    else if (/equipment|machine|hire|rental|scaffold/i.test(desc)) cat = 'Equipment';
+    else if (/paint|finish|tile|plumbing|electrical|wire|pipe/i.test(desc)) cat = 'Finishing';
+    spendByCategory[cat] = (spendByCategory[cat] || 0) + e.amount;
+  }
+
+  const spendByItem: Record<string, number> = {};
+  for (const e of allExpenses) {
+    const key = (e.description || 'Other').substring(0, 60).trim() || 'Other';
+    spendByItem[key] = (spendByItem[key] || 0) + e.amount;
+  }
+  const topItemsBySpend = Object.entries(spendByItem)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([desc, amt]) => ({ desc, amountUgx: Math.round(amt) }));
 
   const spendingByMonth: Record<string, number> = {};
   for (const e of allExpenses) {
@@ -3151,39 +3138,80 @@ async function runAgent(
     .slice(0, 6)
     .map(([month, amt]) => ({ month, amountUgx: Math.round(amt) }));
 
+  const totalSpent = allExpenses.reduce((s, e) => s + e.amount, 0);
+  const budget = parseFloat(String(project?.budget || 0));
+  const remaining = Math.max(0, budget - totalSpent);
+  const pctUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+  const projectStart = project?.start_date ? new Date(project.start_date as string) : startOfThisMonth;
+  const weeksElapsed = Math.max(1, Math.round((now.getTime() - projectStart.getTime()) / (7 * 24 * 60 * 60 * 1000)));
+  const weeklyBurnRate = Math.round(totalSpent / weeksElapsed);
+  const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
+
   const workerLogs = dailyLogs.filter((l) => l.workers && l.workers > 0);
-  const avgWorkers = workerLogs.length > 0
+  const avgWorkersPerDay = workerLogs.length > 0
     ? Math.round(workerLogs.reduce((s, l) => s + (l.workers || 0), 0) / workerLogs.length)
     : 0;
   const peakWorkers = workerLogs.length > 0 ? Math.max(...workerLogs.map((l) => l.workers || 0)) : 0;
+  const todayLog = dailyLogs.find((l) => l.date === todayStr);
+  const workersToday = todayLog?.workers || 0;
   const lowStock = materials.filter((m) => m.lowStockAt != null && m.stock <= m.lowStockAt);
 
-  const today = new Date().toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const todayFormatted = now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const userName = profile?.full_name && profile.full_name !== 'WhatsApp User'
-    ? profile.full_name.split(' ')[0] : 'Site Manager';
+    ? profile.full_name.split(' ')[0]
+    : 'Site Manager';
 
-  // ── Build full context block ───────────────────────────────────────────────
   const contextBlock = JSON.stringify({
     project: {
-      name: project?.name, budgetUgx: budget, spentUgx: totalSpent,
-      remainingUgx: remaining, percentUsed: pctUsed,
-      status: project?.status, startDate: project?.start_date,
+      name: project?.name,
+      budgetUgx: budget,
+      spentUgx: Math.round(totalSpent),
+      remainingUgx: Math.round(remaining),
+      percentUsed: pctUsed,
+      status: project?.status,
+      startDate: project?.start_date,
       description: project?.description,
     },
     analytics: {
-      monthlySpending: monthlyTrend,
-      avgWorkersPerDay: avgWorkers,
-      peakWorkersInPeriod: peakWorkers,
-      totalExpenseRecords: allExpenses.length,
+      todayIso: todayStr,
+      spendingPeriods: {
+        last7Days: spendLast7Days,
+        last30Days: spendLast30Days,
+        thisMonth: spendThisMonth,
+        lastMonth: spendLastMonth,
+        thisWeek: spendThisWeek,
+        lastWeek: spendLastWeek,
+        monthOverMonthChangePercent: momChange,
+      },
+      spendingByCategory: spendByCategory,
+      topItemsBySpend,
+      monthlyTrend,
+      burnRate: {
+        weeklyUgx: weeklyBurnRate,
+        weeksElapsed,
+        weeksRemaining,
+        projectedOverBudget: remaining <= 0,
+      },
+      workers: {
+        today: workersToday,
+        avgPerDay: avgWorkersPerDay,
+        peak: peakWorkers,
+        totalDaysLogged: workerLogs.length,
+      },
       lowStockAlerts: lowStock.map((m) => `${m.name}: ${m.stock} ${m.unit} left (threshold: ${m.lowStockAt})`),
       topVendors: vendors.slice(0, 5),
+      totalExpenseRecords: allExpenses.length,
     },
-    expenses: allExpenses.slice(0, 60),
-    olderExpenses: allExpenses.slice(60),
+    expenses: (expensesRecentRes.data || []).map((e: any) => ({
+      description: e.description,
+      amountUgx: Math.round(parseFloat(String(e.amount || 0))),
+      date: e.expense_date,
+    })),
     materialsInventory: materials,
+    materialTransactionsRecent: materialTransactions.slice(0, 50),
     vendors,
-    recentDailyLogs: dailyLogs.slice(0, 14),
-    olderDailyLogs: dailyLogs.slice(14),
+    recentDailyLogs: dailyLogs.slice(0, 30),
+    olderDailyLogs: dailyLogs.slice(30),
     issues: {
       open: allIssues.filter((i) => i.status === 'open'),
       acknowledged: allIssues.filter((i) => i.status === 'acknowledged'),
@@ -3199,24 +3227,39 @@ async function runAgent(
   // ── System prompt ─────────────────────────────────────────────────────────
   const systemPrompt = `You are JengaTrack, a professional AI construction project assistant for ${userName}'s project in Uganda. You have COMPLETE access to the live project database shown below. You can read any data, perform calculations, answer any question, and take actions that update the database.
 
-TODAY: ${today}
+TODAY: ${todayFormatted}
 USER: ${userName}
 ACTIVE PROJECT: ${project?.name || 'Unknown'}
 
 ━━━ LIVE PROJECT DATABASE ━━━
 ${contextBlock}
 
-━━━ YOUR CAPABILITIES ━━━
-You can do EVERYTHING the dashboard does, and more:
-1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending trends by month/vendor/category
-2. Materials: add/use/set inventory, check stock levels, identify low-stock items, calculate quantities needed
+━━━ YOUR CAPABILITIES — you can do EVERYTHING the dashboard does ━━━
+1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending by month/vendor/category
+2. Materials: add/use/set inventory, check stock levels, identify low-stock items
 3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues: log new issues, acknowledge issues, resolve/close issues, update severity/description of existing issues, delete issues, list all open/acknowledged issues
-5. Tasks: create tasks and milestones, update/complete/edit tasks, delete tasks, list pending tasks
-6. Projects: create new projects, update budget/name/description/status, archive/complete projects, switch between projects
-7. Profile: update your name, WhatsApp number, or language preference
-8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, material usage rates
-9. Construction knowledge: mixing ratios, quantity calculations, best practices, cost estimation formulas, structural advice
+4. Issues: log new issues, acknowledge/resolve/close/delete issues, update severity, list open issues
+5. Tasks: create/update/complete/delete tasks, list pending tasks
+6. Projects: create new projects, update budget/name/description/status, switch between projects
+7. Profile: update name, WhatsApp number, or language preference
+8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns — all pre-computed in analytics.*
+9. Construction knowledge: mixing ratios, quantity calculations, best practices, cost estimation, structural advice
+
+━━━ ANALYTICS INTELLIGENCE — USE PRE-COMPUTED VALUES ━━━
+All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, do not re-sum from the expenses array:
+- last 7 days → analytics.spendingPeriods.last7Days (= ${fmt(spendLast7Days)} UGX)
+- this month → analytics.spendingPeriods.thisMonth (= ${fmt(spendThisMonth)} UGX)
+- last month → analytics.spendingPeriods.lastMonth (= ${fmt(spendLastMonth)} UGX)
+- this week → analytics.spendingPeriods.thisWeek (= ${fmt(spendThisWeek)} UGX)
+- last week → analytics.spendingPeriods.lastWeek (= ${fmt(spendLastWeek)} UGX)
+- month vs last month → use thisMonth, lastMonth, and monthOverMonthChangePercent (${momChange !== null ? momChange + '%' : 'N/A'})
+- Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining at this rate' : 'unknown weeks remaining'}
+- Workers today: ${workersToday}, average: ${avgWorkersPerDay}/day, peak: ${peakWorkers}
+- What I spend most on: analytics.spendingByCategory and analytics.topItemsBySpend
+
+Today is ${todayStr}. For "X days ago" questions, count backward from this date. Never say you do not know the current date.
+
+Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?" use get_daily_summary with that date, or search logs by date. If no log, say nothing was logged that day.
 
 ━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
@@ -3240,40 +3283,41 @@ You can do EVERYTHING the dashboard does, and more:
 {"tool":"update_issue","params":{"title_keyword":"part of issue title","severity":"low|medium|high|critical","description":"optional updated description"}}
 {"tool":"delete_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
+{"tool":"query_data","params":{"answer":"your complete answer to the user's question, drawn from the database above"}}
+{"tool":"get_daily_summary","params":{"date":"YYYY-MM-DD"}}
+{"tool":"compare_periods","params":{}}
 
 ━━━ DECISION GUIDE ━━━
-• User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
-• User asks a QUESTION, wants analysis, or asks "show me..." → answer directly from the database above
-• "any alerts / issues / problems?" → list from issues.open above as plain text. NEVER call log_issue.
-• "switch to X / work on X project" → call switch_project immediately
-• "update my name / change my number / change language" → call update_profile
-• "create a new project / start a new project" → call create_project
-• "acknowledge the X issue" → call acknowledge_issue
-• "edit/correct the X expense" → call edit_expense; "delete/remove the X expense" → call delete_expense
-• "mark task X as done / complete task X" → call update_task with status=completed
-• "delete task X" → call delete_task
-• "change severity of X issue / update the X issue" → call update_issue
-• "delete issue X / remove issue X" → call delete_issue
-• "mark project as done/completed/on hold" → call update_project with the correct status
-• General construction question → answer from your expertise as a construction professional
+- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
+- User asks a QUESTION about their data → use query_data with the full answer (or get_daily_summary / compare_periods when fitting)
+- "any alerts/issues/problems?" → list from issues.open as plain text. NEVER call log_issue.
+- "switch to X project" → call switch_project immediately
+- "update my name / change language" → call update_profile
+- "create a new project" → call create_project
+- "acknowledge/resolve the X issue" → call acknowledge_issue or resolve_issue
+- "edit/correct the X expense" → call edit_expense; "delete/remove the X expense" → call delete_expense
+- "mark task X as done" → call update_task with status=completed
+- "what happened on March 20?" → call get_daily_summary with date YYYY-MM-DD
+- "compare this week to last" / "this month vs last month" → call compare_periods
+- General construction question → answer from your expertise. No tool call needed.
 
 ━━━ CRITICAL RULES ━━━
-1. workers/masons/labourers/staff/casuals = PEOPLE → log_labor (if paid) or update_daily_log (if just counting). NEVER update_inventory for people.
-2. "any alerts/issues?" = QUESTION → list from issues.open data above. Never create a new issue for a query.
-3. Amounts: K=×1,000 | M=×1,000,000 | B=×1,000,000,000. 4K=4,000. 150K=150,000. 2.5M=2,500,000. Never guess.
-4. Multi-person pay: "paid 3 workers 25k each" → amount = 75,000 (3 × 25,000). Always multiply.
-5. NEVER expose UUIDs, raw database IDs, or field names in replies.
-6. NEVER say "I cannot do that", "I don't have that functionality", or "please use the format X".
-7. Dates in replies: "March 16, 2026" not "2026-03-16".
-8. Currency: always UGX. Format with commas: 1,500,000 UGX.
-9. If unsure what user wants, ask ONE short clarifying question.
+1. Workers/masons/labourers/staff = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
+2. "any alerts/issues?" = QUESTION. List from issues.open. Never create a new issue.
+3. Amounts: K=1,000 | M=1,000,000 | B=1,000,000,000. "paid 3 workers 25k each" → amount = 75,000. Always multiply.
+4. NEVER expose UUIDs or raw database IDs in replies.
+5. NEVER say "I cannot do that", "I don't have that functionality", or "please use the format X".
+6. Dates in replies: "March 16, 2026" not "2026-03-16".
+7. Currency: always UGX with commas: 1,500,000 UGX.
+8. If unsure what user wants, ask ONE short clarifying question.
+9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
+10. For multi-part questions, answer ALL parts in one reply.
 
-━━━ FORMATTING (WhatsApp) ━━━
-• Use *bold* for totals, headings, and key numbers
-• Use numbered or bullet lists for multiple items
-• For analytics responses, show actual numbers with context (vs budget, vs last month, etc.)
-• Be thorough on analysis questions — answer ALL parts of a multi-part question
-• Be concise on simple confirmations — one clear line is enough`;
+━━━ FORMATTING ━━━
+- Plain text only. No markdown asterisks, no ** bold, no * bullets.
+- Use dashes (-) for lists. WhatsApp renders asterisks as raw characters.
+- For analytics: show actual numbers with context (vs budget, vs last month, vs average).
+- Be thorough on analysis questions. Be concise on simple confirmations.`;
 
   const userPrompt = rawMessage;
 
@@ -3305,7 +3349,7 @@ You can do EVERYTHING the dashboard does, and more:
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 700,
+        max_tokens: 800,
       });
       rawResponse = completion.choices[0]?.message?.content?.trim() || null;
       if (rawResponse) console.log('[Agent] OpenAI:', rawResponse.substring(0, 120));
@@ -3388,6 +3432,58 @@ You can do EVERYTHING the dashboard does, and more:
     case 'switch_project':
       result = await toolSwitchProject(userId, toolCall.params, allProjects);
       break;
+    case 'query_data':
+      result = {
+        success: true,
+        reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
+      };
+      break;
+    case 'get_daily_summary': {
+      const queryDate = String(toolCall.params.date || todayStr);
+      const log = dailyLogs.find((l: any) => l.date === queryDate);
+      if (!log) {
+        const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+        result = { success: true, reply: `No daily log found for ${dateLabel}. Nothing was logged that day.` };
+      } else {
+        const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+        const parts: string[] = [];
+        if (log.workers) parts.push(`${log.workers} workers on site`);
+        if (log.notes) parts.push(String(log.notes));
+        if (log.milestones) parts.push(`Milestone: ${log.milestones}`);
+        if (log.weatherCondition) parts.push(`Weather: ${log.weatherCondition}`);
+        result = {
+          success: true,
+          reply: `${dateLabel}: ${parts.length > 0 ? parts.join('. ') : 'Log exists but no details recorded.'}`,
+        };
+      }
+      break;
+    }
+    case 'compare_periods': {
+      const momLine =
+        momChange !== null
+          ? `Month vs prior month: ${momChange > 0 ? '+' : ''}${momChange}% change in spending`
+          : 'Month vs prior month: N/A (no spend last month to compare)';
+      result = {
+        success: true,
+        reply: [
+          `Spending comparison (UGX):`,
+          `- This week: ${fmt(spendThisWeek)} | Last week: ${fmt(spendLastWeek)}`,
+          `- This month: ${fmt(spendThisMonth)} | Last month: ${fmt(spendLastMonth)}`,
+          `- Last 7 days: ${fmt(spendLast7Days)} | Last 30 days: ${fmt(spendLast30Days)}`,
+          momLine,
+        ].join('\n'),
+      };
+      break;
+    }
     default:
       console.log('[Agent] Unknown tool:', toolCall.tool);
       return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || "Got it! What else can I help with?";
