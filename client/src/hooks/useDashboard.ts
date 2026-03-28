@@ -195,6 +195,20 @@ export interface ProjectMaterialsResponse {
   }>;
   lowStock: Array<{ name: string; quantity: number; unit: string; low_stock_threshold?: number }>;
   usage: Array<{ name: string; used: number; received: number }>;
+  transactions?: Array<{
+    id: string;
+    material_id: string;
+    material_name: string;
+    unit: string;
+    transaction_type: string;
+    quantity: number;
+    unit_cost: number;
+    total_cost: number;
+    description: string;
+    source: string;
+    created_at: string;
+    date: string;
+  }>;
   summary: {
     totalItems: number;
     lowStockCount: number;

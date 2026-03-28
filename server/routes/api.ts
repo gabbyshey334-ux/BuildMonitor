@@ -20,6 +20,7 @@ import {
   images,
   expenseCategories,
   materialsInventory,
+  materialTransactions,
   dailyLogs,
   issues,
   InsertExpense,
@@ -2077,10 +2078,34 @@ router.get('/projects/:projectId/materials', requireAuth, async (req: Request, r
           return t > latest ? t : latest;
         }, 0)
       : null;
+
+    // Fetch material transactions to log per day
+    const { data: txRows } = await supabase
+      .from('material_transactions')
+      .select('id, material_id, transaction_type, quantity, unit_cost, total_cost, description, source, created_at, materials_inventory(name, unit)')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+
+    const transactions = (txRows || []).map((t: any) => ({
+      id: t.id,
+      material_id: t.material_id,
+      material_name: t.materials_inventory?.name || 'Unknown',
+      unit: t.materials_inventory?.unit || 'units',
+      transaction_type: t.transaction_type,
+      quantity: parseFloat(String(t.quantity || 0)),
+      unit_cost: t.unit_cost ? parseFloat(String(t.unit_cost)) : 0,
+      total_cost: t.total_cost ? parseFloat(String(t.total_cost)) : 0,
+      description: t.description || '',
+      source: t.source || 'manual',
+      created_at: t.created_at,
+      date: t.created_at ? t.created_at.substring(0, 10) : new Date().toISOString().substring(0, 10),
+    }));
+
     res.json({
       success: true,
       inventory,
       lowStock,
+      transactions,
       usage: [],
       summary: {
         totalItems: inventory.length,

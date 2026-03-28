@@ -219,6 +219,23 @@ export const materialsInventory = pgTable("materials_inventory", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => [index("idx_materials_inventory_project_id").on(table.projectId)]);
 
+export const materialTransactions = pgTable("material_transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  materialId: uuid("material_id").references(() => materialsInventory.id, { onDelete: 'cascade' }).notNull(),
+  projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid("user_id").references(() => profiles.id, { onDelete: 'cascade' }),
+  transactionType: text("transaction_type").notNull(), // 'purchase', 'usage', 'adjustment', 'return'
+  quantity: decimal("quantity", { precision: 15, scale: 2 }).notNull(),
+  unitCost: decimal("unit_cost", { precision: 15, scale: 2 }).default('0'),
+  totalCost: decimal("total_cost", { precision: 15, scale: 2 }).default('0'),
+  description: text("description"),
+  source: text("source").default('manual'), // 'manual', 'whatsapp', 'dashboard'
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => [
+  index("idx_material_transactions_material").on(table.materialId),
+  index("idx_material_transactions_project").on(table.projectId)
+]);
+
 export const vendors = pgTable("vendors", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
