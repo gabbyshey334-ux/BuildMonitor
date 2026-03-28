@@ -1,15 +1,8 @@
 /**
  * JengaTrack WhatsApp Webhook — Complete Implementation
  *
- * Required Supabase table:
- * CREATE TABLE IF NOT EXISTS tasks (
- *   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
- *   project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
- *   title text NOT NULL,
- *   status text DEFAULT 'pending',
- *   completed_at timestamptz,
- *   created_at timestamptz DEFAULT now()
- * );
+ * Tasks: use migrations/align_supabase_schema_profiles_tasks_vendors_projects.sql — user_id → profiles(id)
+ * (project owner), deleted_at, status includes pending|in_progress|completed|todo|done, optional description/priority/due_date/source/updated_at.
  *
  * Features:
  * - Two operating modes: Group Chat (Mode A) & Direct Tracker (Mode B)
@@ -42,6 +35,16 @@ const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+/** tasks.user_id FK is profiles.id of the project owner (same as projects.user_id), not the acting WhatsApp user. */
+async function projectOwnerProfileId(projectId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('projects').select('user_id').eq('id', projectId).maybeSingle();
+  if (error || !data?.user_id) {
+    console.error('[projectOwnerProfileId]', error?.message || 'missing user_id', projectId);
+    return null;
+  }
+  return data.user_id as string;
+}
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -540,6 +543,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
         ? `Started: ${startDate}. Created via WhatsApp.`
         : 'Created via WhatsApp.',
       budget: budgetNum,
+      spent: 0,
       user_id: userId,
       status: 'active',
       currency: 'UGX',
@@ -1910,6 +1914,7 @@ async function handleLaborLog(
 
 async function handleProgressUpdate(
   from: string,
+  _userId: string,
   projectId: string,
   extracted: Record<string, unknown>,
   rawMessage: string,
@@ -1923,22 +1928,29 @@ async function handleProgressUpdate(
       !/^(i completed|following tasks|tasks today|completed today)/i.test(l)
     );
 
-  const today = new Date().toISOString().split('T')[0];
-
   const activityEntry = {
     log_time: new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00',
     activity_type: 'Milestone',
     description: rawMessage.trim(),
   };
 
+  const nowIso = new Date().toISOString();
+  const taskOwnerId = await projectOwnerProfileId(projectId);
   if (taskLines.length > 1) {
     for (const taskText of taskLines) {
+      if (!taskOwnerId) {
+        console.error('[Task Insert Error] no project owner for', projectId);
+        break;
+      }
       const { error } = await supabase.from('tasks').insert({
+        user_id: taskOwnerId,
         project_id: projectId,
         title: taskText,
         status: 'completed',
-        completed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
+        source: 'whatsapp',
+        completed_at: nowIso,
+        created_at: nowIso,
+        updated_at: nowIso,
       });
       if (error) console.error('[Task Insert Error]', error.message);
     }
@@ -1955,13 +1967,20 @@ async function handleProgressUpdate(
     await upsertDailyLog(projectId, { notes: note, activity_entries: [activityEntry] });
 
     if (/finished|completed|done|built|laid|poured|installed/i.test(note)) {
-      await supabase.from('tasks').insert({
-        project_id: projectId,
-        title: note,
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      });
+      if (taskOwnerId) {
+        await supabase.from('tasks').insert({
+          user_id: taskOwnerId,
+          project_id: projectId,
+          title: note,
+          status: 'completed',
+          source: 'whatsapp',
+          completed_at: nowIso,
+          created_at: nowIso,
+          updated_at: nowIso,
+        });
+      } else {
+        console.error('[Task Insert Error] no project owner for', projectId);
+      }
     }
     const msg = await ai(
       `Tell the user their progress update was logged: "${note}". Tell them it will appear on their dashboard timeline. Keep it brief and encouraging.`,
@@ -2553,7 +2572,8 @@ async function toolCreateProject(userId: string, params: any): Promise<AgentTool
   const { data: newProject, error } = await supabase.from('projects').insert({
     name: String(name).trim(),
     description: desc,
-    budget: budgetVal > 0 ? budgetVal : null,
+    budget: budgetVal > 0 ? budgetVal : 0,
+    spent: 0,
     user_id: userId,
     status: 'active',
     currency: 'UGX',
@@ -2657,7 +2677,10 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   if (budget != null && parseFloat(String(budget)) > 0) updateData.budget = parseFloat(String(budget));
   if (name) updateData.name = String(name).trim();
   if (description) updateData.description = String(description).trim();
-  if (status && ['active', 'completed', 'paused'].includes(String(status).toLowerCase())) updateData.status = String(status).toLowerCase();
+  if (status) {
+    const s = String(status).toLowerCase();
+    if (['active', 'completed', 'paused', 'on_hold'].includes(s)) updateData.status = s;
+  }
   if (Object.keys(updateData).length === 1) return { success: false, reply: 'Please specify what to update — budget, name, description, or status.' };
   const { error } = await supabase.from('projects').update(updateData).eq('id', projectId);
   if (error) return { success: false, reply: 'Failed to update project. Please try again.' };
@@ -2677,7 +2700,7 @@ async function toolResolveIssue(projectId: string, params: any): Promise<AgentTo
     .ilike('title', `%${title_keyword}%`).in('status', ['open', 'acknowledged']).limit(1);
   if (!issues || issues.length === 0) return { success: false, reply: `No open issue found matching "${title_keyword}". Check the Issues page for the exact title.` };
   const issue = issues[0];
-  await supabase.from('issues').update({ status: 'resolved', updated_at: new Date().toISOString() }).eq('id', issue.id);
+  await supabase.from('issues').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', issue.id);
   return { success: true, reply: `✅ Issue resolved: "${issue.title}".${resolution_note ? ' Note: ' + resolution_note : ''} View on Issues & Risks page.`, data: { title: issue.title } };
 }
 
@@ -2696,14 +2719,22 @@ async function toolLogWeatherDelay(projectId: string, params: any): Promise<Agen
   return { success: true, reply: `✅ Weather delay logged for ${dateLabel}: "${reason}". Added to your daily timeline.`, data: { reason, logDate } };
 }
 
-async function toolCreateTask(projectId: string, params: any): Promise<AgentToolResult> {
+async function toolCreateTask(_actingUserId: string, projectId: string, params: any): Promise<AgentToolResult> {
   const { title, status } = params;
   if (!title) return { success: false, reply: 'Please provide a task title.' };
+  const taskOwnerId = await projectOwnerProfileId(projectId);
+  if (!taskOwnerId) return { success: false, reply: 'Could not resolve this project. Try again or open the dashboard.' };
   const taskStatus = ['pending', 'completed', 'in_progress'].includes(String(status || '').toLowerCase()) ? String(status).toLowerCase() : 'pending';
+  const ts = new Date().toISOString();
   const { error } = await supabase.from('tasks').insert({
-    project_id: projectId, title: String(title).trim(), status: taskStatus,
-    created_at: new Date().toISOString(),
-    ...(taskStatus === 'completed' ? { completed_at: new Date().toISOString() } : {}),
+    user_id: taskOwnerId,
+    project_id: projectId,
+    title: String(title).trim(),
+    status: taskStatus,
+    source: 'whatsapp',
+    created_at: ts,
+    updated_at: ts,
+    ...(taskStatus === 'completed' ? { completed_at: ts } : {}),
   });
   if (error) return { success: false, reply: 'Failed to create task. Please try again.' };
   return { success: true, reply: `✅ Task created: "${title}" (${taskStatus}). View on your dashboard.`, data: { title, status: taskStatus } };
@@ -2716,6 +2747,7 @@ async function toolUpdateTask(projectId: string, params: any): Promise<AgentTool
     .from('tasks')
     .select('id, title, status')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('title', `%${title_keyword}%`)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -2744,12 +2776,16 @@ async function toolDeleteTask(projectId: string, params: any): Promise<AgentTool
     .from('tasks')
     .select('id, title')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('title', `%${title_keyword}%`)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
   if (!task) return { success: false, reply: `No task found matching "${title_keyword}".` };
-  const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+  const { error } = await supabase
+    .from('tasks')
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', task.id);
   if (error) return { success: false, reply: 'Failed to delete the task. Please try again.' };
   return { success: true, reply: `🗑️ Task "${task.title}" deleted.`, data: { title: task.title } };
 }
@@ -3028,7 +3064,13 @@ async function runAgent(
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
     supabase.from('issues').select('title, description, severity, status, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(40),
-    supabase.from('tasks').select('title, status, completed_at, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(50),
+    supabase
+      .from('tasks')
+      .select('title, status, completed_at, created_at')
+      .eq('project_id', projectId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(50),
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
   ]);
 
@@ -3218,8 +3260,12 @@ async function runAgent(
       recentlyResolved: allIssues.filter((i) => i.status === 'resolved').slice(0, 5),
     },
     tasks: {
-      pending: tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress'),
-      recentlyCompleted: tasks.filter((t) => t.status === 'completed').slice(0, 10),
+      pending: tasks.filter((t) =>
+        ['pending', 'in_progress', 'todo'].includes(String(t.status || '').toLowerCase())
+      ),
+      recentlyCompleted: tasks
+        .filter((t) => ['completed', 'done'].includes(String(t.status || '').toLowerCase()))
+        .slice(0, 10),
     },
     userProjects: allProjects.map((p: any) => ({ name: p.name })),
   });
@@ -3415,7 +3461,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
       result = await toolLogWeatherDelay(projectId, toolCall.params);
       break;
     case 'create_task':
-      result = await toolCreateTask(projectId, toolCall.params);
+      result = await toolCreateTask(userId, projectId, toolCall.params);
       break;
     case 'update_task':
       result = await toolUpdateTask(projectId, toolCall.params);
@@ -4486,7 +4532,7 @@ async function routeIntent(
       await handleLaborLog(from, project.id, extracted, rawMessage, lang);
       break;
     case 'PROGRESS_UPDATE':
-      await handleProgressUpdate(from, project.id, extracted, rawMessage, lang);
+      await handleProgressUpdate(from, userId, project.id, extracted, rawMessage, lang);
       break;
     case 'WEATHER_DELAY':
       await handleWeatherDelay(from, project.id, extracted, rawMessage);

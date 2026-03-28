@@ -102,6 +102,8 @@ async function seed() {
         name: 'Test Construction Project',
         description: 'A test project for development and testing',
         budgetAmount: 10000000, // 10 Million UGX
+        spentAmount: '0',
+        currency: 'UGX',
         status: 'active',
         createdAt: now,
         updatedAt: now,
@@ -110,45 +112,34 @@ async function seed() {
       console.log(`   ✅ Created test project: ${newProject.name} (${newProject.id})\n`);
     }
 
-    // Check if categories already exist
-    console.log('4️⃣  Checking for existing categories...');
-    const existingCategories = await db
-      .select()
-      .from(expenseCategories)
-      .where(eq(expenseCategories.userId, userId));
-
-    if (existingCategories.length > 0) {
-      console.log(`   ℹ️  ${existingCategories.length} categories already exist for this user`);
-      console.log('   Skipping category creation.\n');
-    } else {
-      // Create default categories
-      console.log('   Creating default categories...');
-      const defaultCategories = [
-        { name: 'Materials', colorHex: '#3B82F6' },     // Blue
-        { name: 'Labor', colorHex: '#10B981' },         // Green
-        { name: 'Equipment', colorHex: '#F59E0B' },     // Yellow
-        { name: 'Transport', colorHex: '#8B5CF6' },     // Purple
-        { name: 'Miscellaneous', colorHex: '#6B7280' }, // Gray
-      ];
-
-      for (const category of defaultCategories) {
+    // Global expense categories (shared across all users in Supabase)
+    console.log('4️⃣  Ensuring default expense categories exist...');
+    const defaultCategories = [
+      { name: 'Materials', colorHex: '#3B82F6' },
+      { name: 'Labor', colorHex: '#10B981' },
+      { name: 'Equipment', colorHex: '#F59E0B' },
+      { name: 'Transport', colorHex: '#8B5CF6' },
+      { name: 'Miscellaneous', colorHex: '#6B7280' },
+    ];
+    for (const category of defaultCategories) {
+      const [existing] = await db
+        .select()
+        .from(expenseCategories)
+        .where(eq(expenseCategories.name, category.name))
+        .limit(1);
+      if (!existing) {
         await db.insert(expenseCategories).values({
           id: uuidv4(),
-          userId: userId,
           name: category.name,
           colorHex: category.colorHex,
           createdAt: new Date(),
         });
         console.log(`   ✅ Created category: ${category.name}`);
       }
-      console.log('');
     }
+    console.log('');
 
-    // Get category IDs for sample expenses
-    const categories = await db
-      .select()
-      .from(expenseCategories)
-      .where(eq(expenseCategories.userId, userId));
+    const categories = await db.select().from(expenseCategories);
 
     const categoryMap = Object.fromEntries(
       categories.map(cat => [cat.name, cat.id])
@@ -243,10 +234,7 @@ async function seed() {
       .from(projects)
       .where(eq(projects.userId, userId));
 
-    const userCategories = await db
-      .select()
-      .from(expenseCategories)
-      .where(eq(expenseCategories.userId, userId));
+    const userCategories = await db.select().from(expenseCategories);
 
     const userExpenses = await db
       .select()

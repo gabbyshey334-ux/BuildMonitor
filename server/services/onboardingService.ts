@@ -215,6 +215,8 @@ export async function createProjectFromOnboarding(userId: string): Promise<strin
       name: projectName,
       description: `Project created via WhatsApp onboarding`,
       budgetAmount: budget ? budget.toString() : '0',
+      spentAmount: '0',
+      currency: 'UGX',
       status: 'active',
     })
     .returning();

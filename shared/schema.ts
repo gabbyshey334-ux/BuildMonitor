@@ -18,8 +18,8 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ============================================================================
-// IMPORTANT: This schema matches the EXACT structure deployed in Supabase
-// DO NOT modify column names, types, or constraints without updating Supabase
+// Keep in sync with Supabase: run migrations/*.sql (e.g. align_supabase_schema_profiles_tasks_vendors_projects.sql).
+// tasks.user_id = project owner profiles.id; expense_categories are global (no user_id).
 // ============================================================================
 
 // Supabase auth schema (read-only, managed by Supabase Auth)
@@ -48,7 +48,7 @@ export const sessions = pgTable(
 // ============================================================================
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(), // This IS the auth.users.id
-  email: varchar("email", { length: 255 }).unique().notNull(),
+  email: varchar("email", { length: 255 }).unique(),
   whatsappNumber: varchar("whatsapp_number", { length: 20 }).unique().notNull(),
   fullName: varchar("full_name", { length: 255 }).notNull(),
   defaultCurrency: varchar("default_currency", { length: 3 }).default('UGX'),
@@ -79,8 +79,11 @@ export const projects = pgTable("projects", {
   name: varchar("name", { length: 255 }).notNull(),
   description: text("description"),
   budgetAmount: decimal("budget", { precision: 15, scale: 2 }),
+  spentAmount: decimal("spent", { precision: 15, scale: 2 }).notNull().default('0'),
+  currency: varchar("currency", { length: 3 }).notNull().default('UGX'),
+  startDate: date("start_date"),
   channelType: varchar("channel_type", { length: 20 }).default('direct'), // 'direct' | 'group'
-  status: varchar("status", { length: 20 }).notNull().default('active'), // 'active', 'completed', 'paused'
+  status: varchar("status", { length: 20 }).notNull().default('active'), // 'active', 'completed', 'paused', 'on_hold'
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -94,18 +97,14 @@ export const projects = pgTable("projects", {
 // ============================================================================
 // 3. EXPENSE_CATEGORIES
 // ============================================================================
+// Global categories (Supabase: unique name, no user_id)
 export const expenseCategories = pgTable("expense_categories", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => profiles.id, { onDelete: 'cascade' }).notNull(),
-  name: varchar("name", { length: 100 }).notNull(),
-  colorHex: varchar("color_hex", { length: 7 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-}, (table) => [
-  index("idx_expense_categories_user_id").on(table.userId),
-  index("idx_expense_categories_deleted_at").on(table.deletedAt),
-  // UNIQUE constraint on (user_id, name) is handled at database level
-]);
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  colorHex: text("color"), // DB column "color"
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ============================================================================
 // 4. EXPENSES
@@ -137,14 +136,16 @@ export const expenses = pgTable("expenses", {
 // ============================================================================
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /** Project owner (profiles.id), including rows created by WhatsApp for that project */
   userId: uuid("user_id").references(() => profiles.id, { onDelete: 'cascade' }).notNull(),
   projectId: uuid("project_id").references(() => projects.id, { onDelete: 'cascade' }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
-  status: varchar("status", { length: 20 }).notNull().default('pending'), // 'pending', 'in_progress', 'completed', 'cancelled'
-  priority: varchar("priority", { length: 10 }).default('medium'), // 'low', 'medium', 'high'
+  status: varchar("status", { length: 20 }).notNull().default('pending'), // pending|in_progress|completed|todo|done|cancelled (CHECK in DB)
+  priority: varchar("priority", { length: 10 }).notNull().default('medium'),
   dueDate: date("due_date"),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  source: varchar("source", { length: 20 }).notNull().default('manual'), // whatsapp|manual|dashboard
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -224,6 +225,7 @@ export const vendors = pgTable("vendors", {
   name: text("name").notNull(),
   category: text("category"),
   totalSpent: decimal("total_spent", { precision: 15, scale: 2 }).default('0'),
+  totalTransactions: integer("total_transactions").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => [index("idx_vendors_project_id").on(table.projectId)]);
 
@@ -254,6 +256,7 @@ export const issues = pgTable("issues", {
   status: varchar("status", { length: 20 }).notNull().default('open'),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
 }, (table) => [
   index("idx_issues_project_id").on(table.projectId),
   index("idx_issues_status").on(table.status),
@@ -289,7 +292,6 @@ export const profilesRelations = relations(profiles, ({ one, many }) => ({
   projects: many(projects),
   expenses: many(expenses),
   tasks: many(tasks),
-  expenseCategories: many(expenseCategories),
   images: many(images),
   whatsappMessages: many(whatsappMessages),
   aiUsageLogs: many(aiUsageLog),
@@ -305,11 +307,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   images: many(images),
 }));
 
-export const expenseCategoriesRelations = relations(expenseCategories, ({ one, many }) => ({
-  user: one(profiles, {
-    fields: [expenseCategories.userId],
-    references: [profiles.id],
-  }),
+export const expenseCategoriesRelations = relations(expenseCategories, ({ many }) => ({
   expenses: many(expenses),
 }));
 
@@ -416,7 +414,6 @@ export const insertProjectSchema = createInsertSchema(projects, {
 export const insertExpenseCategorySchema = createInsertSchema(expenseCategories).omit({
   id: true,
   createdAt: true,
-  deletedAt: true,
 });
 
 // Expense

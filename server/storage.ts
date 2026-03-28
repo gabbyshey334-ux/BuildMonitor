@@ -51,7 +51,7 @@ import {
   type InsertWhatsappMessage,
 } from "../shared/schema.js";
 import { db } from "./db.js";
-import { eq, desc, and, sum, sql } from "drizzle-orm";
+import { eq, desc, and, sum, sql, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (required for Replit Auth)
@@ -270,7 +270,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(tasks)
-      .where(eq(tasks.projectId, projectId))
+      .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))
       .orderBy(desc(tasks.createdAt));
   }
 
@@ -294,7 +294,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteTask(id: string): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+    await db
+      .update(tasks)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(eq(tasks.id, id));
   }
 
   // Update operations

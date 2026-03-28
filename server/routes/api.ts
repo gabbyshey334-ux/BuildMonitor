@@ -7,7 +7,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { eq, and, isNull, sql, desc, gte, lte } from 'drizzle-orm';
+import { eq, and, or, isNull, sql, desc, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { db } from '../db.js';
 import { supabase } from '../db.js';
@@ -1217,6 +1217,8 @@ router.post('/projects', requireAuth, async (req: Request, res: Response) => {
       name: name.trim(),
       description: description?.trim() || null,
       budgetAmount: parsedBudgetAmount,
+      spentAmount: '0',
+      currency: 'UGX',
       status: normalizedStatus,
       channelType: normalizedChannelType,
       createdAt: new Date(),
@@ -1296,6 +1298,108 @@ async function getProjectForUser(projectId: string, userId: string) {
   return project ?? null;
 }
 
+function parseActivityEntriesFromRow(raw: unknown): Record<string, unknown>[] {
+  if (Array.isArray(raw)) return [...raw] as Record<string, unknown>[];
+  if (typeof raw === 'string') {
+    try {
+      const p = JSON.parse(raw);
+      return Array.isArray(p) ? (p as Record<string, unknown>[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function heatmapEntryCountForLog(log: {
+  activityEntries?: unknown;
+  notes?: string | null;
+  workerCount?: number | null;
+}): number {
+  const entries = parseActivityEntriesFromRow(log.activityEntries);
+  if (entries.length > 0) return entries.length;
+  if (log.notes?.trim()) return 1;
+  if (log.workerCount != null && log.workerCount > 0) return 1;
+  return 0;
+}
+
+function normalizeActivityTypeLabel(t: unknown): string {
+  const s = String(t ?? 'other').trim().toLowerCase();
+  if (['delivery', 'progress', 'photo', 'labor', 'expense', 'other'].includes(s)) return s;
+  const raw = String(t ?? '');
+  if (/milestone|complete|built|poured|installed/i.test(raw)) return 'progress';
+  if (/payment|expense|cost|ugx/i.test(raw)) return 'expense';
+  if (/photo|image|picture/i.test(raw)) return 'photo';
+  if (/deliver|truck|shipment/i.test(raw)) return 'delivery';
+  if (/worker|labor|hardhat/i.test(raw)) return 'labor';
+  if (s === 'entry') return 'other';
+  return 'other';
+}
+
+function toStoredActivityEntry(e: Record<string, unknown>, defaultSource: string): Record<string, unknown> {
+  const src =
+    e.source === 'whatsapp' ? 'whatsapp' : e.source === 'dashboard' ? 'dashboard' : defaultSource;
+  let amount: number | null = null;
+  if (e.amount != null && e.amount !== '') {
+    const n = typeof e.amount === 'number' ? e.amount : parseFloat(String(e.amount).replace(/,/g, ''));
+    amount = Number.isFinite(n) ? n : null;
+  }
+  return {
+    log_time: e.log_time != null ? String(e.log_time) : '12:00',
+    activity_type: normalizeActivityTypeLabel(e.activity_type),
+    description: e.description != null ? String(e.description) : '',
+    amount,
+    photo_urls: Array.isArray(e.photo_urls) ? e.photo_urls : [],
+    worker_count:
+      e.worker_count != null && String(e.worker_count).trim() !== ''
+        ? parseInt(String(e.worker_count), 10)
+        : null,
+    author: e.author != null ? String(e.author) : null,
+    source: src,
+  };
+}
+
+function mapDailyLogRowToClient(l: typeof dailyLogs.$inferSelect) {
+  const rawEntries = parseActivityEntriesFromRow(l.activityEntries);
+  const activity_entries = rawEntries.map((e, i) => ({
+    id: typeof e.id === 'number' ? e.id : i + 1,
+    log_time: String(e.log_time ?? '12:00'),
+    activity_type: normalizeActivityTypeLabel(e.activity_type),
+    description: String(e.description ?? ''),
+    amount: e.amount != null && e.amount !== '' ? Number(e.amount) : null,
+    photo_urls: Array.isArray(e.photo_urls)
+      ? (e.photo_urls as string[])
+      : e.photo_urls
+        ? [String(e.photo_urls)]
+        : [],
+    worker_count: e.worker_count != null ? Number(e.worker_count) : null,
+    author: e.author != null ? String(e.author) : null,
+    source:
+      e.source === 'whatsapp'
+        ? 'whatsapp'
+        : e.source === 'dashboard'
+          ? 'dashboard'
+          : ((e.source as string) || null),
+  }));
+  const photo_urls = Array.isArray(l.photoUrls)
+    ? (l.photoUrls as string[])
+    : l.photoUrls
+      ? [String(l.photoUrls)]
+      : [];
+  return {
+    id: l.id,
+    log_date: l.logDate,
+    worker_count: l.workerCount,
+    notes: l.notes,
+    milestones: l.milestones,
+    milestone_count: l.milestoneCount,
+    weather_condition: l.weatherCondition,
+    photo_urls,
+    activity_entries,
+    created_at: l.createdAt ? new Date(l.createdAt).toISOString() : null,
+  };
+}
+
 /**
  * GET /api/projects/:projectId/summary
  * Returns everything the dashboard needs in one call.
@@ -1315,6 +1419,7 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
 
+    const now = new Date();
     const totalBudget = parseFloat(project.budgetAmount || '0');
 
     // Expenses: total spent, recent 5, by category
@@ -1437,17 +1542,23 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
       weather_condition: l.weatherCondition,
     }));
 
-    // Tasks for progress, issues, milestones
+    // Tasks for progress, issues, milestones (scoped by project; user_id is project owner profile id)
     const allTasks = await db
       .select()
       .from(tasks)
-      .where(and(eq(tasks.projectId, projectId), eq(tasks.userId, userId), isNull(tasks.deletedAt)));
+      .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)));
     const totalTasks = allTasks.length;
-    const completedTasks = allTasks.filter((t) => t.status === 'completed').length;
+    const completedTasks = allTasks.filter((t) =>
+      t.status === 'completed' || t.status === 'done'
+    ).length;
     const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-    const now = new Date();
+    const isOpenTask = (s: string) =>
+      s === 'pending' || s === 'in_progress' || s === 'todo';
     const delayedTasks = allTasks.filter(
-      (t) => t.dueDate && t.status !== 'completed' && new Date(t.dueDate) < now
+      (t) =>
+        t.dueDate &&
+        !['completed', 'done'].includes(t.status) &&
+        new Date(t.dueDate) < now
     );
     let daysDelayed = 0;
     if (delayedTasks.length > 0) {
@@ -1458,9 +1569,9 @@ router.get('/projects/:projectId/summary', requireAuth, async (req: Request, res
         daysDelayed = Math.floor((now.getTime() - new Date(mostDelayed.dueDate).getTime()) / (24 * 60 * 60 * 1000));
       }
     }
-    const openIssuesCount = allTasks.filter((t) => t.status === 'pending' || t.status === 'in_progress').length;
+    const openIssuesCount = allTasks.filter((t) => isOpenTask(t.status)).length;
     const criticalCount = allTasks.filter(
-      (t) => (t.status === 'pending' || t.status === 'in_progress') && t.priority === 'high'
+      (t) => isOpenTask(t.status) && t.priority === 'high'
     ).length;
     const overdueCount = delayedTasks.length;
     const criticalOverdue = delayedTasks.filter((t) => t.priority === 'high').length;
@@ -1840,7 +1951,7 @@ router.get('/projects/:projectId/expenses', requireAuth, async (req: Request, re
       const [catRow] = await db
         .select({ id: expenseCategories.id })
         .from(expenseCategories)
-        .where(and(eq(expenseCategories.userId, userId), eq(expenseCategories.name, category)))
+        .where(eq(expenseCategories.name, category))
         .limit(1);
       if (catRow) conditions.push(eq(expenses.categoryId, catRow.id));
     }
@@ -2014,11 +2125,18 @@ router.get('/projects/:projectId/daily', requireAuth, async (req: Request, res: 
       const d = (l.logDate || '').toString().substring(0, 10);
       if (d) logByDate[d] = l;
     }
+    const [distinctDaysRow] = await db
+      .select({ n: sql<number>`cast(count(distinct ${dailyLogs.logDate}) as int)` })
+      .from(dailyLogs)
+      .where(eq(dailyLogs.projectId, projectId));
+    const totalActiveDaysAllTime = distinctDaysRow?.n ?? 0;
+
     const heatmap = last60Dates.map((date) => {
       const log = logByDate[date];
       return {
         date,
         active: !!log,
+        entryCount: log ? heatmapEntryCountForLog(log) : 0,
         workerCount: log ? (log.workerCount ?? 0) : 0,
         hasNotes: !!(log && log.notes),
       };
@@ -2055,7 +2173,7 @@ router.get('/projects/:projectId/daily', requireAuth, async (req: Request, res: 
       else break;
     }
     const stats = {
-      totalActiveDays: logs.length,
+      totalActiveDays: totalActiveDaysAllTime,
       currentStreak,
       avgWorkerCount: Math.round(avgWorkerCount * 10) / 10,
       totalPhotos,
@@ -2073,6 +2191,112 @@ router.get('/projects/:projectId/daily', requireAuth, async (req: Request, res: 
   } catch (error) {
     console.error('[Project Daily] Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily logs' });
+  }
+});
+
+/**
+ * GET /api/daily-logs?project_id=&date=
+ * Single-day log for Daily Accountability page (matches Vercel api/index.js shape).
+ */
+router.get('/daily-logs', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const projectId = req.query.project_id as string | undefined;
+    const dateStr = String(req.query.date || new Date().toISOString().split('T')[0]).substring(0, 10);
+    if (!projectId) {
+      return res.status(400).json({ success: false, error: 'project_id is required' });
+    }
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const [log] = await db
+      .select()
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.projectId, projectId), eq(dailyLogs.logDate, dateStr)))
+      .limit(1);
+    res.json({ success: true, data: log ? mapDailyLogRowToClient(log) : null });
+  } catch (error) {
+    console.error('[GET /api/daily-logs]', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch daily log' });
+  }
+});
+
+/**
+ * POST /api/daily-logs
+ * Append activity entries and/or update worker_count, notes (dashboard + Daily page).
+ */
+router.post('/daily-logs', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    const { project_id, log_date, worker_count, entries, entry, milestones, milestone_count, notes } =
+      req.body || {};
+    const projectId = project_id as string | undefined;
+    if (!projectId || typeof projectId !== 'string') {
+      return res.status(400).json({ success: false, error: 'project_id is required' });
+    }
+    const project = await getProjectForUser(projectId, userId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    const today = String(log_date || new Date().toISOString().split('T')[0]).substring(0, 10);
+
+    const newPieces: Record<string, unknown>[] = [];
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      newPieces.push(toStoredActivityEntry(entry as Record<string, unknown>, 'dashboard'));
+    } else if (Array.isArray(entries)) {
+      for (const e of entries) {
+        if (e && typeof e === 'object') {
+          newPieces.push(toStoredActivityEntry(e as Record<string, unknown>, 'dashboard'));
+        }
+      }
+    }
+
+    const existing = await db
+      .select()
+      .from(dailyLogs)
+      .where(and(eq(dailyLogs.projectId, projectId), eq(dailyLogs.logDate, today)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      const row = existing[0];
+      const prev = parseActivityEntriesFromRow(row.activityEntries);
+      const merged = [...prev, ...newPieces];
+      const setVals: Record<string, unknown> = { activityEntries: merged };
+      if (worker_count !== undefined && worker_count !== null) {
+        setVals.workerCount = Number(worker_count);
+      }
+      if (milestones !== undefined) {
+        setVals.milestones = milestones == null ? null : String(milestones).trim();
+      }
+      if (milestone_count !== undefined) {
+        const mc = parseInt(String(milestone_count), 10);
+        setVals.milestoneCount = Number.isFinite(mc) ? mc : 0;
+      }
+      if (notes !== undefined) {
+        setVals.notes = notes == null ? null : String(notes).trim();
+      }
+      await db.update(dailyLogs).set(setVals as typeof dailyLogs.$inferSelect).where(eq(dailyLogs.id, row.id));
+      const [updated] = await db.select().from(dailyLogs).where(eq(dailyLogs.id, row.id)).limit(1);
+      return res.status(200).json({ success: true, data: updated ? mapDailyLogRowToClient(updated) : null });
+    }
+
+    const [inserted] = await db
+      .insert(dailyLogs)
+      .values({
+        projectId,
+        logDate: today,
+        workerCount: worker_count != null ? Number(worker_count) : null,
+        notes: notes != null ? String(notes).trim() : null,
+        milestones: milestones != null ? String(milestones).trim() : null,
+        milestoneCount: milestone_count != null ? parseInt(String(milestone_count), 10) || 0 : 0,
+        activityEntries: newPieces,
+      } as typeof dailyLogs.$inferSelect)
+      .returning();
+    return res.status(201).json({ success: true, data: inserted ? mapDailyLogRowToClient(inserted) : null });
+  } catch (error) {
+    console.error('[POST /api/daily-logs]', error);
+    res.status(500).json({ success: false, error: 'Failed to save daily log' });
   }
 });
 
@@ -2324,7 +2548,7 @@ router.patch('/projects/:projectId/settings', requireAuth, async (req: Request, 
       if (!isNaN(b) && b >= 0) projectUpdates.budgetAmount = b.toFixed(2);
     }
     if (status !== undefined && ['active', 'completed', 'paused', 'on_hold'].includes(String(status))) {
-      projectUpdates.status = status === 'on_hold' ? 'paused' : status;
+      projectUpdates.status = String(status);
     }
     if (channel_type !== undefined && ['direct', 'group'].includes(String(channel_type))) {
       projectUpdates.channelType = channel_type;
@@ -2544,7 +2768,7 @@ router.get('/dashboard/summary', requireAuth, async (req: Request, res: Response
 
     const expenseCount = parseInt(expenseCountResult[0].count.toString());
 
-    // Count pending/in-progress tasks
+    // Count pending/in-progress tasks (WhatsApp-created tasks use project owner user_id)
     const taskCountResult = await db
       .select({
         count: sql<number>`COUNT(*)`,
@@ -2552,9 +2776,8 @@ router.get('/dashboard/summary', requireAuth, async (req: Request, res: Response
       .from(tasks)
       .where(
         and(
-          eq(tasks.userId, userId),
           eq(tasks.projectId, project.id),
-          sql`${tasks.status} IN ('pending', 'in_progress')`,
+          sql`${tasks.status} IN ('pending', 'in_progress', 'todo')`,
           isNull(tasks.deletedAt)
         )
       );
@@ -2571,7 +2794,13 @@ router.get('/dashboard/summary', requireAuth, async (req: Request, res: Response
     const completedTasksResult = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(tasks)
-      .where(and(eq(tasks.projectId, project.id), eq(tasks.status, 'completed'), isNull(tasks.deletedAt)));
+      .where(
+        and(
+          eq(tasks.projectId, project.id),
+          or(eq(tasks.status, 'completed'), eq(tasks.status, 'done')),
+          isNull(tasks.deletedAt)
+        )
+      );
     const completedTasks = parseInt(completedTasksResult[0].count.toString());
 
     const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -3674,7 +3903,6 @@ router.get('/categories', requireAuth, async (req: Request, res: Response) => {
     const categories = await db
       .select()
       .from(expenseCategories)
-      .where(and(eq(expenseCategories.userId, userId), isNull(expenseCategories.deletedAt)))
       .orderBy(expenseCategories.name);
 
     res.json({
@@ -4100,4 +4328,3 @@ router.get('/debug/session', async (req: Request, res: Response) => {
 // ============================================================================
 
 export default router;
-

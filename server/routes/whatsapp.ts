@@ -1189,14 +1189,7 @@ async function findMatchingCategory(userId: string, description: string): Promis
   try {
     const lowerDesc = description.toLowerCase();
     
-    const userCategories = await db.select()
-      .from(expenseCategories)
-      .where(
-        and(
-          eq(expenseCategories.userId, userId),
-          isNull(expenseCategories.deletedAt)
-        )
-      );
+    const userCategories = await db.select().from(expenseCategories);
     
     const keywords: Record<string, string[]> = {
       'Materials': ['cement', 'sand', 'bricks', 'steel', 'iron', 'timber', 'wood', 'stone', 'gravel', 'aggregate'],

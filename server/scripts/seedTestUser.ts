@@ -135,6 +135,8 @@ async function seedTestUser() {
         name: 'My Construction Project',
         description: 'Sample project with demo data',
         budgetAmount: '10000000', // 10M UGX
+        spentAmount: '0',
+        currency: 'UGX',
         status: 'active',
         createdAt: now,
         updatedAt: now,
@@ -146,47 +148,37 @@ async function seedTestUser() {
       console.log(`   Budget: UGX ${Number(project.budgetAmount).toLocaleString()}\n`);
     }
 
-    // 3. Check if categories exist
-    console.log('3️⃣  Checking for existing expense categories...');
-    const existingCategories = await db
-      .select()
-      .from(expenseCategories)
-      .where(eq(expenseCategories.userId, userId));
-
-    let categoryIds: Record<string, string> = {};
-
-    if (existingCategories.length > 0) {
-      console.log(`   ✅ ${existingCategories.length} categories already exist`);
-      existingCategories.forEach(cat => {
-        categoryIds[cat.name] = cat.id;
-        console.log(`      - ${cat.name} (${cat.colorHex})`);
-      });
-      console.log('');
-    } else {
-      // Create default categories with brand colors
-      console.log('   Creating expense categories...');
-      const categories = [
-        { name: 'Materials', colorHex: '#93C54E' },      // Fresh Fern
-        { name: 'Labor', colorHex: '#218598' },          // Ocean Pine
-        { name: 'Equipment', colorHex: '#B4D68C' },       // Moss Green
-        { name: 'Transport', colorHex: '#6EC1C0' },      // Aqua Breeze
-        { name: 'Miscellaneous', colorHex: '#2F3332' },  // Graphite
-      ];
-
-      for (const category of categories) {
-        const [cat] = await db.insert(expenseCategories).values({
+    // 3. Global expense categories (Supabase: unique by name)
+    console.log('3️⃣  Ensuring expense categories exist...');
+    const defaultCatList = [
+      { name: 'Materials', colorHex: '#93C54E' },
+      { name: 'Labor', colorHex: '#218598' },
+      { name: 'Equipment', colorHex: '#B4D68C' },
+      { name: 'Transport', colorHex: '#6EC1C0' },
+      { name: 'Miscellaneous', colorHex: '#2F3332' },
+    ];
+    for (const category of defaultCatList) {
+      const [existing] = await db
+        .select()
+        .from(expenseCategories)
+        .where(eq(expenseCategories.name, category.name))
+        .limit(1);
+      if (!existing) {
+        await db.insert(expenseCategories).values({
           id: uuidv4(),
-          userId: userId,
           name: category.name,
           colorHex: category.colorHex,
           createdAt: new Date(),
-        }).returning();
-        
-        categoryIds[cat.name] = cat.id;
-        console.log(`   ✅ Created category: ${cat.name} (${cat.colorHex})`);
+        });
+        console.log(`   ✅ Created category: ${category.name}`);
       }
-      console.log('');
     }
+    const allCategories = await db.select().from(expenseCategories);
+    const categoryIds: Record<string, string> = Object.fromEntries(
+      allCategories.map((c) => [c.name, c.id])
+    );
+    allCategories.forEach((cat) => console.log(`      - ${cat.name} (${cat.colorHex})`));
+    console.log('');
 
     // 4. Check if expenses exist
     console.log('4️⃣  Checking for existing sample expenses...');

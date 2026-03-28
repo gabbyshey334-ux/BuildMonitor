@@ -1006,8 +1006,51 @@ app.patch('/api/issues/:id', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/daily-logs — Daily site log: { project_id, log_date, worker_count, entries, milestones, milestone_count, notes }
-// Upserts on (project_id, log_date). Journal fields: milestones, milestone_count, notes.
+// GET /api/daily-logs — Fetch daily log for a specific project and date
+// Query params: project_id (required), date (YYYY-MM-DD, optional - defaults to today)
+app.get('/api/daily-logs', requireAuth, async (req, res) => {
+  try {
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    
+    const projectId = req.query.project_id;
+    const date = req.query.date || new Date().toISOString().split('T')[0];
+    
+    if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
+    
+    // Verify project belongs to user
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    
+    // Fetch the daily log for this date
+    const { data: logRow, error } = await supabase
+      .from('daily_logs')
+      .select('id, log_date, worker_count, notes, milestones, milestone_count, activity_entries, photo_urls, created_at')
+      .eq('project_id', projectId)
+      .eq('log_date', date)
+      .maybeSingle();
+    
+    if (error) {
+      console.error('[GET /api/daily-logs]', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+    
+    return res.json({ success: true, data: logRow || null });
+  } catch (err) {
+    console.error('[GET /api/daily-logs]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch daily log' });
+  }
+});
+
+// POST /api/daily-logs — Daily site log: { project_id, log_date, entry } or { project_id, log_date, entries, ... }
+// Supports both single entry append and bulk entries replacement
 app.post('/api/daily-logs', requireAuth, async (req, res) => {
   try {
     const userId = req.userId || req.user?.id;
@@ -1019,50 +1062,95 @@ app.post('/api/daily-logs', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { project_id, log_date, worker_count, entries, milestones, milestone_count, notes } = req.body;
+    const { project_id, log_date, worker_count, entries, entry, milestones, milestone_count, notes } = req.body;
     const projectId = project_id;
     if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
     const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
     if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
     const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    const activityEntries = Array.isArray(entries) ? entries.map(e => ({
-      log_time: e.log_time || null,
-      activity_type: e.activity_type || 'Other',
-      description: e.description || '',
-      amount: e.amount != null ? parseFloat(e.amount) : null,
-    })) : [];
+    
+    // Check if we have a single entry to append or multiple entries
+    let newActivityEntries = [];
+    if (entry && typeof entry === 'object') {
+      // Single entry append mode
+      newActivityEntries = [{
+        log_time: entry.log_time || new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase(),
+        activity_type: entry.activity_type || 'Entry',
+        description: entry.description || '',
+        amount: entry.amount != null ? parseFloat(entry.amount) : null,
+        photo_urls: entry.photo_urls || [],
+        worker_count: entry.worker_count != null ? parseInt(entry.worker_count) : null,
+        author: entry.author || null,
+        source: entry.source || 'dashboard',
+      }];
+    } else if (Array.isArray(entries)) {
+      // Bulk entries mode
+      newActivityEntries = entries.map(e => ({
+        log_time: e.log_time || null,
+        activity_type: e.activity_type || 'Other',
+        description: e.description || '',
+        amount: e.amount != null ? parseFloat(e.amount) : null,
+        photo_urls: e.photo_urls || [],
+        worker_count: e.worker_count != null ? parseInt(e.worker_count) : null,
+        author: e.author || null,
+        source: e.source || 'dashboard',
+      }));
+    }
+    
     const { data: existing } = await supabase
       .from('daily_logs')
       .select('id, notes, activity_entries, worker_count')
       .eq('project_id', projectId)
       .eq('log_date', today)
       .maybeSingle();
+    
     if (existing) {
       const updateData = {
         worker_count: worker_count != null ? worker_count : existing.worker_count,
         updated_at: new Date().toISOString(),
       };
-      if (activityEntries.length > 0) updateData.activity_entries = activityEntries;
+      
+      // Append new entries to existing entries
+      const existingEntries = existing.activity_entries || [];
+      if (newActivityEntries.length > 0) {
+        updateData.activity_entries = [...existingEntries, ...newActivityEntries];
+      }
+      
       if (milestones !== undefined) updateData.milestones = milestones == null ? null : String(milestones).trim();
       if (milestone_count !== undefined) {
         const mc = parseInt(String(milestone_count), 10);
         updateData.milestone_count = Number.isFinite(mc) ? mc : 0;
       }
       if (notes !== undefined) updateData.notes = notes == null ? '' : String(notes).trim();
-      await supabase.from('daily_logs').update(updateData).eq('id', existing.id);
+      
+      const { data: updated, error: updateError } = await supabase
+        .from('daily_logs')
+        .update(updateData)
+        .eq('id', existing.id)
+        .select()
+        .single();
+        
+      if (updateError) throw updateError;
+      return res.status(200).json({ success: true, data: updated });
     } else {
-      await supabase.from('daily_logs').insert({
-        project_id: projectId,
-        log_date: today,
-        worker_count: worker_count != null ? worker_count : null,
-        notes: notes != null ? String(notes).trim() : '',
-        milestones: milestones != null ? String(milestones).trim() : null,
-        milestone_count: milestone_count != null ? (parseInt(String(milestone_count), 10) || 0) : 0,
-        activity_entries: activityEntries.length > 0 ? activityEntries : [],
-        created_at: new Date().toISOString(),
-      });
+      const { data: inserted, error: insertError } = await supabase
+        .from('daily_logs')
+        .insert({
+          project_id: projectId,
+          log_date: today,
+          worker_count: worker_count != null ? worker_count : null,
+          notes: notes != null ? String(notes).trim() : '',
+          milestones: milestones != null ? String(milestones).trim() : null,
+          milestone_count: milestone_count != null ? (parseInt(String(milestone_count), 10) || 0) : 0,
+          activity_entries: newActivityEntries.length > 0 ? newActivityEntries : [],
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+        
+      if (insertError) throw insertError;
+      return res.status(201).json({ success: true, data: inserted });
     }
-    return res.status(201).json({ success: true });
   } catch (err) {
     console.error('[POST /api/daily-logs]', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to save daily log' });
@@ -1504,9 +1592,10 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
+      // Fetch all logs for this project with activity_entries
       const { data: logRows, error } = await supabase
         .from('daily_logs')
-        .select('id, log_date, worker_count, notes, weather_condition, photo_urls, created_at')
+        .select('id, log_date, worker_count, notes, milestones, milestone_count, weather_condition, photo_urls, activity_entries, created_at')
         .eq('project_id', projectId)
         .order('log_date', { ascending: false })
         .limit(60);
@@ -1520,6 +1609,7 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
       const todayStr = new Date().toISOString().split('T')[0];
       const todayLog = logs.find((l) => (l.log_date || '').toString().substring(0, 10) === todayStr);
 
+      // Generate last 60 days for heatmap
       const last60Dates = [];
       for (let i = 59; i >= 0; i--) {
         const d = new Date();
@@ -1533,16 +1623,21 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
         if (d) logByDate[d] = l;
       }
 
+      // Heatmap with entry counts for color intensity
       const heatmap = last60Dates.map((date) => {
         const log = logByDate[date];
+        const entries = log?.activity_entries || [];
+        const entryCount = Array.isArray(entries) ? entries.length : 0;
         return {
           date,
           active: !!log,
+          entryCount,
           workerCount: log ? (log.worker_count || 0) : 0,
           hasNotes: !!(log && log.notes),
         };
       });
 
+      // Recent logs with entries
       const recentLogs = logs.slice(0, 10).map((l) => {
         const raw = l.photo_urls;
         const photoEntries = Array.isArray(raw)
@@ -1554,44 +1649,88 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
           log_date: l.log_date,
           worker_count: l.worker_count,
           notes: l.notes,
+          milestones: l.milestones,
+          milestone_count: l.milestone_count,
           weather_condition: l.weather_condition,
           photo_urls: photoUrls,
           photo_entries: photoEntries,
+          activity_entries: l.activity_entries || [],
           created_at: l.created_at,
         };
       });
 
-      const totalPhotos = logs.reduce((sum, l) => {
+      // Calculate total photos from both photo_urls and activity_entries
+      let totalPhotos = 0;
+      let totalPhotoEntries = 0;
+      logs.forEach((l) => {
+        // Photos in photo_urls
         const urls = Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []);
-        return sum + urls.length;
-      }, 0);
+        totalPhotos += urls.length;
+        
+        // Photos in activity_entries
+        const entries = l.activity_entries || [];
+        if (Array.isArray(entries)) {
+          entries.forEach((e) => {
+            if (e.activity_type === 'photo' || e.photo_urls) {
+              totalPhotoEntries++;
+            }
+          });
+        }
+      });
 
-      const workerCounts = logs.filter((l) => l.worker_count != null && l.worker_count > 0).map((l) => l.worker_count);
+      // Calculate avg workers from both worker_count field and labor entries
+      const workerCounts = [];
+      logs.forEach((l) => {
+        // Direct worker_count
+        if (l.worker_count != null && l.worker_count > 0) {
+          workerCounts.push(l.worker_count);
+        }
+        // Workers from activity entries
+        const entries = l.activity_entries || [];
+        if (Array.isArray(entries)) {
+          entries.forEach((e) => {
+            if (e.activity_type === 'labor' && e.worker_count) {
+              workerCounts.push(e.worker_count);
+            }
+          });
+        }
+      });
       const avgWorkerCount = workerCounts.length > 0 ? workerCounts.reduce((a, b) => a + b, 0) / workerCounts.length : 0;
 
-      const startOfWeek = new Date();
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+      // This week active (Mon-Sun)
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1)); // Monday
       startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6); // Sunday
+      
       const thisWeekActive = logs.filter((l) => {
         const d = new Date(l.log_date + 'T12:00:00');
-        return d >= startOfWeek;
+        return d >= startOfWeek && d <= endOfWeek;
       }).length;
 
+      // Current streak (consecutive days ending today)
       let currentStreak = 0;
       const sortedDates = [...new Set(logs.map((l) => (l.log_date || '').toString().substring(0, 10)))].sort().reverse();
-      for (let i = 0; i < sortedDates.length; i++) {
-        const expected = new Date();
-        expected.setDate(expected.getDate() - i);
-        const expectedStr = expected.toISOString().split('T')[0];
-        if (sortedDates[i] === expectedStr) currentStreak++;
-        else break;
+      const hasEntryToday = sortedDates.includes(todayStr);
+      
+      if (hasEntryToday || sortedDates.length > 0) {
+        for (let i = 0; i < (hasEntryToday ? sortedDates.length : 0); i++) {
+          const expected = new Date();
+          expected.setDate(expected.getDate() - i);
+          const expectedStr = expected.toISOString().split('T')[0];
+          if (sortedDates[i] === expectedStr) currentStreak++;
+          else break;
+        }
       }
 
+      // Stats
       const stats = {
         totalActiveDays: logs.length,
         currentStreak,
         avgWorkerCount: Math.round(avgWorkerCount * 10) / 10,
-        totalPhotos,
+        totalPhotos: totalPhotos + totalPhotoEntries,
         thisWeekActive,
       };
 
