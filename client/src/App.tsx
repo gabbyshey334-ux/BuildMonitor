@@ -28,6 +28,8 @@ import DailyPage from "@/pages/DailyPage";
 import TrendsPage from "@/pages/TrendsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import HelpPage from "@/pages/HelpPage";
+import { PageTransition } from "@/components/animations/PageTransition";
+import { CommandPalette } from "@/components/ui/CommandPalette";
 
 function Redirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
@@ -145,6 +147,31 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  return (
+    <>
+      <Toaster />
+      <CommandPalette isOpen={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
+      <PageTransition>
+        <Router />
+      </PageTransition>
+    </>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -154,8 +181,7 @@ function App() {
             <AuthProvider>
               <ProjectProvider>
                 <TooltipProvider>
-                  <Toaster />
-                  <Router />
+                  <AppContent />
                 </TooltipProvider>
               </ProjectProvider>
             </AuthProvider>

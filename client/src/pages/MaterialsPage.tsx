@@ -33,6 +33,9 @@ import {
   formatMaterialDisplayName,
   normalizeMaterialStorageName,
 } from "@shared/materialNames";
+import { MaterialQuickAdd, QuickMaterial } from "@/components/MaterialQuickAdd";
+import { AnimatedNumber } from "@/components/animations/AnimatedNumber";
+import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations/PageTransition";
 
 function getDateKey(d: Date): string {
   return d.toISOString().split("T")[0];
@@ -325,7 +328,9 @@ export default function MaterialsPage() {
               </div>
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Days logged</span>
             </div>
-            <p className="text-3xl font-bold">{stats?.totalDaysWithMaterials ?? 0}</p>
+            <p className="text-3xl font-bold">
+              <AnimatedNumber value={stats?.totalDaysWithMaterials ?? 0} duration={1.5} />
+            </p>
             <p className="text-sm text-muted-foreground">distinct days with material moves</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden">
@@ -338,7 +343,9 @@ export default function MaterialsPage() {
               </div>
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Streak</span>
             </div>
-            <p className="text-3xl font-bold relative z-10">{stats?.currentStreak ?? 0}</p>
+            <p className="text-3xl font-bold relative z-10">
+              <AnimatedNumber value={stats?.currentStreak ?? 0} duration={2} />
+            </p>
             <p className="text-sm text-muted-foreground">consecutive days (UTC)</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-6">
@@ -348,7 +355,9 @@ export default function MaterialsPage() {
               </div>
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stock SKUs</span>
             </div>
-            <p className="text-3xl font-bold">{groupedStock.length}</p>
+            <p className="text-3xl font-bold">
+              <AnimatedNumber value={groupedStock.length} duration={1.2} />
+            </p>
             <p className="text-sm text-muted-foreground">unique materials (grouped)</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-6">
@@ -632,6 +641,26 @@ export default function MaterialsPage() {
               >
                 + Add line
               </button>
+
+              {/* Quick Add Templates */}
+              <div className="border-t border-border/60 pt-4 mt-4">
+                <MaterialQuickAdd
+                  onSelect={(material: QuickMaterial, quantity: number, type: TxType) => {
+                    const newRow: LogRow = {
+                      id: Date.now(),
+                      name: material.name,
+                      quantity: String(quantity),
+                      unit: material.unit,
+                      transaction_type: type,
+                    };
+                    setRows((prev) => [...prev, newRow]);
+                    toast({
+                      title: `Added ${material.name} to log`,
+                      description: `${type === "purchase" ? "+" : "-"}${quantity} ${material.unit}`,
+                    });
+                  }}
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-2 mt-6">
