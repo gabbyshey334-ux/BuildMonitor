@@ -6,7 +6,7 @@ import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
-import {
+import { 
   Dialog,
   DialogContent,
   DialogHeader,
@@ -23,6 +23,7 @@ import {
   Plus,
   ChevronRight,
   Activity,
+  ChevronLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -110,12 +111,12 @@ const DESC_PREVIEW_LEN = 160;
 function activityTypeLabel(entry: TimelineEntry): string {
   const raw = String(entry.activity_type || 'other').toLowerCase();
   if (raw === 'expense' && entry.amount != null && Number(entry.amount) > 0) {
-    return 'Labour payment';
+    return 'Labour Payment';
   }
   const map: Record<string, string> = {
     delivery: 'Delivery',
-    progress: 'Task completion',
-    photo: 'Media upload',
+    progress: 'Task Completion',
+    photo: 'Inspection Photos',
     labor: 'Staffing',
     expense: 'Financials',
     other: 'Activity',
@@ -148,155 +149,177 @@ function DailyTimelineRow({
     ? `${entry.description.slice(0, DESC_PREVIEW_LEN).trim()}…`
     : entry.description;
 
+  // Determine if this is a labor entry with worker details
+  const isLaborEntry = entry.activity_type === 'labor' || entry.worker_count != null;
+  const isPaymentEntry = entry.activity_type === 'expense' || (entry.amount != null && Number(entry.amount) > 0);
+
   return (
     <>
       <div
         className={cn(
-          'flex gap-2 sm:gap-4',
-          !isLast && 'border-b border-border',
+          'flex gap-3',
+          !isLast && 'border-b border-border/50',
         )}
       >
-        <div className="w-14 sm:w-[72px] shrink-0 text-right pt-1">
-          <span className="text-xs sm:text-sm text-muted-foreground tabular-nums">
+      {/* Time column */}
+        <div className="w-16 shrink-0 text-right pt-2">
+          <span className="text-sm text-muted-foreground tabular-nums font-medium">
             {timeDisplay}
           </span>
-        </div>
+      </div>
 
-        <div className="flex flex-col items-center shrink-0 w-3 pt-1">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#00bcd4] ring-4 ring-background z-10 shrink-0" />
+        {/* Timeline connector */}
+        <div className="flex flex-col items-center shrink-0 w-4 pt-2">
+          <div className="w-3 h-3 rounded-full bg-[#00a8a8] ring-4 ring-background z-10 shrink-0" />
           {!isLast && (
-            <div className="w-0.5 flex-1 bg-[#00bcd4]/90 min-h-[48px] mt-1" />
-          )}
-        </div>
+            <div className="w-0.5 flex-1 bg-[#00a8a8]/60 min-h-[60px] mt-1" />
+        )}
+      </div>
 
-        <div className="flex-1 min-w-0 py-4 pr-1 sm:pr-3">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        {/* Content */}
+        <div className="flex-1 min-w-0 py-3 pr-2">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#00bcd4]">
+              {/* Activity Type Label */}
+              <p className="text-sm font-semibold text-[#00a8a8] mb-1">
                 {typeLabel}
               </p>
-              <p className="text-sm sm:text-base text-foreground mt-1 whitespace-pre-wrap">
+
+              {/* Description */}
+              <p className="text-sm text-foreground/90 leading-relaxed">
                 {longText ? descPreview : entry.description}
               </p>
-              {entry.amount != null &&
-                entry.activity_type === 'expense' &&
-                Number(entry.amount) > 0 && (
-                  <p className="text-[#00bcd4] font-bold text-base mt-1">
-                    UGX {Number(entry.amount).toLocaleString()}
-                  </p>
-                )}
-              {entry.worker_count != null &&
-                entry.activity_type === 'labor' &&
-                entry.worker_count > 0 && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {entry.worker_count} workers
-                  </p>
-                )}
+
+              {/* Payment Amount Display */}
+              {isPaymentEntry && entry.amount != null && Number(entry.amount) > 0 && (
+                <p className="text-[#00a8a8] font-bold text-lg mt-2">
+                  UGX {Number(entry.amount).toLocaleString()}
+              </p>
+            )}
+
+              {/* Worker Count Display */}
+              {isLaborEntry && entry.worker_count != null && entry.worker_count > 0 && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  <span className="font-medium text-foreground">{entry.worker_count} workers</span> logged for today
+              </p>
+            )}
+
+              {/* Author info */}
               {(entry.author || entry.source) && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  {entry.author && <span>{entry.author}</span>}
+                  {entry.author && <span className="font-medium">{entry.author}</span>}
                   {entry.author && entry.source && <span> · </span>}
                   {entry.source && (
                     <span>{sourceLabel(entry.source)}</span>
                   )}
                 </p>
               )}
-            </div>
+              </div>
 
-            <div className="flex items-center gap-2 shrink-0 self-start sm:self-start">
-              {hasPhotos && (
-                <button
-                  type="button"
-                  onClick={() => setGalleryOpen(true)}
-                  className="text-sm font-medium text-[#00bcd4] hover:text-[#00acc1] flex items-center gap-1 whitespace-nowrap"
-                >
-                  View all
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-              {longText && (
-                <button
-                  type="button"
-                  onClick={() => setTextOpen(true)}
-                  className="text-sm font-medium text-[#00bcd4] hover:text-[#00acc1] flex items-center gap-1 whitespace-nowrap"
-                >
-                  View all
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {hasPhotos && (
-            <div className="mt-4 flex flex-col sm:flex-row gap-4 sm:items-start">
+            {/* View All Button */}
+            {(hasPhotos || longText) && (
               <button
                 type="button"
-                onClick={() => setGalleryOpen(true)}
-                className="flex items-center gap-3 text-left shrink-0"
+                onClick={() => hasPhotos ? setGalleryOpen(true) : setTextOpen(true)}
+                className="shrink-0 px-4 py-2 rounded-md bg-[#00a8a8]/10 hover:bg-[#00a8a8]/20 text-[#00a8a8] text-sm font-medium flex items-center gap-1 transition-colors"
               >
+                View All
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Photo Gallery Preview */}
+          {hasPhotos && (
+            <div className="mt-4">
+              {/* Thumbnail row */}
+              <div className="flex items-center gap-2 mb-3">
                 <div className="flex -space-x-2">
                   {photos.slice(0, 3).map((photo, idx) => (
                     <img
                       key={idx}
                       src={photo}
                       alt=""
-                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover border-2 border-card"
+                      className="w-12 h-12 rounded-lg object-cover border-2 border-card shadow-sm"
                     />
                   ))}
                 </div>
-                <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => setGalleryOpen(true)}
+                  className="text-sm text-muted-foreground hover:text-[#00a8a8] flex items-center gap-0.5 transition-colors ml-2"
+                >
                   {photos.length} photos
                   <ChevronRight className="w-4 h-4" />
-                </span>
-              </button>
-              <div className="flex-1 flex gap-2 min-w-0">
+                </button>
+              </div>
+
+              {/* Large preview images */}
+              <div className="flex gap-3">
                 {photos[0] && (
                   <img
                     src={photos[0]}
                     alt=""
-                    className="flex-1 min-w-0 h-32 sm:h-36 rounded-lg object-cover border border-border"
+                    className="flex-1 h-36 rounded-xl object-cover border border-border/50 shadow-sm"
                   />
                 )}
                 {photos[1] && (
                   <img
                     src={photos[1]}
                     alt=""
-                    className="flex-1 min-w-0 h-32 sm:h-36 rounded-lg object-cover border border-border hidden sm:block"
+                    className="flex-1 h-36 rounded-xl object-cover border border-border/50 shadow-sm hidden sm:block"
                   />
                 )}
               </div>
-            </div>
-          )}
-        </div>
-      </div>
+              </div>
+            )}
 
+          {/* Payment Receipt Preview */}
+          {isPaymentEntry && photos.length > 0 && (
+            <div className="mt-4 flex gap-3">
+              {photos.slice(0, 2).map((photo, idx) => (
+                <div key={idx} className="flex-1 bg-white rounded-xl border border-border/50 overflow-hidden shadow-sm">
+                  <img
+                    src={photo}
+                    alt="Receipt"
+                    className="w-full h-32 object-cover"
+                  />
+          </div>
+              ))}
+        </div>
+          )}
+      </div>
+    </div>
+
+      {/* Photo Gallery Dialog */}
       <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-card">
           <DialogHeader>
-            <DialogTitle>Photos</DialogTitle>
+            <DialogTitle className="text-foreground">{typeLabel}</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-4">
             {photos.map((url, i) => (
               <a
                 key={i}
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block aspect-square rounded-lg overflow-hidden border border-border"
+                className="block aspect-square rounded-xl overflow-hidden border border-border hover:border-[#00a8a8]/50 transition-colors"
               >
-                <img src={url} alt="" className="w-full h-full object-cover" />
+                <img src={url} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" />
               </a>
             ))}
           </div>
         </DialogContent>
       </Dialog>
 
+      {/* Text Dialog */}
       <Dialog open={textOpen} onOpenChange={setTextOpen}>
-        <DialogContent>
+        <DialogContent className="bg-card">
           <DialogHeader>
-            <DialogTitle>{typeLabel}</DialogTitle>
+            <DialogTitle className="text-foreground">{typeLabel}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-foreground whitespace-pre-wrap pt-2">
+          <p className="text-sm text-foreground/90 whitespace-pre-wrap pt-4 leading-relaxed">
             {entry.description}
           </p>
         </DialogContent>
@@ -312,27 +335,27 @@ function TimelineSkeleton() {
         <div
           key={i}
           className={cn(
-            'flex gap-2 sm:gap-4',
-            idx < 2 && 'border-b border-border',
+            'flex gap-3',
+            idx < 2 && 'border-b border-border/50',
           )}
         >
-          <div className="w-14 sm:w-[72px] shrink-0 pt-2">
+          <div className="w-16 shrink-0 pt-2">
             <div className="h-4 bg-muted rounded w-full" />
           </div>
-          <div className="flex flex-col items-center shrink-0 w-3 pt-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-muted" />
+          <div className="flex flex-col items-center shrink-0 w-4 pt-2">
+            <div className="w-3 h-3 rounded-full bg-muted" />
             {idx < 2 && (
-              <div className="w-0.5 flex-1 bg-muted min-h-[48px] mt-1" />
+              <div className="w-0.5 flex-1 bg-muted min-h-[60px] mt-1" />
             )}
           </div>
-          <div className="flex-1 py-4 space-y-2">
-            <div className="h-3 bg-muted rounded w-24" />
+          <div className="flex-1 py-3 space-y-3">
+            <div className="h-4 bg-muted rounded w-32" />
             <div className="h-4 bg-muted rounded w-full max-w-md" />
-            <div className="h-4 bg-muted rounded w-2/3" />
-          </div>
-        </div>
+                <div className="h-4 bg-muted rounded w-3/4" />
+              </div>
+            </div>
       ))}
-    </div>
+          </div>
   );
 }
 
@@ -540,10 +563,10 @@ export default function DailyPage() {
         }
 
         await apiRequest('POST', '/api/daily-logs', {
-          project_id: projectId,
-          log_date: selectedDate,
-          entry: newEntry,
-        });
+            project_id: projectId,
+            log_date: selectedDate,
+            entry: newEntry,
+      });
       }
 
       setShowDailyModal(false);
@@ -555,7 +578,7 @@ export default function DailyPage() {
       await refetchStats();
       queryClient.invalidateQueries({ queryKey: ['project-daily', projectId] });
       queryClient.invalidateQueries({ queryKey: ['api/projects/summary'] });
-
+      
       toast({ title: 'Activity logged! ✅' });
     } catch (err: any) {
       toast({ title: err.message || 'Failed to save activity', variant: 'destructive' });
@@ -576,8 +599,8 @@ export default function DailyPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center max-w-md space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
-            <Calendar className="w-10 h-10 text-[#00bcd4]" />
+          <div className="w-20 h-20 rounded-full bg-[#00a8a8]/10 flex items-center justify-center mx-auto ring-1 ring-[#00a8a8]/20">
+            <Calendar className="w-10 h-10 text-[#00a8a8]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("daily.title")}</h1>
@@ -587,7 +610,7 @@ export default function DailyPage() {
           </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold"
+            className="bg-[#00a8a8] hover:bg-[#008b8b] text-white font-semibold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
@@ -620,34 +643,29 @@ export default function DailyPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 font-sans pb-24">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">Daily Accountability</h1>
-            <p className="text-muted-foreground mt-1">Track site progress, worker attendance, and daily conditions.</p>
-          </div>
-          <div className="flex items-center gap-3">
+      <div className="max-w-6xl mx-auto space-y-6">
+
+        {/* Header - Updated to match screenshot */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-foreground tracking-tight">Daily Accountability</h1>
             <Button
               onClick={() => { refetchStats(); refetchDaily(); }}
               variant="outline"
               size="icon"
-              className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
+            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#00a8a8] hover:border-[#00a8a8]/50 transition-all"
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
-          </div>
         </div>
 
-        {/* Stats Row */}
+        {/* Stats Row - Updated styling */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-border transition-all">
+          <div className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-[#00a8a8]/30 transition-all">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 rounded-lg bg-muted text-muted-foreground group-hover:bg-muted/80 group-hover:text-foreground transition-colors">
+              <div className="p-2 rounded-lg bg-muted text-muted-foreground group-hover:bg-[#00a8a8]/10 group-hover:text-[#00a8a8] transition-colors">
                 <Calendar className="w-5 h-5" />
               </div>
-              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("daily.totaldays")}</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("daily.totaldays")}</span>
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold text-foreground">{stats?.totalActiveDays || 0}</span>
@@ -655,7 +673,7 @@ export default function DailyPage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-amber-500/30 transition-all">
+          <div className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-amber-500/30 transition-all">
              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Flame className="w-24 h-24 text-amber-500" />
             </div>
@@ -663,7 +681,7 @@ export default function DailyPage() {
               <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
                 <Flame className="w-5 h-5" />
               </div>
-              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("daily.streak")}</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("daily.streak")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl font-bold text-foreground">{stats?.currentStreak || 0}</span>
@@ -671,15 +689,15 @@ export default function DailyPage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-[#00bcd4]/30 transition-all">
+          <div className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-[#00a8a8]/30 transition-all">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-              <Users className="w-24 h-24 text-[#00bcd4]" />
+              <Users className="w-24 h-24 text-[#00a8a8]" />
             </div>
             <div className="flex items-center gap-3 mb-2 relative z-10">
-              <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
+              <div className="p-2 rounded-lg bg-[#00a8a8]/10 text-[#00a8a8]">
                 <Users className="w-5 h-5" />
               </div>
-              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("daily.avgworkers")}</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("daily.avgworkers")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl font-bold text-foreground">{stats?.avgWorkerCount || 0}</span>
@@ -687,7 +705,7 @@ export default function DailyPage() {
             </div>
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 relative overflow-hidden group hover:border-purple-500/30 transition-all">
+          <div className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-purple-500/30 transition-all">
             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
               <Camera className="w-24 h-24 text-purple-500" />
             </div>
@@ -695,7 +713,7 @@ export default function DailyPage() {
               <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400">
                 <Camera className="w-5 h-5" />
               </div>
-              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t("daily.photos")}</span>
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{t("daily.photos")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl font-bold text-foreground">{stats?.totalPhotos || 0}</span>
@@ -704,113 +722,70 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* Daily log + heatmap: mobile heatmap first (flex-col-reverse), desktop timeline left */}
+        {/* Main Content Area - Updated to match screenshot design */}
         <div className="flex flex-col-reverse xl:flex-row xl:items-start gap-6">
+        {/* Timeline Section */}
           <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 p-4 border-b border-border">
-              <div className="flex items-center justify-center sm:justify-start gap-2 flex-1 min-w-0">
-                <button
+            {/* Date Navigation Header - Updated to match screenshot */}
+            <div className="flex items-center justify-between gap-4 p-4 border-b border-border bg-card">
+            <div className="flex items-center gap-2">
+              <button
                   type="button"
-                  onClick={goToPreviousDay}
-                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  aria-label="Previous day"
-                >
-                  <ChevronRight className="w-5 h-5 rotate-180" />
-                </button>
-                <span className="font-semibold text-foreground text-sm sm:text-base text-center flex-1 min-w-0 px-1">
-                  {formatTimelineDate(selectedDate)}
-                </span>
-                <button
+                onClick={goToPreviousDay}
+                className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Previous day"
+              >
+                  <ChevronLeft className="w-5 h-5" />
+              </button>
+                <span className="font-semibold text-foreground text-base">
+                {formatTimelineDate(selectedDate)}
+              </span>
+              <button
                   type="button"
-                  onClick={goToNextDay}
-                  disabled={isToday}
-                  className={cn(
-                    'p-2 rounded-lg transition-colors shrink-0',
-                    isToday
+                onClick={goToNextDay}
+                disabled={isToday}
+                className={cn(
+                    'p-2 rounded-lg transition-colors',
+                  isToday 
                       ? 'text-muted-foreground/30 cursor-not-allowed'
                       : 'hover:bg-muted text-muted-foreground hover:text-foreground',
-                  )}
-                  aria-label="Next day"
-                >
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="flex items-center justify-center sm:justify-end gap-3 flex-wrap">
+                )}
+                aria-label="Next day"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+              <div className="flex items-center gap-3">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setChatFilterOnly((v) => !v)}
                   className={cn(
-                    'rounded-lg border-[#00bcd4] text-[#00bcd4] bg-transparent hover:bg-[#00bcd4]/10 hover:text-[#00bcd4]',
-                    chatFilterOnly && 'bg-[#00bcd4]/10',
+                    'rounded-lg border-[#00a8a8] text-[#00a8a8] bg-transparent hover:bg-[#00a8a8]/10 hover:text-[#00a8a8]',
+                    chatFilterOnly && 'bg-[#00a8a8]/10',
                   )}
                 >
-                  Chat reports · {formatChatReportsDateLabel()} ({chatReportCount})
+                  Chat reports {formatChatReportsDateLabel()} ({chatReportCount})
                 </Button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    document.getElementById('daily-heatmap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }
-                  className="text-[#00bcd4] hover:text-[#00acc1] text-sm font-medium flex items-center gap-1 transition-colors xl:hidden"
-                >
-                  View heatmap <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {!isDailyLoading &&
-              dailyLog &&
-              ((dailyLog.worker_count != null && dailyLog.worker_count > 0) ||
-                (dailyLog.notes && dailyLog.notes.trim()) ||
-                (dailyLog.weather_condition && dailyLog.weather_condition.trim()) ||
-                (dailyLog.photo_urls && dailyLog.photo_urls.length > 0)) && (
-                <div className="px-4 py-3 border-b border-border space-y-2 bg-muted/20">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Day summary</h3>
-                  {dailyLog.worker_count != null && dailyLog.worker_count > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Users className="w-4 h-4 text-[#00bcd4] shrink-0" />
-                      <span>
-                        <span className="font-medium text-foreground">{dailyLog.worker_count}</span> workers on site
-                      </span>
                     </div>
-                  )}
-                  {dailyLog.weather_condition?.trim() && (
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Weather:</span> {dailyLog.weather_condition}
-                    </p>
-                  )}
-                  {dailyLog.notes?.trim() && (
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                      <span className="font-medium text-foreground">Notes:</span> {dailyLog.notes}
-                    </p>
-                  )}
-                  {dailyLog.photo_urls && dailyLog.photo_urls.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-1">
-                      {dailyLog.photo_urls.map((url, i) => (
-                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                          <img src={url} alt="" className="w-14 h-14 rounded-lg object-cover border border-border" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                  </div>
 
-            <div className="p-4 sm:px-5">
-              {isDailyLoading ? (
-                <TimelineSkeleton />
-              ) : isDailyError ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground mb-4">Failed to load entries.</p>
-                  <Button onClick={() => refetchDaily()} variant="outline" className="border-border text-muted-foreground">
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
+            {/* Timeline Content */}
+            <div className="p-4 sm:px-6">
+            {isDailyLoading ? (
+              <TimelineSkeleton />
+            ) : isDailyError ? (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground mb-4">Failed to load entries.</p>
+                <Button onClick={() => refetchDaily()} variant="outline" className="border-border text-muted-foreground">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retry
+                </Button>
+                      </div>
               ) : displayTimelineEntries.length === 0 ? (
-                <div className="text-center py-16">
+              <div className="text-center py-16">
                   {chatFilterOnly && timelineEntries.length > 0 ? (
                     <>
                       <p className="text-muted-foreground mb-4">No WhatsApp chat reports for this day.</p>
@@ -825,10 +800,10 @@ export default function DailyPage() {
                     </>
                   ) : (
                     <>
-                      <p className="text-muted-foreground mb-4">No activity logged for this day.</p>
-                      <Button
-                        onClick={() => {
-                          setEntryErrors({});
+                <p className="text-muted-foreground mb-4">No activity logged for this day.</p>
+                <Button
+                  onClick={() => {
+                    setEntryErrors({});
                           setEntries([
                             {
                               time: new Date().toLocaleTimeString('en-US', {
@@ -843,30 +818,31 @@ export default function DailyPage() {
                               id: Date.now(),
                             },
                           ]);
-                          setShowDailyModal(true);
-                        }}
-                        className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Log Activity
-                      </Button>
+                    setShowDailyModal(true);
+                  }}
+                        className="bg-[#00a8a8] hover:bg-[#008b8b] text-white font-bold"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Log Activity
+                </Button>
                     </>
                   )}
-                </div>
-              ) : (
-                <div>
+                            </div>
+            ) : (
+                <div className="space-y-0">
                   {displayTimelineEntries.map((entry, index) => (
                     <DailyTimelineRow
                       key={entry.id ?? index}
-                      entry={entry}
+                    entry={entry} 
                       isLast={index === displayTimelineEntries.length - 1}
-                    />
-                  ))}
+                  />
+                ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
+        </div>
 
+          {/* Heatmap Sidebar */}
           <div
             id="daily-heatmap"
             className="w-full xl:w-[min(100%,320px)] xl:min-w-[260px] shrink-0 rounded-2xl border border-border bg-card p-5 sm:p-6 scroll-mt-24"
@@ -877,10 +853,10 @@ export default function DailyPage() {
                 const ec = h.entryCount ?? 0;
                 let bgColor = 'bg-muted';
                 if (h.active) {
-                  if (ec === 0) bgColor = 'bg-cyan-900';
-                  else if (ec <= 2) bgColor = 'bg-cyan-700';
-                  else if (ec <= 5) bgColor = 'bg-cyan-500';
-                  else bgColor = 'bg-cyan-400';
+                  if (ec === 0) bgColor = 'bg-[#00a8a8]/30';
+                  else if (ec <= 2) bgColor = 'bg-[#00a8a8]/50';
+                  else if (ec <= 5) bgColor = 'bg-[#00a8a8]/70';
+                  else bgColor = 'bg-[#00a8a8]';
                 }
 
                 return (
@@ -893,13 +869,13 @@ export default function DailyPage() {
                       className={cn(
                         'w-8 h-8 rounded-md transition-all duration-300 hover:scale-110',
                         h.active
-                          ? `${bgColor} shadow-[0_0_10px_rgba(0,188,212,0.3)]`
+                          ? `${bgColor} shadow-[0_0_10px_rgba(0,168,168,0.3)]`
                           : 'bg-muted scale-90 opacity-50 hover:bg-muted/80',
                       )}
                     />
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-card border border-border rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
                       <p className="font-bold text-foreground">{formatDate(h.date)}</p>
-                      <p className="text-[#00bcd4]">{ec} entries</p>
+                      <p className="text-[#00a8a8]">{ec} entries</p>
                     </div>
                   </div>
                 );
@@ -908,7 +884,7 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* Floating + Log Activity Button */}
+        {/* Floating Log Activity Button */}
         <button
           onClick={() => {
             setEntryErrors({});
@@ -924,7 +900,7 @@ export default function DailyPage() {
             ]);
             setShowDailyModal(true);
           }}
-          className="fixed bottom-6 right-6 flex items-center gap-2 px-5 py-3 rounded-full bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold shadow-lg hover:shadow-xl transition-all z-40"
+          className="fixed bottom-6 right-6 flex items-center gap-2 px-5 py-3 rounded-full bg-[#00a8a8] hover:bg-[#008b8b] text-white font-bold shadow-lg hover:shadow-xl transition-all z-40"
         >
           <Plus className="w-5 h-5" />
           Log Activity
@@ -967,7 +943,7 @@ export default function DailyPage() {
                       <select
                         value={entry.activityType}
                         onChange={(e) => updateEntry(entry.id, 'activityType', e.target.value as ActivityType)}
-                        className="w-full px-2 py-1.5 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00bcd4]"
+                        className="w-full px-2 py-1.5 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00a8a8]"
                       >
                         <option value="delivery">📦 Delivery</option>
                         <option value="progress">✅ Progress</option>
@@ -984,7 +960,7 @@ export default function DailyPage() {
                           type="time"
                           value={entry.time}
                           onChange={(e) => updateEntry(entry.id, 'time', e.target.value)}
-                          className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00bcd4]"
+                          className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00a8a8]"
                         />
                         {entryErrors[entry.id]?.time && (
                           <p className="text-red-500 text-[10px] mt-0.5">{entryErrors[entry.id]?.time}</p>
@@ -998,12 +974,12 @@ export default function DailyPage() {
                           placeholder="What happened?"
                           value={entry.description}
                           onChange={(e) => updateEntry(entry.id, 'description', e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
+                          className="w-full px-3 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00a8a8] placeholder:text-muted-foreground"
                         />
                         {entryErrors[entry.id]?.description && (
                           <p className="text-red-500 text-[10px] mt-0.5">{entryErrors[entry.id]?.description}</p>
                         )}
-                      </div>
+                </div>
                       {entry.activityType === 'labor' && (
                         <div className="col-span-3">
                           <input
@@ -1012,7 +988,7 @@ export default function DailyPage() {
                             placeholder="# workers"
                             value={entry.workers}
                             onChange={(e) => updateEntry(entry.id, 'workers', e.target.value)}
-                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
+                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00a8a8] placeholder:text-muted-foreground"
                           />
                         </div>
                       )}
@@ -1024,9 +1000,9 @@ export default function DailyPage() {
                             placeholder="UGX"
                             value={entry.amount}
                             onChange={(e) => updateEntry(entry.id, 'amount', e.target.value)}
-                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00bcd4] placeholder:text-muted-foreground"
-                          />
-                        </div>
+                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#00a8a8] placeholder:text-muted-foreground"
+                  />
+                </div>
                       )}
                     </div>
                   </div>
@@ -1035,7 +1011,7 @@ export default function DailyPage() {
                 <button
                   type="button"
                   onClick={addEntry}
-                  className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#00bcd4]/50 hover:bg-[#00bcd4]/5 transition-all text-sm"
+                  className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#00a8a8]/50 hover:bg-[#00a8a8]/5 transition-all text-sm"
                 >
                   + Add another entry
                 </button>
@@ -1052,7 +1028,7 @@ export default function DailyPage() {
                 </Button>
                 <Button 
                   type="button" 
-                  className="w-full bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold h-11"
+                  className="w-full bg-[#00a8a8] hover:bg-[#008b8b] text-white font-bold h-11"
                   onClick={handleSaveLog}
                 >
                   Save Activity
