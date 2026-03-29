@@ -1374,6 +1374,33 @@ function utcDateKeyFromIso(iso) {
   return new Date(iso).toISOString().split('T')[0];
 }
 
+/** Keep in sync with shared/materialNames.ts */
+const _MAT_KEEP = new Set(['glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar']);
+const _MAT_KEEP_ES = new Set(['makes', 'takes', 'bakes', 'lakes', 'notes']);
+function singularizeMaterialToken(w) {
+  if (w.length < 2) return w;
+  if (_MAT_KEEP.has(w)) return w;
+  if (w.endsWith("'s")) return w.slice(0, -2);
+  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+  if (w.endsWith('es') && w.length >= 5 && !_MAT_KEEP_ES.has(w)) {
+    const base = w.slice(0, -2);
+    if (base.length >= 2) return base;
+  }
+  if (w.endsWith('s') && !w.endsWith('ss') && w.length >= 4) {
+    const stem = w.slice(0, -1);
+    if (stem.length >= 3 && !stem.endsWith('s')) return stem;
+  }
+  return w;
+}
+function normalizeMaterialStorageName(raw) {
+  const s = String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+  if (!s) return '';
+  return s.split(/\s+/).map(singularizeMaterialToken).join(' ');
+}
+
 // GET /api/projects/:projectId/materials/daily — Vercel: same as Express (materials calendar + by-date entries)
 app.get('/api/projects/:projectId/materials/daily', (req, res, next) => {
   requireAuth(req, res, async () => {
@@ -1572,22 +1599,26 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
     const now = new Date().toISOString();
     let saved = 0;
 
+    const { data: invRowsRaw } = await supabase
+      .from('materials_inventory')
+      .select('id, name, quantity, unit_cost, total_cost, unit')
+      .eq('project_id', projectId);
+    const invRows = invRowsRaw || [];
+    const invNorm = (n) => normalizeMaterialStorageName(n);
+    const findMatches = (canonical) => invRows.filter((r) => invNorm(r.name) === canonical);
+
     for (const raw of list) {
       const nameRaw = typeof raw.name === 'string' ? raw.name.trim() : '';
-      const materialName = nameRaw.toLowerCase();
+      const canonical = normalizeMaterialStorageName(nameRaw);
       const qty = parseFloat(String(raw.quantity ?? '').replace(/,/g, ''));
-      if (!materialName || !Number.isFinite(qty) || qty <= 0) continue;
+      if (!canonical || !Number.isFinite(qty) || qty <= 0) continue;
       const unit = String(raw.unit || 'units').trim() || 'units';
       const t = String(raw.transaction_type || 'purchase').toLowerCase();
       const transactionType = t === 'usage' ? 'usage' : 'purchase';
 
       if (transactionType === 'purchase') {
-        const { data: existing } = await supabase
-          .from('materials_inventory')
-          .select('id, quantity, unit_cost, total_cost')
-          .eq('project_id', projectId)
-          .eq('name', materialName)
-          .maybeSingle();
+        const matches = findMatches(canonical);
+        const existing = matches.find((r) => r.name === canonical) || matches[0];
 
         let materialId;
         if (existing) {
@@ -1597,6 +1628,7 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
           await supabase
             .from('materials_inventory')
             .update({
+              name: canonical,
               quantity: newQty,
               total_cost: newTotalCost,
               last_purchased_at: createdAtIso,
@@ -1604,6 +1636,9 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
               user_id: userId,
             })
             .eq('id', existing.id);
+          existing.name = canonical;
+          existing.quantity = newQty;
+          existing.total_cost = newTotalCost;
           materialId = existing.id;
           await supabase.from('material_transactions').insert({
             material_id: materialId,
@@ -1623,7 +1658,7 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
             .insert({
               project_id: projectId,
               user_id: userId,
-              name: materialName,
+              name: canonical,
               quantity: qty,
               unit,
               unit_cost: 0,
@@ -1636,6 +1671,14 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
             .single();
           if (insErr || !inserted?.id) continue;
           materialId = inserted.id;
+          invRows.push({
+            id: inserted.id,
+            name: canonical,
+            quantity: qty,
+            unit_cost: 0,
+            total_cost: 0,
+            unit,
+          });
           await supabase.from('material_transactions').insert({
             material_id: materialId,
             project_id: projectId,
@@ -1651,32 +1694,42 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
         }
         saved++;
       } else {
-        const { data: existing } = await supabase
-          .from('materials_inventory')
-          .select('id, quantity, unit')
-          .eq('project_id', projectId)
-          .ilike('name', materialName)
-          .maybeSingle();
-        if (!existing) {
+        const matches = findMatches(canonical).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        if (matches.length === 0) {
           return res.status(400).json({
             success: false,
             error: `No inventory match for "${nameRaw}". Log a purchase first or check spelling.`,
           });
         }
         const usedQty = qty;
-        const currentQty = parseFloat(String(existing.quantity || 0));
-        const newQty = Math.max(0, currentQty - usedQty);
-        await supabase
-          .from('materials_inventory')
-          .update({
-            quantity: newQty,
-            last_used_at: createdAtIso,
-            updated_at: now,
-            user_id: userId,
-          })
-          .eq('id', existing.id);
+        const totalAvail = matches.reduce((s, r) => s + parseFloat(String(r.quantity || 0)), 0);
+        if (totalAvail < usedQty) {
+          return res.status(400).json({
+            success: false,
+            error: `Not enough stock for "${nameRaw}" (have ${totalAvail}, need ${usedQty}).`,
+          });
+        }
+        let remaining = usedQty;
+        for (const row of matches) {
+          if (remaining <= 0) break;
+          const q = parseFloat(String(row.quantity || 0));
+          if (q <= 0) continue;
+          const take = Math.min(q, remaining);
+          const newQty = q - take;
+          await supabase
+            .from('materials_inventory')
+            .update({
+              quantity: newQty,
+              last_used_at: createdAtIso,
+              updated_at: now,
+              user_id: userId,
+            })
+            .eq('id', row.id);
+          row.quantity = newQty;
+          remaining -= take;
+        }
         await supabase.from('material_transactions').insert({
-          material_id: existing.id,
+          material_id: matches[0].id,
           project_id: projectId,
           user_id: userId,
           transaction_type: 'usage',
@@ -1721,18 +1774,21 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
     const { name, quantity, unit, unit_cost, total_cost, source } = req.body || {};
     const nameStr = typeof name === 'string' ? name.trim() : '';
     if (!nameStr) return res.status(400).json({ success: false, error: 'name is required' });
+    const canonical = normalizeMaterialStorageName(nameStr);
+    if (!canonical) return res.status(400).json({ success: false, error: 'name is required' });
     const qty = parseFloat(String(quantity ?? 0)) || 0;
     const unitCost = unit_cost != null ? parseFloat(String(unit_cost)) : 0;
     const totalCost = total_cost != null ? parseFloat(String(total_cost)) : qty * unitCost;
     const sourceStr = source === 'whatsapp' || source === 'dashboard' ? source : 'manual';
     const now = new Date().toISOString();
 
-    const { data: existing } = await supabase
+    const { data: invList } = await supabase
       .from('materials_inventory')
-      .select('id, quantity, unit_cost, total_cost')
-      .eq('project_id', projectId)
-      .eq('name', nameStr)
-      .maybeSingle();
+      .select('id, name, quantity, unit_cost, total_cost')
+      .eq('project_id', projectId);
+    const rows = invList || [];
+    const matches = rows.filter((r) => normalizeMaterialStorageName(r.name) === canonical);
+    const existing = matches.find((r) => r.name === canonical) || matches[0];
 
     let materialId;
     if (existing) {
@@ -1741,6 +1797,7 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
       const { data: updated, error: updateErr } = await supabase
         .from('materials_inventory')
         .update({
+          name: canonical,
           quantity: newQty,
           unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
           total_cost: newTotalCost,
@@ -1761,7 +1818,7 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
         .insert({
           project_id: projectId,
           user_id: userId,
-          name: nameStr,
+          name: canonical,
           quantity: qty,
           unit: unit || 'units',
           unit_cost: unitCost,

@@ -29,6 +29,7 @@ import {
   Expense,
   Task,
 } from '../../shared/schema.js';
+import { normalizeMaterialStorageName } from '../../shared/materialNames.js';
 
 const router = Router();
 
@@ -2268,23 +2269,28 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
     const now = new Date().toISOString();
     let saved = 0;
 
+    const { data: invRowsRaw } = await supabase
+      .from('materials_inventory')
+      .select('id, name, quantity, unit_cost, total_cost, unit')
+      .eq('project_id', projectId);
+    const invRows = invRowsRaw ?? [];
+    const invNorm = (n: string) => normalizeMaterialStorageName(n);
+    const findMatches = (canonical: string) =>
+      invRows.filter((r) => invNorm(r.name) === canonical);
+
     for (const raw of list) {
       const e = raw as Record<string, unknown>;
       const nameRaw = String(e.name || '').trim();
-      const materialName = nameRaw.toLowerCase();
+      const canonical = normalizeMaterialStorageName(nameRaw);
       const qty = parseFloat(String(e.quantity ?? '').replace(/,/g, ''));
-      if (!materialName || !Number.isFinite(qty) || qty <= 0) continue;
+      if (!canonical || !Number.isFinite(qty) || qty <= 0) continue;
       const unit = String(e.unit || 'units').trim() || 'units';
       const t = String(e.transaction_type || 'purchase').toLowerCase();
       const transactionType = t === 'usage' ? 'usage' : 'purchase';
 
       if (transactionType === 'purchase') {
-        const { data: existing } = await supabase
-          .from('materials_inventory')
-          .select('id, quantity, unit_cost, total_cost')
-          .eq('project_id', projectId)
-          .eq('name', materialName)
-          .maybeSingle();
+        const matches = findMatches(canonical);
+        const existing = matches.find((r) => r.name === canonical) || matches[0];
 
         let materialId: string | undefined;
         if (existing) {
@@ -2294,6 +2300,7 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
           await supabase
             .from('materials_inventory')
             .update({
+              name: canonical,
               quantity: newQty,
               total_cost: newTotalCost,
               last_purchased_at: createdAtIso,
@@ -2301,6 +2308,9 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
               user_id: userId,
             })
             .eq('id', existing.id);
+          existing.name = canonical;
+          existing.quantity = newQty;
+          existing.total_cost = newTotalCost;
           materialId = existing.id;
           await supabase.from('material_transactions').insert({
             material_id: materialId,
@@ -2320,7 +2330,7 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
             .insert({
               project_id: projectId,
               user_id: userId,
-              name: materialName,
+              name: canonical,
               quantity: qty,
               unit,
               unit_cost: 0,
@@ -2333,6 +2343,14 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
             .single();
           if (insErr || !inserted?.id) continue;
           materialId = inserted.id;
+          invRows.push({
+            id: inserted.id,
+            name: canonical,
+            quantity: qty,
+            unit_cost: 0,
+            total_cost: 0,
+            unit,
+          });
           await supabase.from('material_transactions').insert({
             material_id: materialId,
             project_id: projectId,
@@ -2348,32 +2366,42 @@ router.post('/projects/:projectId/materials/daily', requireAuth, async (req: Req
         }
         saved++;
       } else {
-        const { data: existing } = await supabase
-          .from('materials_inventory')
-          .select('id, quantity, unit, low_stock_threshold')
-          .eq('project_id', projectId)
-          .ilike('name', materialName)
-          .maybeSingle();
-        if (!existing) {
+        const matches = findMatches(canonical).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+        if (matches.length === 0) {
           return res.status(400).json({
             success: false,
             error: `No inventory match for "${nameRaw}". Log a purchase first or check spelling.`,
           });
         }
         const usedQty = qty;
-        const currentQty = parseFloat(String(existing.quantity || 0));
-        const newQty = Math.max(0, currentQty - usedQty);
-        await supabase
-          .from('materials_inventory')
-          .update({
-            quantity: newQty,
-            last_used_at: createdAtIso,
-            updated_at: now,
-            user_id: userId,
-          })
-          .eq('id', existing.id);
+        const totalAvail = matches.reduce((s, r) => s + parseFloat(String(r.quantity || 0)), 0);
+        if (totalAvail < usedQty) {
+          return res.status(400).json({
+            success: false,
+            error: `Not enough stock for "${nameRaw}" (have ${totalAvail}, need ${usedQty}).`,
+          });
+        }
+        let remaining = usedQty;
+        for (const row of matches) {
+          if (remaining <= 0) break;
+          const q = parseFloat(String(row.quantity || 0));
+          if (q <= 0) continue;
+          const take = Math.min(q, remaining);
+          const newQty = q - take;
+          await supabase
+            .from('materials_inventory')
+            .update({
+              quantity: newQty,
+              last_used_at: createdAtIso,
+              updated_at: now,
+              user_id: userId,
+            })
+            .eq('id', row.id);
+          row.quantity = newQty;
+          remaining -= take;
+        }
         await supabase.from('material_transactions').insert({
-          material_id: existing.id,
+          material_id: matches[0].id,
           project_id: projectId,
           user_id: userId,
           transaction_type: 'usage',

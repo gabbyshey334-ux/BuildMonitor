@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
@@ -28,6 +28,11 @@ import { cn } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import {
+  materialGroupKey,
+  formatMaterialDisplayName,
+  normalizeMaterialStorageName,
+} from "@shared/materialNames";
 
 function getDateKey(d: Date): string {
   return d.toISOString().split("T")[0];
@@ -200,6 +205,36 @@ export default function MaterialsPage() {
 
   const showTodayReminder = isToday && stats && !stats.todayLogged;
 
+  const inventory = stockData?.inventory ?? [];
+  const groupedStock = useMemo(() => {
+    const map = new Map<
+      string,
+      { displayName: string; quantity: number; unit: string; low: boolean }
+    >();
+    for (const m of inventory) {
+      const threshold = (m as { low_stock_threshold?: number }).low_stock_threshold ?? 5;
+      const key = materialGroupKey(m.name, m.unit || "units");
+      const norm = normalizeMaterialStorageName(m.name);
+      const displayName = formatMaterialDisplayName(norm);
+      const low = m.quantity <= threshold;
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, {
+          displayName,
+          quantity: m.quantity,
+          unit: m.unit || "units",
+          low,
+        });
+      } else {
+        prev.quantity += m.quantity;
+        prev.low = prev.low || low;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) =>
+      a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" }),
+    );
+  }, [inventory]);
+
   if (mergedLoading) {
     return <MaterialsSkeleton />;
   }
@@ -243,8 +278,6 @@ export default function MaterialsPage() {
       </div>
     );
   }
-
-  const inventory = stockData?.inventory ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 font-sans pb-28">
@@ -315,8 +348,8 @@ export default function MaterialsPage() {
               </div>
               <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Stock SKUs</span>
             </div>
-            <p className="text-3xl font-bold">{stockData?.summary?.totalItems ?? 0}</p>
-            <p className="text-sm text-muted-foreground">current inventory lines</p>
+            <p className="text-3xl font-bold">{groupedStock.length}</p>
+            <p className="text-sm text-muted-foreground">unique materials (grouped)</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-6">
             <div className="flex items-center gap-3 mb-2">
@@ -343,10 +376,10 @@ export default function MaterialsPage() {
             <h2 className="text-lg font-bold">Activity — last 60 days</h2>
             <span className="text-xs text-muted-foreground">Tap a square to open that day</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             {heatmap.map((h) => {
               const ec = h.entryCount ?? 0;
-              let bg = "bg-muted";
+              let bg = "";
               if (h.active) {
                 if (ec <= 1) bg = "bg-cyan-900";
                 else if (ec <= 3) bg = "bg-cyan-600";
@@ -361,8 +394,10 @@ export default function MaterialsPage() {
                 >
                   <div
                     className={cn(
-                      "w-8 h-8 rounded-md transition-all hover:scale-110",
-                      h.active ? `${bg} shadow-[0_0_8px_rgba(0,188,212,0.25)]` : "opacity-40 hover:opacity-70",
+                      "w-8 h-8 rounded-md transition-all hover:scale-110 border-2 shadow-sm shrink-0",
+                      h.active
+                        ? cn(bg, "border-cyan-500/50 shadow-[0_0_8px_rgba(0,188,212,0.25)]")
+                        : "border-muted-foreground/35 bg-secondary/90 hover:bg-secondary hover:border-muted-foreground/55",
                     )}
                   />
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-popover border rounded text-[10px] whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-20">
@@ -467,7 +502,9 @@ export default function MaterialsPage() {
                           {isUsage ? <TrendingDown className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
                         </div>
                         <div>
-                          <p className="font-semibold text-foreground capitalize">{e.material_name}</p>
+                          <p className="font-semibold text-foreground">
+                            {formatMaterialDisplayName(normalizeMaterialStorageName(e.material_name))}
+                          </p>
                           <p className="text-sm text-muted-foreground">{e.description || "—"}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             {e.source === "whatsapp" ? "WhatsApp" : e.source === "dashboard" ? "Dashboard" : e.source || "—"}
@@ -499,34 +536,32 @@ export default function MaterialsPage() {
           </div>
           {stockError ? (
             <p className="text-sm text-red-500">{stockErr instanceof Error ? stockErr.message : "Stock error"}</p>
-          ) : inventory.length === 0 ? (
+          ) : groupedStock.length === 0 ? (
             <p className="text-sm text-muted-foreground border border-border rounded-xl p-6 text-center">
               No inventory rows yet. Log a purchase for a new material to create stock.
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {inventory.slice(0, 12).map((m) => {
-                const threshold = (m as { low_stock_threshold?: number }).low_stock_threshold ?? 5;
-                const low = m.quantity <= threshold;
-                return (
-                  <div
-                    key={m.id}
-                    className={cn(
-                      "flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-card",
-                      low && "border-amber-500/40",
-                    )}
-                  >
-                    <span className="font-medium truncate pr-2">{m.name}</span>
-                    <span className="tabular-nums text-sm shrink-0">
-                      {m.quantity.toLocaleString()} <span className="text-muted-foreground">{m.unit}</span>
-                    </span>
-                  </div>
-                );
-              })}
+              {groupedStock.slice(0, 12).map((m) => (
+                <div
+                  key={`${m.displayName}-${m.unit}`}
+                  className={cn(
+                    "flex items-center justify-between rounded-lg border border-border px-4 py-3 bg-card",
+                    m.low && "border-amber-500/40",
+                  )}
+                >
+                  <span className="font-medium truncate pr-2">{m.displayName}</span>
+                  <span className="tabular-nums text-sm shrink-0">
+                    {m.quantity.toLocaleString()} <span className="text-muted-foreground">{m.unit}</span>
+                  </span>
+                </div>
+              ))}
             </div>
           )}
-          {inventory.length > 12 && (
-            <p className="text-xs text-muted-foreground text-center">Showing 12 of {inventory.length} items</p>
+          {groupedStock.length > 12 && (
+            <p className="text-xs text-muted-foreground text-center">
+              Showing 12 of {groupedStock.length} items
+            </p>
           )}
         </div>
       </div>
