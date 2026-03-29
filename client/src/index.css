@@ -2,6 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* iOS / notched devices: respect home indicator */
+  .pb-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
+  /* Main content offset for fixed bottom nav (bar + safe area) */
+  .pb-mobile-nav-offset {
+    padding-bottom: calc(3.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.25rem);
+  }
+  .h-mobile-nav-spacer {
+    height: calc(3.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+  }
+}
+
 /* Theme variables: light = default (:root), dark = .dark on html */
 :root {
   --bg-primary: #f8fafc;

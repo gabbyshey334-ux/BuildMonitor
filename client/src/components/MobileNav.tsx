@@ -50,40 +50,51 @@ export default function MobileNav({
   return (
     <>
       {/* Bottom Navigation Bar - Mobile Only */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-white/10 safe-area-pb">
-        <div className="flex items-center justify-around h-16">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card/95 pb-safe shadow-[0_-6px_24px_rgba(0,0,0,0.08)] backdrop-blur-md supports-[backdrop-filter]:bg-card/85 dark:shadow-[0_-6px_28px_rgba(0,0,0,0.35)]">
+        <div className="grid min-h-[3.75rem] grid-cols-5 items-stretch px-0.5 xs:px-2">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
+                type="button"
                 onClick={() => handleTabClick(item.id)}
-                className={`relative flex flex-col items-center justify-center flex-1 h-full transition-colors ${
-                  isActive 
-                    ? 'text-brand' 
-                    : 'text-muted-foreground hover:text-white'
+                aria-label={item.label}
+                className={`relative flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 touch-manipulation transition-all active:scale-[0.97] xs:gap-1 xs:px-1 xs:py-2 ${
+                  isActive
+                    ? 'text-brand'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
                 data-testid={`mobile-nav-${item.id}`}
               >
-                <Icon className="w-5 h-5 mb-1" />
-                <span className="text-xs font-medium">{item.label}</span>
+                <Icon className="h-5 w-5 shrink-0 xs:h-6 xs:w-6" aria-hidden />
+                <span className="max-[359px]:sr-only w-full truncate text-center text-[10px] font-medium leading-tight xs:text-xs">
+                  {item.label}
+                </span>
                 {isActive && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand" />
+                  <span
+                    className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-brand max-[359px]:hidden"
+                    aria-hidden
+                  />
                 )}
               </button>
             );
           })}
-          
+
           {/* More Menu */}
           <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
             <SheetTrigger asChild>
               <button
-                className="flex flex-col items-center justify-center flex-1 h-full text-muted-foreground hover:text-white transition-colors"
+                type="button"
+                className="relative flex min-h-[44px] min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-muted-foreground touch-manipulation transition-all hover:text-foreground active:scale-[0.97] xs:gap-1 xs:px-1 xs:py-2"
+                aria-label="More"
                 data-testid="mobile-nav-more"
               >
-                <Menu className="w-5 h-5 mb-1" />
-                <span className="text-xs font-medium">More</span>
+                <Menu className="h-5 w-5 shrink-0 xs:h-6 xs:w-6" aria-hidden />
+                <span className="max-[359px]:sr-only w-full truncate text-center text-[10px] font-medium leading-tight xs:text-xs">
+                  More
+                </span>
               </button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[280px] bg-dark-bg border-white/10">
@@ -200,7 +211,7 @@ export default function MobileNav({
       </div>
 
       {/* Spacer for bottom nav on mobile */}
-      <div className="md:hidden h-16" />
+      <div className="h-mobile-nav-spacer md:hidden shrink-0" aria-hidden />
     </>
   );
 }

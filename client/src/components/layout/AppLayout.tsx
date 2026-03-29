@@ -38,7 +38,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         className={cn(
           "min-h-screen transition-[margin-left] duration-300 ease-out",
           "pt-14",
-          "pb-16 md:pb-0",
+          "pb-mobile-nav-offset md:pb-0",
           open ? "md:ml-[240px]" : "md:ml-16"
         )}
       >
