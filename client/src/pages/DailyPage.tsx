@@ -1,15 +1,28 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
-import { 
-  RefreshCw, ArrowLeft, Flame, Users, Camera, Calendar, 
-  X,   Plus, ChevronRight, CheckCircle, Activity,
-  CreditCard, Image as ImageIcon, Truck, HardHat
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  RefreshCw,
+  ArrowLeft,
+  Flame,
+  Users,
+  Camera,
+  Calendar,
+  X,
+  Plus,
+  ChevronRight,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -92,140 +105,230 @@ function getDateKey(date: Date): string {
   return date.toISOString().split('T')[0];
 }
 
-// Timeline card component
-function TimelineCard({ entry, index, total }: { entry: TimelineEntry; index: number; total: number }) {
-  const typeColors: Record<ActivityType, { border: string; bg: string; icon: React.ReactNode }> = {
-    delivery: { 
-      border: "border-l-[#00bcd4]", 
-      bg: "bg-[#00bcd4]/10 text-[#00bcd4]",
-      icon: <Truck className="w-4 h-4" />
-    },
-    progress: { 
-      border: "border-l-emerald-500", 
-      bg: "bg-emerald-500/10 text-emerald-500",
-      icon: <CheckCircle className="w-4 h-4" />
-    },
-    photo: { 
-      border: "border-l-blue-500", 
-      bg: "bg-blue-500/10 text-blue-500",
-      icon: <ImageIcon className="w-4 h-4" />
-    },
-    labor: { 
-      border: "border-l-amber-500", 
-      bg: "bg-amber-500/10 text-amber-500",
-      icon: <HardHat className="w-4 h-4" />
-    },
-    expense: { 
-      border: "border-l-purple-500", 
-      bg: "bg-purple-500/10 text-purple-500",
-      icon: <CreditCard className="w-4 h-4" />
-    },
-    other: { 
-      border: "border-l-muted-foreground", 
-      bg: "bg-muted text-muted-foreground",
-      icon: <Activity className="w-4 h-4" />
-    },
-  };
+const DESC_PREVIEW_LEN = 160;
 
-  const at = entry.activity_type as ActivityType;
-  const colors = typeColors[at] ?? typeColors.other;
+function activityTypeLabel(entry: TimelineEntry): string {
+  const raw = String(entry.activity_type || 'other').toLowerCase();
+  if (raw === 'expense' && entry.amount != null && Number(entry.amount) > 0) {
+    return 'Labour payment';
+  }
+  const map: Record<string, string> = {
+    delivery: 'Delivery',
+    progress: 'Task completion',
+    photo: 'Media upload',
+    labor: 'Staffing',
+    expense: 'Financials',
+    other: 'Activity',
+  };
+  return map[raw] ?? 'Activity';
+}
+
+function sourceLabel(source?: string | null): string {
+  if (source === 'whatsapp') return 'WhatsApp';
+  if (source === 'dashboard') return 'Dashboard';
+  return source || '';
+}
+
+function DailyTimelineRow({
+  entry,
+  isLast,
+}: {
+  entry: TimelineEntry;
+  isLast: boolean;
+}) {
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [textOpen, setTextOpen] = useState(false);
   const timeDisplay = formatTime12Hour(entry.log_time);
+  const typeLabel = activityTypeLabel(entry);
+  const photos = entry.photo_urls ?? [];
+  const hasPhotos = photos.length > 0;
+  const longText =
+    (entry.description?.length ?? 0) > DESC_PREVIEW_LEN && !hasPhotos;
+  const descPreview = longText
+    ? `${entry.description.slice(0, DESC_PREVIEW_LEN).trim()}…`
+    : entry.description;
 
   return (
-    <div className="relative flex gap-4 md:gap-6">
-      {/* Time column */}
-      <div className="w-[70px] shrink-0 text-right">
-        <span className="text-sm font-mono text-muted-foreground">{timeDisplay}</span>
-      </div>
-
-      {/* Timeline dot and line */}
-      <div className="hidden md:flex flex-col items-center shrink-0">
-        <div className={cn("w-3 h-3 rounded-full border-2 z-10", colors.bg.replace('/10', '').replace('text-', 'border-').replace('bg-', ''))} />
-        {index < total - 1 && (
-          <div className="w-px flex-1 bg-border min-h-[40px] mt-1" />
+    <>
+      <div
+        className={cn(
+          'flex gap-2 sm:gap-4',
+          !isLast && 'border-b border-border',
         )}
-      </div>
+      >
+        <div className="w-14 sm:w-[72px] shrink-0 text-right pt-1">
+          <span className="text-xs sm:text-sm text-muted-foreground tabular-nums">
+            {timeDisplay}
+          </span>
+        </div>
 
-      {/* Card */}
-      <div className={cn("flex-1 bg-card border border-border rounded-xl p-4 relative overflow-hidden", "hover:border-border/80 transition-all", colors.border, "border-l-4")}>
-        <div className="flex items-start gap-3">
-          <div className={cn("p-2 rounded-lg shrink-0", colors.bg)}>
-            {colors.icon}
+        <div className="flex flex-col items-center shrink-0 w-3 pt-1">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#00bcd4] ring-4 ring-background z-10 shrink-0" />
+          {!isLast && (
+            <div className="w-0.5 flex-1 bg-[#00bcd4]/90 min-h-[48px] mt-1" />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0 py-4 pr-1 sm:pr-3">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#00bcd4]">
+                {typeLabel}
+              </p>
+              <p className="text-sm sm:text-base text-foreground mt-1 whitespace-pre-wrap">
+                {longText ? descPreview : entry.description}
+              </p>
+              {entry.amount != null &&
+                entry.activity_type === 'expense' &&
+                Number(entry.amount) > 0 && (
+                  <p className="text-[#00bcd4] font-bold text-base mt-1">
+                    UGX {Number(entry.amount).toLocaleString()}
+                  </p>
+                )}
+              {entry.worker_count != null &&
+                entry.activity_type === 'labor' &&
+                entry.worker_count > 0 && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {entry.worker_count} workers
+                  </p>
+                )}
+              {(entry.author || entry.source) && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {entry.author && <span>{entry.author}</span>}
+                  {entry.author && entry.source && <span> · </span>}
+                  {entry.source && (
+                    <span>{sourceLabel(entry.source)}</span>
+                  )}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-start sm:self-start">
+              {hasPhotos && (
+                <button
+                  type="button"
+                  onClick={() => setGalleryOpen(true)}
+                  className="text-sm font-medium text-[#00bcd4] hover:text-[#00acc1] flex items-center gap-1 whitespace-nowrap"
+                >
+                  View all
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+              {longText && (
+                <button
+                  type="button"
+                  onClick={() => setTextOpen(true)}
+                  className="text-sm font-medium text-[#00bcd4] hover:text-[#00acc1] flex items-center gap-1 whitespace-nowrap"
+                >
+                  View all
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex-1 min-w-0">
-            {/* Title / Description */}
-            <h4 className="font-semibold text-foreground">{entry.description}</h4>
-
-            {/* Amount for expenses */}
-            {entry.amount && entry.activity_type === 'expense' && (
-              <p className="text-[#00bcd4] font-bold text-lg mt-1">
-                UGX {entry.amount.toLocaleString()}
-              </p>
-            )}
-
-            {/* Worker count for labor */}
-            {entry.worker_count && entry.activity_type === 'labor' && (
-              <p className="text-amber-500 font-medium text-sm mt-1">
-                {entry.worker_count} workers
-              </p>
-            )}
-
-            {/* Author */}
-            {entry.author && (
-              <div className="flex items-center gap-1 mt-2 text-muted-foreground text-sm">
-                <span>{entry.author}</span>
-                <ChevronRight className="w-3 h-3" />
-              </div>
-            )}
-
-            {/* Photo thumbnails */}
-            {entry.photo_urls && entry.photo_urls.length > 0 && (
-              <div className="flex items-center gap-2 mt-3">
+          {hasPhotos && (
+            <div className="mt-4 flex flex-col sm:flex-row gap-4 sm:items-start">
+              <button
+                type="button"
+                onClick={() => setGalleryOpen(true)}
+                className="flex items-center gap-3 text-left shrink-0"
+              >
                 <div className="flex -space-x-2">
-                  {entry.photo_urls.slice(0, 3).map((photo, idx) => (
+                  {photos.slice(0, 3).map((photo, idx) => (
                     <img
                       key={idx}
                       src={photo}
                       alt=""
-                      className="w-10 h-10 rounded-lg object-cover border-2 border-card"
+                      className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg object-cover border-2 border-card"
                     />
                   ))}
                 </div>
-                {entry.photo_urls.length > 3 && (
-                  <span className="text-sm text-muted-foreground">
-                    {entry.photo_urls.length} photos <ChevronRight className="w-3 h-3 inline" />
-                  </span>
+                <span className="text-sm text-muted-foreground flex items-center gap-0.5">
+                  {photos.length} photos
+                  <ChevronRight className="w-4 h-4" />
+                </span>
+              </button>
+              <div className="flex-1 flex gap-2 min-w-0">
+                {photos[0] && (
+                  <img
+                    src={photos[0]}
+                    alt=""
+                    className="flex-1 min-w-0 h-32 sm:h-36 rounded-lg object-cover border border-border"
+                  />
+                )}
+                {photos[1] && (
+                  <img
+                    src={photos[1]}
+                    alt=""
+                    className="flex-1 min-w-0 h-32 sm:h-36 rounded-lg object-cover border border-border hidden sm:block"
+                  />
                 )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
-    </div>
+
+      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Photos</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+            {photos.map((url, i) => (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block aspect-square rounded-lg overflow-hidden border border-border"
+              >
+                <img src={url} alt="" className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={textOpen} onOpenChange={setTextOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{typeLabel}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-foreground whitespace-pre-wrap pt-2">
+            {entry.description}
+          </p>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
 function TimelineSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="relative flex gap-4 md:gap-6">
-          <div className="w-[70px] shrink-0">
+    <div className="animate-pulse">
+      {[1, 2, 3].map((i, idx) => (
+        <div
+          key={i}
+          className={cn(
+            'flex gap-2 sm:gap-4',
+            idx < 2 && 'border-b border-border',
+          )}
+        >
+          <div className="w-14 sm:w-[72px] shrink-0 pt-2">
             <div className="h-4 bg-muted rounded w-full" />
           </div>
-          <div className="hidden md:flex flex-col items-center shrink-0">
-            <div className="w-3 h-3 rounded-full bg-muted" />
-            <div className="w-px flex-1 bg-muted min-h-[40px] mt-1" />
+          <div className="flex flex-col items-center shrink-0 w-3 pt-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-muted" />
+            {idx < 2 && (
+              <div className="w-0.5 flex-1 bg-muted min-h-[48px] mt-1" />
+            )}
           </div>
-          <div className="flex-1 bg-card border border-border rounded-xl p-4 h-24">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-muted shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-4 bg-muted rounded w-3/4" />
-                <div className="h-3 bg-muted rounded w-1/2" />
-              </div>
-            </div>
+          <div className="flex-1 py-4 space-y-2">
+            <div className="h-3 bg-muted rounded w-24" />
+            <div className="h-4 bg-muted rounded w-full max-w-md" />
+            <div className="h-4 bg-muted rounded w-2/3" />
           </div>
         </div>
       ))}
@@ -243,8 +346,13 @@ function DailySkeleton() {
             <div key={i} className="h-28 bg-card border border-border rounded-xl" />
           ))}
         </div>
-        <div className="h-48 bg-card border border-border rounded-xl" />
-        <TimelineSkeleton />
+        <div className="flex flex-col-reverse xl:flex-row gap-6">
+          <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card p-4 space-y-4">
+            <div className="h-12 bg-muted rounded-lg w-full" />
+            <TimelineSkeleton />
+          </div>
+          <div className="w-full xl:w-[min(100%,320px)] xl:min-w-[260px] shrink-0 h-40 xl:h-64 rounded-2xl border border-border bg-card" />
+        </div>
       </div>
     </div>
   );
@@ -322,11 +430,27 @@ export default function DailyPage() {
     return entries.sort((a, b) => (a.log_time || '').localeCompare(b.log_time || ''));
   }, [dailyLog]);
 
+  const [chatFilterOnly, setChatFilterOnly] = useState(false);
+
+  const displayTimelineEntries = useMemo(() => {
+    if (!chatFilterOnly) return timelineEntries;
+    return timelineEntries.filter((e) => e.source === 'whatsapp');
+  }, [timelineEntries, chatFilterOnly]);
+
   // Chat report count (WhatsApp-sourced entries)
   const chatReportCount = useMemo(() => {
     if (!dailyLog?.activity_entries) return 0;
     return dailyLog.activity_entries.filter(e => e.source === 'whatsapp').length;
   }, [dailyLog]);
+
+  function formatChatReportsDateLabel(): string {
+    if (selectedDate === todayKey) return 'Today';
+    return formatDate(selectedDate);
+  }
+
+  useEffect(() => {
+    setChatFilterOnly(false);
+  }, [selectedDate]);
 
   // Day navigation
   const goToPreviousDay = () => {
@@ -580,178 +704,208 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* Heatmap */}
-        <div id="daily-heatmap" className="bg-card border border-border rounded-xl p-6 scroll-mt-24">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-foreground">Activity Heatmap</h3>
-            <span className="text-xs text-muted-foreground">Last 60 days</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {heatmap.map((h) => {
-              const ec = h.entryCount ?? 0;
-              let bgColor = "bg-muted";
-              if (h.active) {
-                if (ec === 0) bgColor = "bg-cyan-900";
-                else if (ec <= 2) bgColor = "bg-cyan-700";
-                else if (ec <= 5) bgColor = "bg-cyan-500";
-                else bgColor = "bg-cyan-400";
-              }
-              
-              return (
-              <div
-                key={h.date}
-                  className="relative group cursor-pointer"
-                  onClick={() => handleHeatmapClick(h.date)}
-              >
-                <div 
+        {/* Daily log + heatmap: mobile heatmap first (flex-col-reverse), desktop timeline left */}
+        <div className="flex flex-col-reverse xl:flex-row xl:items-start gap-6">
+          <div className="flex-1 min-w-0 rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 p-4 border-b border-border">
+              <div className="flex items-center justify-center sm:justify-start gap-2 flex-1 min-w-0">
+                <button
+                  type="button"
+                  onClick={goToPreviousDay}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  aria-label="Previous day"
+                >
+                  <ChevronRight className="w-5 h-5 rotate-180" />
+                </button>
+                <span className="font-semibold text-foreground text-sm sm:text-base text-center flex-1 min-w-0 px-1">
+                  {formatTimelineDate(selectedDate)}
+                </span>
+                <button
+                  type="button"
+                  onClick={goToNextDay}
+                  disabled={isToday}
                   className={cn(
-                      "w-8 h-8 rounded-md transition-all duration-300 hover:scale-110",
-                    h.active 
-                        ? `${bgColor} shadow-[0_0_10px_rgba(0,188,212,0.3)]` 
-                      : "bg-muted scale-90 opacity-50 hover:bg-muted/80"
+                    'p-2 rounded-lg transition-colors shrink-0',
+                    isToday
+                      ? 'text-muted-foreground/30 cursor-not-allowed'
+                      : 'hover:bg-muted text-muted-foreground hover:text-foreground',
                   )}
-                />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-card border border-border rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
-                  <p className="font-bold text-foreground">{formatDate(h.date)}</p>
-                    <p className="text-[#00bcd4]">{ec} entries</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Timeline Section */}
-        <div className="space-y-6">
-          {/* Top Bar */}
-          <div className="flex items-center justify-between bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={goToPreviousDay}
-                className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Previous day"
-              >
-                <ChevronRight className="w-5 h-5 rotate-180" />
-              </button>
-              <span className="font-semibold text-foreground text-base min-w-[250px] text-center">
-                {formatTimelineDate(selectedDate)}
-              </span>
-              <button
-                onClick={goToNextDay}
-                disabled={isToday}
-                className={cn(
-                  "p-2 rounded-lg transition-colors",
-                  isToday 
-                    ? "text-muted-foreground/30 cursor-not-allowed" 
-                    : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                )}
-                aria-label="Next day"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+                  aria-label="Next day"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex items-center justify-center sm:justify-end gap-3 flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChatFilterOnly((v) => !v)}
+                  className={cn(
+                    'rounded-lg border-[#00bcd4] text-[#00bcd4] bg-transparent hover:bg-[#00bcd4]/10 hover:text-[#00bcd4]',
+                    chatFilterOnly && 'bg-[#00bcd4]/10',
+                  )}
+                >
+                  Chat reports · {formatChatReportsDateLabel()} ({chatReportCount})
+                </Button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById('daily-heatmap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  }
+                  className="text-[#00bcd4] hover:text-[#00acc1] text-sm font-medium flex items-center gap-1 transition-colors xl:hidden"
+                >
+                  View heatmap <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="px-3 py-1.5 rounded-full bg-muted text-muted-foreground text-sm">
-                Chat reports ({chatReportCount})
-              </span>
-              <button
-                type="button"
-                onClick={() => document.getElementById('daily-heatmap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="text-[#00bcd4] hover:text-[#00acc1] text-sm font-medium flex items-center gap-1 transition-colors"
-              >
-                View heatmap <ChevronRight className="w-4 h-4" />
-              </button>
-                    </div>
-                  </div>
 
-          {/* Day summary (workers, notes, weather, site photos — outside activity_entries) */}
-          {!isDailyLoading && dailyLog && (
-            (dailyLog.worker_count != null && dailyLog.worker_count > 0) ||
-            (dailyLog.notes && dailyLog.notes.trim()) ||
-            (dailyLog.weather_condition && dailyLog.weather_condition.trim()) ||
-            (dailyLog.photo_urls && dailyLog.photo_urls.length > 0)
-          ) ? (
-            <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">Day summary</h3>
-              {dailyLog!.worker_count != null && dailyLog!.worker_count > 0 && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Users className="w-4 h-4 text-[#00bcd4]" />
-                  <span>
-                    <span className="font-medium text-foreground">{dailyLog!.worker_count}</span> workers on site
-                  </span>
+            {!isDailyLoading &&
+              dailyLog &&
+              ((dailyLog.worker_count != null && dailyLog.worker_count > 0) ||
+                (dailyLog.notes && dailyLog.notes.trim()) ||
+                (dailyLog.weather_condition && dailyLog.weather_condition.trim()) ||
+                (dailyLog.photo_urls && dailyLog.photo_urls.length > 0)) && (
+                <div className="px-4 py-3 border-b border-border space-y-2 bg-muted/20">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Day summary</h3>
+                  {dailyLog.worker_count != null && dailyLog.worker_count > 0 && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Users className="w-4 h-4 text-[#00bcd4] shrink-0" />
+                      <span>
+                        <span className="font-medium text-foreground">{dailyLog.worker_count}</span> workers on site
+                      </span>
+                    </div>
+                  )}
+                  {dailyLog.weather_condition?.trim() && (
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Weather:</span> {dailyLog.weather_condition}
+                    </p>
+                  )}
+                  {dailyLog.notes?.trim() && (
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      <span className="font-medium text-foreground">Notes:</span> {dailyLog.notes}
+                    </p>
+                  )}
+                  {dailyLog.photo_urls && dailyLog.photo_urls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {dailyLog.photo_urls.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                          <img src={url} alt="" className="w-14 h-14 rounded-lg object-cover border border-border" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-              {dailyLog!.weather_condition?.trim() && (
-                <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">Weather:</span> {dailyLog!.weather_condition}
-                </p>
-              )}
-              {dailyLog!.notes?.trim() && (
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  <span className="font-medium text-foreground">Notes:</span> {dailyLog!.notes}
-                </p>
-              )}
-              {dailyLog!.photo_urls && dailyLog!.photo_urls.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {dailyLog!.photo_urls.map((url, i) => (
-                    <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                      <img src={url} alt="" className="w-16 h-16 rounded-lg object-cover border border-border" />
-                    </a>
+
+            <div className="p-4 sm:px-5">
+              {isDailyLoading ? (
+                <TimelineSkeleton />
+              ) : isDailyError ? (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground mb-4">Failed to load entries.</p>
+                  <Button onClick={() => refetchDaily()} variant="outline" className="border-border text-muted-foreground">
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Retry
+                  </Button>
+                </div>
+              ) : displayTimelineEntries.length === 0 ? (
+                <div className="text-center py-16">
+                  {chatFilterOnly && timelineEntries.length > 0 ? (
+                    <>
+                      <p className="text-muted-foreground mb-4">No WhatsApp chat reports for this day.</p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-border text-muted-foreground"
+                        onClick={() => setChatFilterOnly(false)}
+                      >
+                        Show all activity
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground mb-4">No activity logged for this day.</p>
+                      <Button
+                        onClick={() => {
+                          setEntryErrors({});
+                          setEntries([
+                            {
+                              time: new Date().toLocaleTimeString('en-US', {
+                                hour12: false,
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }),
+                              description: '',
+                              amount: '',
+                              workers: '',
+                              activityType: 'other',
+                              id: Date.now(),
+                            },
+                          ]);
+                          setShowDailyModal(true);
+                        }}
+                        className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Log Activity
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  {displayTimelineEntries.map((entry, index) => (
+                    <DailyTimelineRow
+                      key={entry.id ?? index}
+                      entry={entry}
+                      isLast={index === displayTimelineEntries.length - 1}
+                    />
                   ))}
                 </div>
               )}
             </div>
-          ) : null}
+          </div>
 
-          {/* Timeline */}
-          <div className="relative">
-            {isDailyLoading ? (
-              <TimelineSkeleton />
-            ) : isDailyError ? (
-              <div className="text-center py-12">
-                <p className="text-muted-foreground mb-4">Failed to load entries.</p>
-                <Button onClick={() => refetchDaily()} variant="outline" className="border-border text-muted-foreground">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Retry
-                </Button>
-                      </div>
-            ) : timelineEntries.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-muted-foreground mb-4">No activity logged for this day.</p>
-                <Button
-                  onClick={() => {
-                    setEntryErrors({});
-                    setEntries([
-                      {
-                        time: new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }),
-                        description: '',
-                        amount: '',
-                        workers: '',
-                        activityType: 'other',
-                        id: Date.now(),
-                      },
-                    ]);
-                    setShowDailyModal(true);
-                  }}
-                  className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Log Activity
-                </Button>
-                            </div>
-            ) : (
-              <div className="space-y-4">
-                {timelineEntries.map((entry, index) => (
-                  <TimelineCard 
-                    key={entry.id || index} 
-                    entry={entry} 
-                    index={index} 
-                    total={timelineEntries.length} 
-                  />
-                ))}
+          <div
+            id="daily-heatmap"
+            className="w-full xl:w-[min(100%,320px)] xl:min-w-[260px] shrink-0 rounded-2xl border border-border bg-card p-5 sm:p-6 scroll-mt-24"
+          >
+            <h3 className="text-lg font-bold text-foreground mb-6">Activity — last 60 days</h3>
+            <div className="flex flex-wrap gap-2">
+              {heatmap.map((h) => {
+                const ec = h.entryCount ?? 0;
+                let bgColor = 'bg-muted';
+                if (h.active) {
+                  if (ec === 0) bgColor = 'bg-cyan-900';
+                  else if (ec <= 2) bgColor = 'bg-cyan-700';
+                  else if (ec <= 5) bgColor = 'bg-cyan-500';
+                  else bgColor = 'bg-cyan-400';
+                }
+
+                return (
+                  <div
+                    key={h.date}
+                    className="relative group cursor-pointer"
+                    onClick={() => handleHeatmapClick(h.date)}
+                  >
+                    <div
+                      className={cn(
+                        'w-8 h-8 rounded-md transition-all duration-300 hover:scale-110',
+                        h.active
+                          ? `${bgColor} shadow-[0_0_10px_rgba(0,188,212,0.3)]`
+                          : 'bg-muted scale-90 opacity-50 hover:bg-muted/80',
+                      )}
+                    />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-card border border-border rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
+                      <p className="font-bold text-foreground">{formatDate(h.date)}</p>
+                      <p className="text-[#00bcd4]">{ec} entries</p>
                     </div>
-                  )}
-                </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Floating + Log Activity Button */}
