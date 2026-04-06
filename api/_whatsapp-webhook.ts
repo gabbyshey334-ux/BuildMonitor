@@ -3288,7 +3288,6 @@ async function runAgent(
       monthlyTrend,
       burnRate: {
         weeklyUgx: weeklyBurnRate,
-        weeksElapsed,
         weeksRemaining,
         projectedOverBudget: remaining <= 0,
       },
