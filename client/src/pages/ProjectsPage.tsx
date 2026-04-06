@@ -55,11 +55,17 @@ export default function ProjectsPage() {
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjects();
 
+  const fetchedJson = JSON.stringify(fetched ?? null);
   useEffect(() => {
-    if (Array.isArray(fetched) && fetched.length >= 0) {
-      setProjects(fetched);
+    try {
+      const parsed = JSON.parse(fetchedJson) as Project[] | null;
+      if (Array.isArray(parsed)) {
+        setProjects(parsed);
+      }
+    } catch {
+      /* ignore */
     }
-  }, [fetched, setProjects]);
+  }, [fetchedJson, setProjects]);
 
   const list = Array.isArray(fetched) ? fetched : projects;
   const hasProjects = list.length > 0;

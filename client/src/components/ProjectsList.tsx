@@ -20,6 +20,7 @@ interface Project {
   description?: string;
   budgetAmount: number;
   spent?: number;
+  totalSpent?: number;
   currency?: string;
   status: 'active' | 'completed' | 'on_hold';
   createdAt: string;
@@ -301,7 +302,7 @@ export default function ProjectsList() {
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {projects.map((project) => {
-          const spent = project.spent || 0;
+          const spent = Number(project.totalSpent ?? project.spent ?? 0) || 0;
           const budget = project.budgetAmount || 0;
           const progressPercentage = getProgressPercentage(spent, budget);
           const remaining = budget - spent;

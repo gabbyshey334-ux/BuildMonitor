@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -274,6 +275,7 @@ function DailyTimelineRow({
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Photos</DialogTitle>
+            <DialogDescription className="sr-only">Gallery of photos attached to this daily log entry.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
             {photos.map((url, i) => (
@@ -295,6 +297,7 @@ function DailyTimelineRow({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{typeLabel}</DialogTitle>
+            <DialogDescription className="sr-only">Full text for this log entry.</DialogDescription>
           </DialogHeader>
           <p className="text-sm text-foreground whitespace-pre-wrap pt-2">
             {entry.description}

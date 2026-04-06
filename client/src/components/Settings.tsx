@@ -5,7 +5,7 @@
  * Can be expanded with actual settings in the future
  */
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
       <DialogContent className="sm:max-width-[425px]">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
+          <DialogDescription className="sr-only">Application settings panel.</DialogDescription>
         </DialogHeader>
         <div className="py-6">
           <p className="text-sm text-muted-foreground text-center">

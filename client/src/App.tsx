@@ -85,6 +85,9 @@ function Router() {
       <Route path="/reset-password">
         {isAuthenticated ? <Redirect to="/projects" /> : <ResetPassword />}
       </Route>
+      <Route path="/auth/callback">
+        {isAuthenticated ? <Redirect to="/projects" /> : <ResetPassword />}
+      </Route>
       <Route path="/projects">
         {isAuthenticated ? (
           <AppLayout>

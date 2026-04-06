@@ -32,10 +32,12 @@ export default function ForgotPassword() {
     setIsLoading(true);
 
     try {
+      const redirectTo =
+        typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail }),
+        body: JSON.stringify({ email: trimmedEmail, redirectTo }),
       });
 
       const contentType = res.headers.get("content-type");

@@ -138,7 +138,7 @@ interface PendingMaterialUpdate {
 const MATERIAL_KEYWORDS = [
   'cement', 'sand', 'gravel', 'bricks', 'iron bars', 'steel', 'timber', 'wood',
   'poles', 'tiles', 'paint', 'roofing', 'pipes', 'wire', 'aggregate', 'ballast',
-  'blocks', 'stone',
+  'blocks', 'stone', 'nails', 'rebar', 'hardcore', 'murram',
 ];
 
 // Labor/service — log as expense only, never add to materials_inventory
@@ -1744,7 +1744,7 @@ async function handleMaterialLog(
       .from('materials_inventory')
       .select('id, quantity, unit, low_stock_threshold')
       .eq('project_id', projectId)
-      .ilike('name', materialName)
+      .eq('name', materialName)
       .maybeSingle();
 
     if (!existing) {
@@ -2937,7 +2937,12 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
   const name = String(material_name).toLowerCase().trim();
   const qty = parseFloat(String(quantity));
   const now = new Date().toISOString();
-  const { data: existing } = await supabase.from('materials_inventory').select('id, quantity, unit').eq('project_id', projectId).ilike('name', `%${name}%`).maybeSingle();
+  const { data: existing } = await supabase
+    .from('materials_inventory')
+    .select('id, quantity, unit')
+    .eq('project_id', projectId)
+    .eq('name', name)
+    .maybeSingle();
 
   if (action === 'use' || action === 'used') {
     if (!existing) return { success: false, reply: `"${material_name}" is not in your inventory yet. Log a purchase first.` };
@@ -3729,11 +3734,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isYes || isNo) {
         if (isYes) {
           try {
+            const pendingNameNorm = String(pendingMaterial.material_name || '')
+              .toLowerCase()
+              .trim();
             const { data: existing } = await supabase
               .from('materials_inventory')
               .select('id, quantity, unit')
               .eq('project_id', pendingMaterial.project_id)
-              .ilike('name', `%${pendingMaterial.material_name}%`)
+              .eq('name', pendingNameNorm)
               .maybeSingle();
             if (existing) {
               const newQty = parseFloat(String(existing.quantity || 0)) + pendingMaterial.quantity;
@@ -3766,7 +3774,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .insert({
                   project_id: pendingMaterial.project_id,
                   user_id: userId,
-                  name: pendingMaterial.material_name,
+                  name: pendingNameNorm,
                   quantity: pendingMaterial.quantity,
                   unit: pendingMaterial.unit || 'units',
                   last_purchased_at: now,
@@ -4274,8 +4282,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const materialLines: string[] = [];
         for (const ent of materialEntries) {
           const descLower = (ent.description || ent.materialName).toLowerCase();
+          const matLower = (ent.materialName || '').toLowerCase();
           const isSkipType = SKIP_KEYWORDS.some((k) => descLower.includes(k));
-          const isMaterial = ent.materialName && ent.quantity > 0 && !isSkipType && MATERIAL_KEYWORDS.some((k) => descLower.includes(k));
+          const isMaterial =
+            !!ent.materialName &&
+            ent.quantity > 0 &&
+            !isSkipType &&
+            (MATERIAL_KEYWORDS.some((k) => descLower.includes(k)) ||
+              MATERIAL_KEYWORDS.some((k) => matLower.includes(k)));
 
         if (isMaterial && ent.materialName && ent.quantity > 0) {
           const nameNorm = ent.materialName.toLowerCase().trim();

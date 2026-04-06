@@ -204,7 +204,7 @@ export interface ProjectMaterialsResponse {
 
 export function useProjectMaterials(projectId: string | null | undefined) {
   return useQuery({
-    queryKey: ["project-materials", projectId],
+    queryKey: ["materials", projectId],
     queryFn: async (): Promise<ProjectMaterialsResponse> => {
       const res = await apiRequest("GET", `/api/projects/${projectId}/materials`);
       const data = await res.json();
@@ -214,8 +214,7 @@ export function useProjectMaterials(projectId: string | null | undefined) {
       return data as ProjectMaterialsResponse;
     },
     enabled: !!projectId,
-    staleTime: 30000,
-    refetchInterval: 30000,
+    staleTime: 0,
     refetchOnWindowFocus: true,
   });
 }

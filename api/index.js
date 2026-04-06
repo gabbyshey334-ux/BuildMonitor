@@ -16,6 +16,32 @@ import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
 
+/** Linked WhatsApp profile IDs + auth user id — mirrors GET /api/projects. */
+async function getLinkedUserIdsForAuth(supabase, userId) {
+  const ids = new Set([userId]);
+  const { data: linked } = await supabase.from('profiles').select('id').eq('auth_user_id', userId);
+  if (linked && Array.isArray(linked)) {
+    for (const p of linked) {
+      if (p?.id) ids.add(p.id);
+    }
+  }
+  return [...ids];
+}
+
+/** True if user owns the project (directly or via linked profile) or is manager_id. */
+async function userHasProjectAccess(supabase, projectId, userId) {
+  const allowed = await getLinkedUserIdsForAuth(supabase, userId);
+  const { data: projectRow } = await supabase
+    .from('projects')
+    .select('id, user_id, manager_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (!projectRow) return false;
+  if (allowed.includes(projectRow.user_id)) return true;
+  if (projectRow.manager_id && projectRow.manager_id === userId) return true;
+  return false;
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -151,15 +177,18 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
+        const allowedSummary = await userHasProjectAccess(supabase, projectId, userId);
+        if (!allowedSummary) {
+          return res.status(404).json({ success: false, error: 'Project not found' });
+        }
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
           .select('id, name, budget, status, created_at')
           .eq('id', projectId)
-          .eq('user_id', userId)
           .maybeSingle();
-        if (projectError) {
+        if (projectError || !projectData) {
           console.error('[Summary] Supabase project error:', projectError);
-          return res.status(500).json({ success: false, error: projectError.message });
+          return res.status(404).json({ success: false, error: projectError?.message || 'Project not found' });
         }
         projectRow = projectData;
 
@@ -169,7 +198,8 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           const { data: expenseRows, error: expenseError } = await supabase
             .from('expenses')
             .select('amount, expense_date')
-            .eq('project_id', projectId);
+            .eq('project_id', projectId)
+            .is('deleted_at', null);
           if (expenseError) console.error('[Summary] Supabase expenses error:', expenseError);
           expenseRowCount = (expenseRows || []).length;
           totalSpent = (expenseRows || []).reduce((sum, row) => sum + parseFloat(String(row.amount || 0)), 0);
@@ -1298,21 +1328,16 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-      const { data: projectRow, error: projectError } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (projectError || !projectRow) {
+      const allowed = await userHasProjectAccess(supabase, projectId, userId);
+      if (!allowed) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
       const { data: rows, error } = await supabase
         .from('materials_inventory')
-        .select('id, project_id, name, quantity, unit, last_updated, created_at, user_id, unit_cost, total_cost, low_stock_threshold, last_purchased_at, last_used_at, source, notes, updated_at')
+        .select('*')
         .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
+        .order('name', { ascending: true });
       if (error) {
         console.error('[Materials GET]', error.message);
         return res.status(500).json({ success: false, error: error.message || 'Failed to load materials' });
@@ -1418,13 +1443,8 @@ app.get('/api/projects/:projectId/materials/daily', (req, res, next) => {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-      const { data: projectRow, error: projectError } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (projectError || !projectRow) {
+      const allowedDaily = await userHasProjectAccess(supabase, projectId, userId);
+      if (!allowedDaily) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
@@ -1582,8 +1602,8 @@ app.post('/api/projects/:projectId/materials/daily', requireAuth, async (req, re
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const allowedPostDaily = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowedPostDaily) return res.status(404).json({ success: false, error: 'Project not found' });
 
     const { log_date, entries } = req.body || {};
     const logDate = String(log_date || new Date().toISOString().split('T')[0]).substring(0, 10);
@@ -1768,10 +1788,10 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const allowedPostMat = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowedPostMat) return res.status(404).json({ success: false, error: 'Project not found' });
 
-    const { name, quantity, unit, unit_cost, total_cost, source } = req.body || {};
+    const { name, quantity, unit, unit_cost, total_cost, source, low_stock_threshold } = req.body || {};
     const nameStr = typeof name === 'string' ? name.trim() : '';
     if (!nameStr) return res.status(400).json({ success: false, error: 'name is required' });
     const canonical = normalizeMaterialStorageName(nameStr);
@@ -1780,6 +1800,10 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
     const unitCost = unit_cost != null ? parseFloat(String(unit_cost)) : 0;
     const totalCost = total_cost != null ? parseFloat(String(total_cost)) : qty * unitCost;
     const sourceStr = source === 'whatsapp' || source === 'dashboard' ? source : 'manual';
+    const lowTh =
+      low_stock_threshold != null && low_stock_threshold !== ''
+        ? parseFloat(String(low_stock_threshold))
+        : null;
     const now = new Date().toISOString();
 
     const { data: invList } = await supabase
@@ -1794,16 +1818,18 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
     if (existing) {
       const newQty = parseFloat(String(existing.quantity || 0)) + qty;
       const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
+      const updatePayload = {
+        name: canonical,
+        quantity: newQty,
+        unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
+        total_cost: newTotalCost,
+        last_purchased_at: now,
+        updated_at: now,
+      };
+      if (lowTh != null && Number.isFinite(lowTh)) updatePayload.low_stock_threshold = lowTh;
       const { data: updated, error: updateErr } = await supabase
         .from('materials_inventory')
-        .update({
-          name: canonical,
-          quantity: newQty,
-          unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
-          total_cost: newTotalCost,
-          last_purchased_at: now,
-          updated_at: now,
-        })
+        .update(updatePayload)
         .eq('id', existing.id)
         .select('id')
         .single();
@@ -1813,20 +1839,22 @@ app.post('/api/projects/:projectId/materials', requireAuth, async (req, res) => 
       }
       materialId = updated?.id ?? existing.id;
     } else {
+      const insertPayload = {
+        project_id: projectId,
+        user_id: userId,
+        name: canonical,
+        quantity: qty,
+        unit: unit || 'units',
+        unit_cost: unitCost,
+        total_cost: totalCost,
+        source: sourceStr,
+        last_purchased_at: now,
+        updated_at: now,
+      };
+      if (lowTh != null && Number.isFinite(lowTh)) insertPayload.low_stock_threshold = lowTh;
       const { data: inserted, error: insertErr } = await supabase
         .from('materials_inventory')
-        .insert({
-          project_id: projectId,
-          user_id: userId,
-          name: canonical,
-          quantity: qty,
-          unit: unit || 'units',
-          unit_cost: unitCost,
-          total_cost: totalCost,
-          source: sourceStr,
-          last_purchased_at: now,
-          updated_at: now,
-        })
+        .insert(insertPayload)
         .select('id')
         .single();
       if (insertErr) {
@@ -1879,14 +1907,16 @@ app.patch('/api/projects/:projectId/materials/:id', requireAuth, async (req, res
       .eq('project_id', projectId)
       .maybeSingle();
     if (!row) return res.status(404).json({ success: false, error: 'Material not found' });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(403).json({ success: false, error: 'Not allowed' });
+    const allowedPatchMat = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowedPatchMat) return res.status(403).json({ success: false, error: 'Not allowed' });
 
-    const { quantity, unit_cost, total_cost } = req.body || {};
+    const { quantity, unit, unit_cost, total_cost, low_stock_threshold } = req.body || {};
     const updates = { updated_at: new Date().toISOString() };
     if (quantity != null) updates.quantity = parseFloat(String(quantity));
+    if (typeof unit === 'string' && unit.trim()) updates.unit = unit.trim();
     if (unit_cost != null) updates.unit_cost = parseFloat(String(unit_cost));
     if (total_cost != null) updates.total_cost = parseFloat(String(total_cost));
+    if (low_stock_threshold != null) updates.low_stock_threshold = parseFloat(String(low_stock_threshold));
 
     const { data: updated, error: updateErr } = await supabase
       .from('materials_inventory')
@@ -1934,8 +1964,8 @@ app.delete('/api/projects/:projectId/materials/:id', requireAuth, async (req, re
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const allowedDelMat = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowedDelMat) return res.status(404).json({ success: false, error: 'Project not found' });
 
     const { data: row, error: delErr } = await supabase
       .from('materials_inventory')
@@ -2740,7 +2770,7 @@ app.post('/api/auth/logout', (req, res) => {
 // POST /api/auth/forgot-password - Send password reset email (Supabase Auth)
 app.post('/api/auth/forgot-password', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, redirectTo: bodyRedirect } = req.body || {};
     if (!email || typeof email !== 'string' || !email.trim()) {
       return res.status(400).json({
         success: false,
@@ -2760,7 +2790,15 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false } });
-    const redirectTo = process.env.APP_URL ? `${process.env.APP_URL}/reset-password` : undefined;
+    const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin.trim() : '';
+    let redirectTo =
+      typeof bodyRedirect === 'string' && bodyRedirect.startsWith('http')
+        ? bodyRedirect
+        : originHeader
+          ? `${originHeader.replace(/\/$/, '')}/reset-password`
+          : process.env.APP_URL
+            ? `${String(process.env.APP_URL).replace(/\/$/, '')}/reset-password`
+            : undefined;
     console.log('[forgot-password] redirectTo:', redirectTo);
     console.log('[forgot-password] Sending reset to:', email.trim());
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
@@ -2788,6 +2826,93 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       success: false,
       error: 'Server error',
       message: err?.message || 'Server error',
+    });
+  }
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Client sends access_token from email hash; server decodes JWT sub and uses admin API to set password.
+ */
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const password = req.body?.password;
+    const token = req.body?.token;
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        message: 'Password must be at least 6 characters.',
+      });
+    }
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Reset link required',
+        message:
+          'Please use the link from your password reset email. If it expired, request a new reset from Forgot Password.',
+      });
+    }
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Password reset is not configured.',
+      });
+    }
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset link',
+        message: 'Invalid or expired reset link. Please request a new password reset.',
+      });
+    }
+    let userId;
+    try {
+      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+      const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
+      userId = payload.sub;
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset link',
+        message: 'Invalid or expired reset link. Please request a new password reset.',
+      });
+    }
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset link',
+        message: 'Invalid or expired reset link. Please request a new password reset.',
+      });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+    if (error) {
+      console.error('[reset-password]', error.message);
+      return res.status(400).json({
+        success: false,
+        error: 'Reset failed',
+        message: error.message,
+      });
+    }
+    return res.json({
+      success: true,
+      message: 'Your password has been reset successfully.',
+    });
+  } catch (err) {
+    console.error('[reset-password] Unexpected:', err?.message || err, err?.stack || '');
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to reset password',
+      message: err?.message || 'An error occurred while resetting your password.',
     });
   }
 });
@@ -3057,7 +3182,8 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       const { data: expenseRows } = await supabase
         .from('expenses')
         .select('project_id, amount, created_at')
-        .in('project_id', projectIds);
+        .in('project_id', projectIds)
+        .is('deleted_at', null);
       if (expenseRows && Array.isArray(expenseRows)) {
         for (const row of expenseRows) {
           const pid = row.project_id;
