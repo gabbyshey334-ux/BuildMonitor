@@ -1387,23 +1387,21 @@ async function upsertDailyLog(
 async function handleBudgetQuery(from: string, projectId: string, lang?: string): Promise<void> {
   const { data: project } = await supabase
     .from('projects').select('budget, name').eq('id', projectId).single();
-  // Filter soft-deleted expenses to stay consistent with the dashboard
+  // Single query with date fields for both totalSpent and burn rate calculation
   const { data: expenses } = await supabase
-    .from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
+    .from('expenses').select('amount, expense_date, created_at').eq('project_id', projectId).is('deleted_at', null);
 
-  const totalSpent = (expenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
+  // Single query with all fields needed for both totalSpent AND burn rate
+  const allExpensesArr = expenses || [];
+  const totalSpent = allExpensesArr.reduce((s: any, e: any) => s + parseFloat(String(e.amount || 0)), 0);
   const budget = parseFloat(String(project?.budget || 0));
-  const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+  const pct = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
   const remaining = budget > 0 ? Math.max(0, budget - totalSpent) : 0;
 
   // Unified burn-rate: mirrors dashboard's computeWeeklyBurnRate logic exactly.
   // Uses spannedDays < 4 check to handle single-day projects without inflating.
-  const { data: allExpensesForBurn } = await supabase
-    .from('expenses').select('amount, expense_date, created_at')
-    .eq('project_id', projectId).is('deleted_at', null);
   let weeklyBurn = 0;
-  const allExpensesArr = allExpensesForBurn || [];
-  const totalSpentAll = allExpensesArr.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+  const totalSpentAll = totalSpent;
   if (allExpensesArr.length > 0 && totalSpentAll > 0) {
     const burnDates = allExpensesArr
       .map((e: any) => {
@@ -3153,11 +3151,19 @@ async function runAgent(
     amount: parseFloat(String(e.amount || 0)),
     date: e.expense_date as string,
   }));
-  const materials = (materialsRes.data || []).map((m: any) => ({
-    name: m.name, stock: m.quantity, unit: m.unit, unitCostUgx: m.unit_cost,
-    totalCostUgx: m.total_cost, lastPurchased: m.last_purchased_at,
-    lastUsed: m.last_used_at, lowStockAt: m.low_stock_threshold,
-  }));
+  const materials = (materialsRes.data || []).map((m: any) => {
+    const stock = parseFloat(String(m.quantity || 0));
+    const unitCostUgx = parseFloat(String(m.unit_cost || 0));
+    return {
+      name: m.name, stock, unit: m.unit, unitCostUgx,
+      // currentValueUgx = current stock × unit cost (what inventory is worth NOW)
+      currentValueUgx: Math.round(stock * unitCostUgx),
+      // purchaseTotalUgx = accumulated spend (historical, includes consumed stock)
+      purchaseTotalUgx: parseFloat(String(m.total_cost || 0)),
+      lastPurchased: m.last_purchased_at,
+      lastUsed: m.last_used_at, lowStockAt: m.low_stock_threshold,
+    };
+  });
   const vendors = (!vendorsRes.error && vendorsRes.data)
     ? vendorsRes.data.map((v: any) => ({
         name: v.name, totalSpentUgx: parseFloat(String(v.total_spent || 0)), transactions: v.total_transactions,
@@ -3256,7 +3262,8 @@ async function runAgent(
   const totalSpent = allExpenses.reduce((s, e) => s + e.amount, 0);
   const budget = parseFloat(String(project?.budget || 0));
   const remaining = Math.max(0, budget - totalSpent);
-  const pctUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+  // Cap at 100 to match dashboard display (dashboard uses Math.min(100, ...))
+  const pctUsed = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
 
   // Unified burn-rate: mirrors dashboard's computeWeeklyBurnRate logic exactly.
   // spannedDays < 4 → use per-active-day avg × 7 (avoids inflating for single-day data)
@@ -3331,7 +3338,9 @@ async function runAgent(
         peak: peakWorkers,
         totalDaysLogged: workerLogs.length,
       },
-      lowStockAlerts: lowStock.map((m) => `${m.name}: ${m.stock} ${m.unit} left (threshold: ${m.lowStockAt})`),
+      // totalInventoryValueUgx = Σ(currentStock × unitCost) — what all materials are worth right now
+      totalInventoryValueUgx: Math.round(materials.reduce((s, m) => s + m.currentValueUgx, 0)),
+      lowStockAlerts: lowStock.map((m) => `${m.name}: ${m.stock} ${m.unit} left (threshold: ${m.lowStockAt ?? 5})`),
       topVendors: vendors.slice(0, 5),
       totalExpenseRecords: allExpenses.length,
     },

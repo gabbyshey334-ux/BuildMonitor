@@ -128,8 +128,9 @@ export default function MaterialsPage() {
 
   const kpis = useMemo(() => {
     const totalMaterials = inventory.length;
+    // Current inventory value = quantity × unit_cost (not historical total_cost)
     const totalValue = inventory.reduce(
-      (s, m) => s + parseFloat(String(m.total_cost ?? 0)),
+      (s, m) => s + (Number(m.quantity) || 0) * (Number(m.unit_cost) || 0),
       0,
     );
     const lowStockItems = inventory.filter((m) => {
@@ -413,7 +414,8 @@ export default function MaterialsPage() {
                     const qty = Number(row.quantity) || 0;
                     const st = stockStatus(qty, th);
                     const uc = row.unit_cost != null ? parseFloat(String(row.unit_cost)) : 0;
-                    const tv = row.total_cost != null ? parseFloat(String(row.total_cost)) : qty * uc;
+                    // Current value = current stock × unit cost (not historical purchase total)
+                    const tv = qty * uc;
                     const displayName = formatMaterialDisplayName(normalizeMaterialStorageName(row.name));
                     return (
                       <TableRow key={row.id}>

@@ -1417,8 +1417,14 @@ app.get('/api/projects/:projectId/materials', (req, res, next) => {
             return t > latest ? t : latest;
           }, 0)
         : null;
+      // Total inventory value = Σ(quantity × unit_cost) — current stock at current price
+      const totalInventoryValue = inventory.reduce(
+        (s, m) => s + (m.quantity || 0) * (m.unit_cost || 0),
+        0
+      );
       const summary = {
         totalItems: inventory.length,
+        totalInventoryValue: Math.round(totalInventoryValue),
         lowStockCount: lowStock.length,
         lastUpdated: lastUpdated ? new Date(lastUpdated).toISOString() : null,
       };
@@ -2270,10 +2276,10 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 
       const { data: materialRows } = await supabase
         .from('materials_inventory')
-        .select('name, quantity, unit')
+        .select('name, quantity, unit, unit_cost, low_stock_threshold')
         .eq('project_id', projectId)
         .order('quantity', { ascending: false })
-        .limit(5);
+        .limit(20);
 
       const { data: vendorRows } = await supabase
         .from('vendors')
@@ -2326,10 +2332,12 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
         : (byDay[byDay.length - 1]?.count || 0) < (byDay[byDay.length - 2]?.count || 0) ? 'decreasing'
         : 'stable';
 
-      const mostUsed = materials.map((m) => ({
+      const mostUsed = materials.slice(0, 5).map((m) => ({
         name: m.name || '',
         quantity: parseFloat(String(m.quantity || 0)),
         unit: m.unit || 'units',
+        unitCost: parseFloat(String(m.unit_cost || 0)),
+        currentValue: parseFloat(String(m.quantity || 0)) * parseFloat(String(m.unit_cost || 0)),
       }));
 
       const topVendors = vendorList.map((v) => ({
@@ -2341,7 +2349,10 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
       if (budgetTotal > 0 && (totalSpent / budgetTotal) > 0.8) {
         alerts.push({ type: 'budget_warning', message: 'Over 80% of budget used', severity: 'high', date: new Date().toISOString().split('T')[0] });
       }
-      const lowStockMaterials = materials.filter((m) => parseFloat(String(m.quantity || 0)) <= 5);
+      const lowStockMaterials = materials.filter((m) => {
+        const th = m.low_stock_threshold != null ? parseFloat(String(m.low_stock_threshold)) : 5;
+        return parseFloat(String(m.quantity || 0)) <= th;
+      });
       for (const m of lowStockMaterials) {
         alerts.push({ type: 'low_stock', message: `${m.name} low on stock (${m.quantity} ${m.unit})`, severity: 'medium', date: new Date().toISOString().split('T')[0] });
       }

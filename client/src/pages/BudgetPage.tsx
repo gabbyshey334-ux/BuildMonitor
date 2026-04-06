@@ -683,14 +683,32 @@ export default function BudgetPage() {
   const percentSpent = useMemo(() => pct(totalSpent, budget), [totalSpent, budget]);
   const overBudget = budget > 0 && totalSpent > budget;
 
-  const recentSpend = useMemo(() => {
-    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    return expenses
-      .filter((e) => new Date(e.expense_date || e.created_at).getTime() >= cutoff)
-      .reduce((s, e) => s + (parseFloat(String(e.amount || 0)) || 0), 0);
-  }, [expenses]);
+  // Unified burn rate — identical logic to api/index.js computeWeeklyBurnRate
+  const weeklyBurn = useMemo(() => {
+    if (!expenses.length || totalSpent <= 0) return 0;
+    const dates = expenses
+      .map((e) => {
+        const d = String(e.expense_date || e.created_at || "").split("T")[0];
+        return d ? new Date(d + "T12:00:00").getTime() : null;
+      })
+      .filter((t): t is number => t !== null);
+    if (dates.length === 0) return 0;
+    const firstMs = Math.min(...dates);
+    const lastMs = Math.max(...dates);
+    const spannedDays = Math.max(1, (lastMs - firstMs) / 86400000);
+    const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
+    const uniqueDates = new Set(
+      expenses
+        .map((e) => String(e.expense_date || e.created_at || "").split("T")[0])
+        .filter(Boolean)
+    );
+    const daysWithSpending = Math.max(1, uniqueDates.size);
+    if (spannedDays < 4) {
+      return Math.round((totalSpent / daysWithSpending) * 7);
+    }
+    return Math.round((totalSpent / daysSinceFirst) * 7);
+  }, [expenses, totalSpent]);
 
-  const weeklyBurn = recentSpend / 4.3;
   const weeksRemaining =
     weeklyBurn > 0
       ? Math.min(999, Math.max(0, Math.round(balance / weeklyBurn)))
