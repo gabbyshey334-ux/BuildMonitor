@@ -338,10 +338,10 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       const budgetAmount = parseFloat(String(projectRow.budget ?? '0'));
       const remaining = Math.max(0, budgetAmount - totalSpent);
       const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
-      const createdAt = projectRow.created_at ? new Date(projectRow.created_at) : new Date();
-      const daysSinceStart = Math.max(1, (Date.now() - createdAt.getTime()) / 86400000);
-      const dailyBurnRate = totalSpent / daysSinceStart;
-      const weeksRemaining = dailyBurnRate > 0 ? remaining / (dailyBurnRate * 7) : null;
+      // Use unified burn rate formula (same as Budget & Costs and Trends pages)
+      const weeklyBurnRate = computeWeeklyBurnRate(expenseRowsForCumulative, totalSpent);
+      const dailyBurnRate = weeklyBurnRate / 7;
+      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
 
       // Build cumulative costs by date (for Budget & Costs section)
       const byDate = {};
@@ -420,7 +420,11 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           remaining,
           percentage: Math.round(percentage * 10) / 10,
           dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
+          weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
           weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
+          budgetRunout: weeksRemaining != null && weeksRemaining < 9999
+            ? new Date(Date.now() + Math.floor(weeksRemaining) * 7 * 86400000).toISOString().split('T')[0]
+            : null,
         },
         progress: {
           overallPercentage: 0,
@@ -733,7 +737,7 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
       const now = new Date().toISOString();
       const unitCost = amount && quantity > 0 ? amount / quantity : 0;
       const totalCost = amount || quantity * unitCost;
-      const nameNorm = itemName.toLowerCase().trim();
+      const nameNorm = normalizeMaterialStorageName(itemName);
       const { data: existing } = await supabase
         .from('materials_inventory')
         .select('id, quantity, unit_cost, total_cost')
@@ -1439,20 +1443,23 @@ function utcDateKeyFromIso(iso) {
 }
 
 /** Keep in sync with shared/materialNames.ts */
-const _MAT_KEEP = new Set(['glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar']);
-const _MAT_KEEP_ES = new Set(['makes', 'takes', 'bakes', 'lakes', 'notes']);
+// Words that must never be singularized (would produce wrong stems)
+const _MAT_KEEP = new Set([
+  'glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar',
+  'hardcore', 'murram', 'gravel', 'ballast', 'aggregate', 'cement',
+]);
 function singularizeMaterialToken(w) {
   if (w.length < 2) return w;
   if (_MAT_KEEP.has(w)) return w;
+  // possessive: "mason's" → "mason"
   if (w.endsWith("'s")) return w.slice(0, -2);
+  // -ies → -y: "lorries" → "lorry"
   if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
-  if (w.endsWith('es') && w.length >= 5 && !_MAT_KEEP_ES.has(w)) {
-    const base = w.slice(0, -2);
-    if (base.length >= 2) return base;
-  }
+  // General -s removal (handles tiles→tile, pipes→pipe, bricks→brick, cements→cement)
+  // Keeps double-s words (glass, grass, brass) via _MAT_KEEP above
   if (w.endsWith('s') && !w.endsWith('ss') && w.length >= 4) {
     const stem = w.slice(0, -1);
-    if (stem.length >= 3 && !stem.endsWith('s')) return stem;
+    if (stem.length >= 3) return stem;
   }
   return w;
 }

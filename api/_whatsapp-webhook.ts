@@ -149,6 +149,33 @@ const SKIP_KEYWORDS = [
 
 const GARBAGE_MATERIAL_NAMES = ['material', 'item', 'thing', 'stuff', 'goods', 'product', 'units'];
 
+// Words that must never be singularized (would produce wrong stems)
+const _MAT_KEEP = new Set([
+  'glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar',
+  'hardcore', 'murram', 'gravel', 'ballast', 'aggregate', 'cement',
+]);
+function _singularize(w: string): string {
+  if (w.length < 2) return w;
+  if (_MAT_KEEP.has(w)) return w;
+  if (w.endsWith("'s")) return w.slice(0, -2);
+  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+  if (w.endsWith('s') && !w.endsWith('ss') && w.length >= 4) {
+    const stem = w.slice(0, -1);
+    if (stem.length >= 3) return stem;
+  }
+  return w;
+}
+/**
+ * Canonical material storage name: lowercase, trimmed, each token singularized.
+ * "Cements" → "cement", "Iron Bars" → "iron bar", "Tiles" → "tile".
+ * Must be used identically in both dashboard (api/index.js) and webhook.
+ */
+function normalizeMaterialName(raw: string): string {
+  const s = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return '';
+  return s.split(/\s+/).map(_singularize).join(' ');
+}
+
 function parseQuantityFromDescription(desc: string): { quantity: number; unit?: string } | null {
   const m = desc.match(/(\d+)\s*(bags?|tonnes?|pieces?|bars?|sheets?|litres?|rolls?)?/i);
   if (!m) return null;
@@ -651,7 +678,7 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     if (ocrData.items && ocrData.items.length > 0) {
       for (const item of ocrData.items) {
         if (!item.name) continue;
-        const materialName = String(item.name).toLowerCase().trim();
+        const materialName = normalizeMaterialName(item.name);
         const qty = parseFloat(String(item.quantity || 0));
         if (qty <= 0) continue;
         const itemUnitCost = parseFloat(String(item.amount || 0)) / (qty || 1);
@@ -1729,7 +1756,7 @@ async function handleMaterialLog(
   if (!qty || qty <= 0) qty = 1;
 
   // Garbage data prevention
-  const nameNormCheck = item.toLowerCase().trim();
+  const nameNormCheck = normalizeMaterialName(item);
   if (nameNormCheck.length < 2) {
     await sendMessage(from, 'Please provide a valid material name (at least 2 characters).');
     return;
@@ -1745,7 +1772,7 @@ async function handleMaterialLog(
     .select('id, name, quantity, unit, low_stock_threshold')
     .eq('project_id', projectId);
 
-  let materialName = item.toLowerCase().trim() || 'material';
+  let materialName = nameNormCheck || 'material';
 
   if (allMaterials && allMaterials.length > 0 && materialName !== 'material') {
     const fuzzyMatch = allMaterials.find((m: any) =>
@@ -2892,7 +2919,7 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
         amount: String(amt), quantity_logged: item.quantity ? String(item.quantity) : null,
         currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
       });
-      const itemName = String(item.item || '').toLowerCase().trim();
+      const itemName = normalizeMaterialName(item.item || '');
       const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
       if (isMat && item.quantity > 0 && itemName.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
         const now = new Date().toISOString();
@@ -2923,7 +2950,7 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
   if (vendor) await upsertVendor(projectId, vendor, amt);
 
   if (params.item && params.quantity > 0) {
-    const itemName = String(params.item).toLowerCase().trim();
+    const itemName = normalizeMaterialName(params.item);
     const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
     if (isMat && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
       const now = new Date().toISOString();
@@ -2975,7 +3002,7 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
   const { material_name, action, quantity, unit } = params;
   if (!material_name) return { success: false, reply: 'Please specify the material name.' };
   if (!quantity || parseFloat(String(quantity)) <= 0) return { success: false, reply: 'Please specify the quantity.' };
-  const name = String(material_name).toLowerCase().trim();
+  const name = normalizeMaterialName(material_name);
   const qty = parseFloat(String(quantity));
   const now = new Date().toISOString();
   const { data: existing } = await supabase
@@ -3260,7 +3287,8 @@ async function runAgent(
   const peakWorkers = workerLogs.length > 0 ? Math.max(...workerLogs.map((l) => l.workers || 0)) : 0;
   const todayLog = dailyLogs.find((l) => l.date === todayStr);
   const workersToday = todayLog?.workers || 0;
-  const lowStock = materials.filter((m) => m.lowStockAt != null && m.stock <= m.lowStockAt);
+  // Default low_stock_threshold to 5 when null — same as dashboard
+  const lowStock = materials.filter((m) => m.stock <= (m.lowStockAt ?? 5));
 
   const todayFormatted = now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const userName = profile?.full_name && profile.full_name !== 'WhatsApp User'
@@ -4353,7 +4381,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               MATERIAL_KEYWORDS.some((k) => matLower.includes(k)));
 
         if (isMaterial && ent.materialName && ent.quantity > 0) {
-          const nameNorm = ent.materialName.toLowerCase().trim();
+          const nameNorm = normalizeMaterialName(ent.materialName);
           if (nameNorm.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(nameNorm)) {
             const now = new Date().toISOString();
             const unitCost = ent.amount && ent.quantity > 0 ? ent.amount / ent.quantity : 0;
