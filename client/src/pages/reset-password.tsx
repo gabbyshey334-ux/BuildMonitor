@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Link, useLocation } from "wouter";
-import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, CheckCircle2, AlertCircle, ArrowLeft, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 function parseHashParams(): { access_token?: string; refresh_token?: string; type?: string } {
@@ -18,10 +17,27 @@ function parseHashParams(): { access_token?: string; refresh_token?: string; typ
   };
 }
 
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: 0, label: "", color: "" };
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  if (score <= 1) return { score, label: "Weak", color: "#ef4444" };
+  if (score <= 2) return { score, label: "Fair", color: "#f59e0b" };
+  if (score <= 3) return { score, label: "Good", color: "#93C54E" };
+  return { score, label: "Strong", color: "#218598" };
+}
+
+const LEFT_TAGS = ["500+ projects tracked", "Real-time updates", "Works on WhatsApp"];
+
 export default function ResetPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,15 +45,17 @@ export default function ResetPassword() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
+  const strength = getPasswordStrength(password);
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+
   useEffect(() => {
     const { access_token, type } = parseHashParams();
     if (type === "recovery" && access_token) {
       setRecoveryToken(access_token);
       setError(null);
-      // Clear hash from URL so the token is not visible in address bar or history
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
     } else if (!access_token && !type && window.location.hash) {
-      setError("Invalid or expired reset link. Please request a new password reset from the Forgot Password page.");
+      setError("Invalid or expired reset link. Please request a new one.");
     }
   }, []);
 
@@ -45,23 +63,20 @@ export default function ResetPassword() {
     e.preventDefault();
     setError(null);
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
     if (password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
     }
-
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
     if (!recoveryToken) {
-      setError("Please use the link from your password reset email to set a new password.");
+      setError("Please use the link from your password reset email to continue.");
       return;
     }
 
     setIsLoading(true);
-
     try {
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
@@ -70,166 +85,269 @@ export default function ResetPassword() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Failed to reset password");
-      }
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to reset password");
 
       setIsSuccess(true);
-      toast({
-        title: "Success",
-        description: "Your password has been reset successfully.",
-      });
-
+      toast({ title: "Password updated", description: "You can now sign in with your new password." });
       setTimeout(() => setLocation("/login"), 3000);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to reset password";
       setError(message);
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (isSuccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ocean-pine/10 rounded-full blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600/10 rounded-full blur-[120px] pointer-events-none" />
+  return (
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
 
-        <div className="w-full max-w-[440px] px-6 relative z-10">
-          <Card className="bg-background border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl text-center py-8">
-            <CardContent className="space-y-6">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-500/10 mb-4">
-                <CheckCircle2 className="h-10 w-10 text-green-500" />
-              </div>
-              <h1 className="text-2xl font-bold text-foreground">Password Reset!</h1>
-              <p className="text-muted-foreground">
-                Your password has been successfully updated. You will be redirected to the login page in a few seconds.
-              </p>
-              <Link href="/login">
-                <Button className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold h-12 rounded-xl mt-4">
-                  Go to Login Now
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+      {/* ── LEFT COLUMN ── */}
+      <div className="relative w-full md:w-[45%] h-[260px] md:h-screen md:fixed md:top-0 md:left-0 overflow-hidden">
+        <img
+          src="https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=1200&auto=format&fit=crop&q=80&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNvbnN0cnVjdGlvbiUyMHNpdGV8ZW58MHx8MHx8fDA%3D"
+          alt="Construction site"
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#218598]/40 via-[#2F3332]/60 to-[#2F3332]/90 mix-blend-multiply" />
+        <div className="absolute inset-0 bg-black/20" />
+
+        <div className="absolute bottom-10 left-10 right-10 text-white z-10">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-xl overflow-hidden shrink-0">
+              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-8 h-8 object-contain drop-shadow-md" />
+            </div>
+            <span className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+              JengaTrack
+            </span>
+          </div>
+
+          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-3">
+            Build smarter.<br />Track everything.
+          </h1>
+          <p className="text-white/80 text-base md:text-lg mb-8 font-light max-w-md">
+            The ultimate WhatsApp-powered construction management platform for modern builders.
+          </p>
+
+          <div className="flex flex-wrap gap-3">
+            {LEFT_TAGS.map((tag, i) => (
+              <span
+                key={i}
+                className="px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-sm font-medium border border-white/20 shadow-sm"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-ocean-pine/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-amber-600/10 rounded-full blur-[120px] pointer-events-none" />
+      {/* ── RIGHT COLUMN ── */}
+      <div className="w-full md:w-[55%] md:ml-[45%] min-h-screen bg-background relative flex flex-col justify-center items-center py-12 px-6 md:px-10 overflow-hidden">
+        {/* Decorative blobs */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#218598]/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[#93C54E]/5 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3 pointer-events-none" />
 
-      <div className="w-full max-w-[440px] px-6 relative z-10">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 mb-6 shadow-lg shadow-amber-500/20">
-            <span className="text-2xl font-black text-white">CM</span>
-          </div>
-          <h1 className="text-3xl font-extrabold text-foreground tracking-tight mb-2">
-            Set New Password
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Please enter your new password below
-          </p>
-        </div>
+        <div className="w-full max-w-[420px] relative z-10">
 
-        <Card className="bg-background border-border backdrop-blur-xl shadow-2xl overflow-hidden rounded-2xl">
-          <CardContent className="pt-6">
-            {!recoveryToken && !error ? (
-              <div className="space-y-4 text-center py-4">
-                <p className="text-muted-foreground">
-                  Use the link from your password reset email to set a new password. If you don&apos;t have it, request a new one.
-                </p>
-                <Link href="/forgot-password">
-                  <Button className="bg-amber-600 hover:bg-amber-500 text-white">
-                    Request reset link
-                  </Button>
-                </Link>
+          {/* ── SUCCESS STATE ── */}
+          {isSuccess ? (
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl text-center space-y-6">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#93C54E]/20 to-[#218598]/20 flex items-center justify-center mx-auto border border-[#218598]/20 shadow-inner">
+                <CheckCircle2 className="w-10 h-10 text-[#218598]" />
               </div>
-            ) : (
-            <form onSubmit={handleReset} className="space-y-5">
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-500 text-sm p-3 rounded-xl flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 shrink-0" />
-                  <p>{error}</p>
+              <div className="space-y-2">
+                <h2 className="text-3xl font-bold text-foreground tracking-tight">Password updated!</h2>
+                <p className="text-muted-foreground">
+                  Your password has been set successfully. Redirecting you to sign in…
+                </p>
+              </div>
+              <Link href="/login">
+                <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                  Go to Sign In
+                </Button>
+              </Link>
+            </div>
+
+          ) : (
+            /* ── FORM CARD ── */
+            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl">
+
+              {/* Header */}
+              <div className="space-y-3 mb-8 text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-[#93C54E]/20 to-[#218598]/20 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 mx-auto mb-4 border border-[#218598]/20 shadow-inner">
+                  <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain drop-shadow-sm" />
+                </div>
+                <h2 className="text-3xl font-bold text-foreground tracking-tight">Set new password</h2>
+                <p className="text-muted-foreground">
+                  {recoveryToken
+                    ? "Choose a strong password to secure your account"
+                    : "Check your email for the reset link"}
+                </p>
+              </div>
+
+              {/* No-token fallback */}
+              {!recoveryToken && !error && (
+                <div className="space-y-5 text-center">
+                  <div className="flex items-center justify-center w-14 h-14 rounded-full bg-[#218598]/10 border border-[#218598]/20 mx-auto">
+                    <ShieldCheck className="w-7 h-7 text-[#218598]" />
+                  </div>
+                  <p className="text-muted-foreground text-sm leading-relaxed">
+                    Open the link in your reset email to land here with a valid token. If you don't have one, request a new link below.
+                  </p>
+                  <Link href="/forgot-password">
+                    <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                      Request reset link
+                    </Button>
+                  </Link>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-muted-foreground text-xs uppercase tracking-wider font-bold">New Password</Label>
-                <div className="relative group">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-amber-500 transition-colors" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    className="bg-background border-border text-foreground placeholder:text-muted-foreground pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-muted-foreground text-xs uppercase tracking-wider font-bold">Confirm Password</Label>
-                <div className="relative group">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-amber-500 transition-colors" />
-                  <Input
-                    id="confirmPassword"
-                    type={showPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    className="bg-background border-border text-foreground placeholder:text-muted-foreground pl-10 pr-10 h-12 focus:border-amber-500/50 focus:ring-amber-500/20 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold h-12 rounded-xl shadow-lg shadow-amber-900/20 transition-all active:scale-[0.98]"
-                disabled={isLoading || !recoveryToken}
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 border-2 border-border border-t-foreground rounded-full animate-spin" />
-                    <span>Updating...</span>
+              {/* Error banner (invalid link) */}
+              {error && !recoveryToken && (
+                <div className="space-y-5">
+                  <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-4 rounded-xl">
+                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <p>{error}</p>
                   </div>
-                ) : (
-                  <span>Update Password</span>
-                )}
-              </Button>
-            </form>
-            )}
-          </CardContent>
-          <CardFooter className="bg-muted/30 border-t border-border py-4 flex justify-center">
-            <Link href="/login">
-              <span className="text-muted-foreground hover:text-foreground transition-colors text-sm font-medium cursor-pointer">
-                Cancel and go to Login
-              </span>
-            </Link>
-          </CardFooter>
-        </Card>
+                  <Link href="/forgot-password">
+                    <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                      Request new reset link
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {/* ── Main form (only when token is valid) ── */}
+              {recoveryToken && (
+                <form onSubmit={handleReset} className="space-y-5">
+
+                  {/* Inline error */}
+                  {error && (
+                    <div className="flex items-start gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm p-4 rounded-xl">
+                      <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                      <p>{error}</p>
+                    </div>
+                  )}
+
+                  {/* New Password */}
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className="text-foreground font-semibold ml-1">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); setError(null); }}
+                        placeholder="••••••••"
+                        required
+                        autoComplete="new-password"
+                        className="bg-background/50 border-border/60 rounded-xl h-14 pl-4 pr-12 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+
+                    {/* Password strength bar */}
+                    {password.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4].map((i) => (
+                            <div
+                              key={i}
+                              className="flex-1 h-1 rounded-full transition-all duration-300"
+                              style={{
+                                backgroundColor:
+                                  strength.score >= i ? strength.color : "rgba(255,255,255,0.1)",
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <p className="text-xs font-medium" style={{ color: strength.color }}>
+                          {strength.label}
+                          {strength.label === "Weak" && " — try adding numbers or symbols"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Confirm Password */}
+                  <div className="space-y-2">
+                    <Label htmlFor="confirmPassword" className="text-foreground font-semibold ml-1">Confirm Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirm ? "text" : "password"}
+                        value={confirmPassword}
+                        onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
+                        placeholder="••••••••"
+                        required
+                        autoComplete="new-password"
+                        className={`bg-background/50 border-border/60 rounded-xl h-14 pl-4 pr-12 text-foreground transition-all shadow-sm w-full focus:ring-2 ${
+                          confirmPassword.length > 0
+                            ? passwordsMatch
+                              ? "border-[#93C54E]/60 focus:ring-[#93C54E]/30 focus:border-[#93C54E]"
+                              : "border-red-500/50 focus:ring-red-500/20 focus:border-red-500"
+                            : "focus:ring-[#218598]/50 focus:border-[#218598]"
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirm(!showConfirm)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
+                      >
+                        {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                      {confirmPassword.length > 0 && (
+                        <div className="absolute right-11 top-1/2 -translate-y-1/2">
+                          {passwordsMatch ? (
+                            <CheckCircle2 className="h-4 w-4 text-[#93C54E]" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-red-400" />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {confirmPassword.length > 0 && !passwordsMatch && (
+                      <p className="text-red-400 text-xs ml-1">Passwords do not match</p>
+                    )}
+                  </div>
+
+                  {/* Submit */}
+                  <Button
+                    type="submit"
+                    className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-2"
+                    disabled={isLoading || !passwordsMatch}
+                  >
+                    {isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Updating password…</span>
+                      </div>
+                    ) : (
+                      "Update Password"
+                    )}
+                  </Button>
+                </form>
+              )}
+
+              {/* Bottom nav link */}
+              <div className="mt-8 text-center">
+                <Link href="/login">
+                  <span className="text-muted-foreground hover:text-foreground text-sm font-medium cursor-pointer transition-colors inline-flex items-center gap-2">
+                    <ArrowLeft className="w-4 h-4" /> Back to sign in
+                  </span>
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-
-
