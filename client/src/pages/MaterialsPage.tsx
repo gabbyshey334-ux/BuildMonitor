@@ -35,6 +35,7 @@ import {
   Plus,
   RefreshCw,
   Trash2,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -86,7 +87,7 @@ function stockStatus(qty: number, threshold: number): "out" | "low" | "ok" {
 }
 
 function stockBarPercent(qty: number, threshold: number) {
-  const denom = Math.max((threshold || 5) * 4, 1);
+  const denom = Math.max((threshold || 5) * 6, 1);
   return Math.min(100, (qty / denom) * 100);
 }
 
@@ -120,6 +121,7 @@ export default function MaterialsPage() {
     enabled: !!projectId,
     staleTime: 0,
     refetchOnWindowFocus: true,
+    refetchInterval: 30000,
   });
 
   const inventory = data?.inventory ?? [];
@@ -366,12 +368,26 @@ export default function MaterialsPage() {
           </div>
         </div>
 
+        {/* Smart Sync Banner */}
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-muted border border-border text-sm text-muted-foreground">
+          <Zap className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+          <span>
+            Auto-synced with WhatsApp — materials logged via chat appear here instantly.
+            {kpis.lastUpdatedLabel !== "—" && (
+              <span className="ml-1">Last synced: <span className="text-foreground">{kpis.lastUpdatedLabel}</span></span>
+            )}
+          </span>
+        </div>
+
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           {inventory.length === 0 ? (
-            <div className="p-12 text-center space-y-4">
+            <div className="p-12 text-center space-y-3">
               <Package className="w-12 h-12 text-muted-foreground mx-auto opacity-60" />
-              <p className="text-muted-foreground">No materials in inventory yet.</p>
-              <Button onClick={openAdd}>
+              <p className="text-muted-foreground font-medium">No materials logged yet.</p>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                Materials appear here automatically when you log purchases via WhatsApp, or add them manually using the button above.
+              </p>
+              <Button onClick={openAdd} className="mt-2">
                 <Plus className="w-4 h-4 mr-2" />
                 Add your first material
               </Button>

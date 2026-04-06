@@ -1368,14 +1368,20 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
   const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
   const remaining = budget > 0 ? Math.max(0, budget - totalSpent) : 0;
 
-  // Estimate weeks remaining based on weekly burn rate
-  const { data: recentExpenses } = await supabase
-    .from('expenses').select('amount, created_at')
-    .eq('project_id', projectId)
-    .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-  const weeklyBurn = recentExpenses && recentExpenses.length > 0
-    ? (recentExpenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0) / 4.3)
-    : 0;
+  // Unified burn-rate: use actual days elapsed since first expense date
+  const { data: allExpensesForBurn } = await supabase
+    .from('expenses').select('amount, expense_date')
+    .eq('project_id', projectId);
+  let weeklyBurn = 0;
+  if (allExpensesForBurn && allExpensesForBurn.length > 0) {
+    const burnDates = allExpensesForBurn
+      .map((e: any) => (e.expense_date ? new Date(e.expense_date + 'T12:00:00').getTime() : null))
+      .filter((t: any): t is number => t !== null);
+    const firstMs = burnDates.length > 0 ? Math.min(...burnDates) : Date.now();
+    const daysSince = Math.max(1, (Date.now() - firstMs) / (1000 * 60 * 60 * 24));
+    const spent = allExpensesForBurn.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+    weeklyBurn = Math.round((spent / daysSince) * 7);
+  }
   const weeksLeft = weeklyBurn > 0 ? Math.round(remaining / weeklyBurn) : null;
 
   const msg = await ai(
@@ -2675,7 +2681,17 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   const { budget, name, description, status } = params;
   const updateData: any = { updated_at: new Date().toISOString() };
   if (budget != null && parseFloat(String(budget)) > 0) updateData.budget = parseFloat(String(budget));
-  if (name) updateData.name = String(name).trim();
+
+  // ONLY update name if explicitly provided AND meaningfully different from current name.
+  // This prevents the AI from auto-generating a project name when only budget was requested.
+  if (name && String(name).trim().length > 2) {
+    const { data: current } = await supabase.from('projects').select('name').eq('id', projectId).single();
+    const newName = String(name).trim();
+    if (current && newName !== current.name) {
+      updateData.name = newName;
+    }
+  }
+
   if (description) updateData.description = String(description).trim();
   if (status) {
     const s = String(status).toLowerCase();
@@ -2685,7 +2701,7 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   const { error } = await supabase.from('projects').update(updateData).eq('id', projectId);
   if (error) return { success: false, reply: 'Failed to update project. Please try again.' };
   const parts: string[] = [];
-  if (updateData.budget) parts.push(`budget set to UGX ${fmt(updateData.budget)}`);
+  if (updateData.budget) parts.push(`budget updated to UGX ${fmt(updateData.budget)}`);
   if (updateData.name) parts.push(`name updated to "${updateData.name}"`);
   if (updateData.description) parts.push('description updated');
   if (updateData.status) parts.push(`status set to ${updateData.status}`);
@@ -3189,9 +3205,18 @@ async function runAgent(
   const budget = parseFloat(String(project?.budget || 0));
   const remaining = Math.max(0, budget - totalSpent);
   const pctUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
-  const projectStart = project?.start_date ? new Date(project.start_date as string) : startOfThisMonth;
-  const weeksElapsed = Math.max(1, Math.round((now.getTime() - projectStart.getTime()) / (7 * 24 * 60 * 60 * 1000)));
-  const weeklyBurnRate = Math.round(totalSpent / weeksElapsed);
+
+  // Unified burn-rate: use actual days elapsed since first expense date (avoids inflating when
+  // the project was created weeks ago but spending only started recently).
+  let weeklyBurnRate = 0;
+  if (allExpenses.length > 0) {
+    const expenseDates = allExpenses
+      .map((e) => (e.date ? new Date(e.date + 'T12:00:00').getTime() : null))
+      .filter((t): t is number => t !== null);
+    const firstExpenseMs = expenseDates.length > 0 ? Math.min(...expenseDates) : now.getTime();
+    const daysSinceFirst = Math.max(1, (now.getTime() - firstExpenseMs) / (1000 * 60 * 60 * 24));
+    weeklyBurnRate = Math.round((totalSpent / daysSinceFirst) * 7);
+  }
   const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
 
   const workerLogs = dailyLogs.filter((l) => l.workers && l.workers > 0);
@@ -3324,7 +3349,9 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"delete_expense","params":{"description_keyword":"part of existing expense description"}}
 {"tool":"log_progress","params":{"description":"...","worker_count":number,"date":"YYYY-MM-DD"}}
 {"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
-{"tool":"update_project","params":{"budget":number,"name":"...","description":"...","status":"active|completed|paused"}}
+{"tool":"update_project","params":{"budget":number}}
+// CRITICAL: ONLY include "name" if user explicitly asked to rename. NEVER auto-generate or infer a name.
+// If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no status.
 {"tool":"create_project","params":{"name":"...","budget":number,"description":"optional location or notes"}}
 {"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
@@ -3363,6 +3390,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 8. If unsure what user wants, ask ONE short clarifying question.
 9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
 10. For multi-part questions, answer ALL parts in one reply.
+11. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate or infer a project name. If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no description, no status unless user asked for those.
 
 ━━━ FORMATTING ━━━
 - Plain text only. No markdown asterisks, no ** bold, no * bullets.

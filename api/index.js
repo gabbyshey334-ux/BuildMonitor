@@ -1055,8 +1055,8 @@ app.get('/api/daily-logs', requireAuth, async (req, res) => {
     
     if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
     
-    // Verify project belongs to user
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    // Verify project belongs to user (or user is manager)
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).or(`user_id.eq.${userId},manager_id.eq.${userId}`).maybeSingle();
     if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
     
     // Fetch the daily log for this date
@@ -1095,7 +1095,7 @@ app.post('/api/daily-logs', requireAuth, async (req, res) => {
     const { project_id, log_date, worker_count, entries, entry, milestones, milestone_count, notes } = req.body;
     const projectId = project_id;
     if (!projectId) return res.status(400).json({ success: false, error: 'project_id is required' });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).or(`user_id.eq.${userId},manager_id.eq.${userId}`).maybeSingle();
     if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
     const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
     
@@ -2201,7 +2201,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
         .from('projects')
         .select('id, budget')
         .eq('id', projectId)
-        .eq('user_id', userId)
+        .or(`user_id.eq.${userId},manager_id.eq.${userId}`)
         .maybeSingle();
       if (projectError || !projectRow) {
         return res.status(404).json({ success: false, error: 'Project not found' });
@@ -2242,13 +2242,22 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 
       const totalSpent = expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
       const remaining = Math.max(0, budgetTotal - totalSpent);
-      const daysSinceFirst = expenses.length
-        ? Math.max(1, (Date.now() - Math.min(...expenses.map((e) => new Date(e.expense_date || e.created_at).getTime()))) / 86400000)
-        : 1;
-      const dailyBurn = totalSpent / daysSinceFirst;
-      const weeklyBurnRate = dailyBurn * 7;
-      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
-      const budgetRunout = weeksRemaining != null && weeksRemaining < 999
+
+      // Unified burn-rate: divide total spent by actual days elapsed since first expense date.
+      // This avoids the "project created months ago but only started spending yesterday" inflation.
+      let weeklyBurnRate = 0;
+      if (expenses.length > 0) {
+        const firstMs = Math.min(
+          ...expenses.map((e) => {
+            const d = (e.expense_date || e.created_at || '').toString().split('T')[0];
+            return d ? new Date(d + 'T12:00:00').getTime() : Date.now();
+          })
+        );
+        const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
+        weeklyBurnRate = Math.round((totalSpent / daysSinceFirst) * 7);
+      }
+      const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
+      const budgetRunout = weeksRemaining != null && weeksRemaining < 9999
         ? new Date(Date.now() + weeksRemaining * 7 * 86400000).toISOString().split('T')[0]
         : null;
 
@@ -2258,7 +2267,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
         const dateStr = typeof d === 'string' ? d.split('T')[0] : (d ? new Date(d).toISOString().split('T')[0] : null);
         if (!dateStr) continue;
         const monthKey = dateStr.substring(0, 7);
-        const label = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        const label = new Date(monthKey + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
         if (!byMonthMap[monthKey]) byMonthMap[monthKey] = { month: label, amount: 0, sortKey: monthKey };
         byMonthMap[monthKey].amount += parseFloat(String(e.amount || 0));
       }

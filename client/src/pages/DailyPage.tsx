@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { uploadPhotoDirectly } from "@/lib/uploadPhoto";
 
 // Types
 type ActivityType = 'delivery' | 'progress' | 'photo' | 'labor' | 'expense' | 'other';
@@ -385,6 +386,12 @@ export default function DailyPage() {
   >([{ time: '', description: '', amount: '', workers: '', activityType: 'other', id: Date.now() }]);
   const [entryErrors, setEntryErrors] = useState<Record<number, { time?: string; description?: string }>>({});
 
+  // Per-entry photo state (keyed by entry.id)
+  const [entryPhotos, setEntryPhotos] = useState<Record<number, string[]>>({});
+  const [uploadingEntryId, setUploadingEntryId] = useState<number | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoTargetEntryId, setPhotoTargetEntryId] = useState<number | null>(null);
+
   // Fetch daily stats (heatmap, overall stats)
   const { 
     data: statsData, 
@@ -498,6 +505,35 @@ export default function DailyPage() {
     setEntryErrors((prev) => ({ ...prev, [id]: { ...prev[id], [field]: undefined } }));
   };
 
+  const openPhotoPicker = (entryId: number) => {
+    setPhotoTargetEntryId(entryId);
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length || !photoTargetEntryId || !projectId) return;
+    setUploadingEntryId(photoTargetEntryId);
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const url = await uploadPhotoDirectly(file, projectId);
+        urls.push(url);
+      }
+      setEntryPhotos((prev) => ({
+        ...prev,
+        [photoTargetEntryId]: [...(prev[photoTargetEntryId] || []), ...urls],
+      }));
+      toast({ title: `${urls.length} photo${urls.length > 1 ? 's' : ''} uploaded` });
+    } catch (err: any) {
+      toast({ title: err?.message || 'Photo upload failed', variant: 'destructive' });
+    } finally {
+      setUploadingEntryId(null);
+      setPhotoTargetEntryId(null);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    }
+  };
+
   const handleSaveLog = async () => {
     const errors: Record<number, { time?: string; description?: string }> = {};
     let hasError = false;
@@ -532,6 +568,7 @@ export default function DailyPage() {
           activity_type: entry.activityType,
           description: entry.description.trim(),
           source: 'dashboard',
+          photo_urls: entryPhotos[entry.id] || [],
         };
 
         if (entry.amount && entry.activityType === 'expense') {
@@ -552,6 +589,7 @@ export default function DailyPage() {
       setShowDailyModal(false);
       setEntries([{ time: '', description: '', amount: '', workers: '', activityType: 'other', id: Date.now() }]);
       setEntryErrors({});
+      setEntryPhotos({});
       
       // Refetch to show new entries
       await refetchDaily();
@@ -963,13 +1001,23 @@ export default function DailyPage() {
                 <h3 className="text-foreground font-bold text-xl">Log Activity</h3>
                 <button 
                   type="button"
-                  onClick={() => setShowDailyModal(false)} 
+                  onClick={() => { setShowDailyModal(false); setEntryPhotos({}); }} 
                   className="text-muted-foreground hover:text-foreground transition-colors p-2 hover:bg-muted rounded-full"
                 >
                   <X size={20} />
                 </button>
               </div>
               <p className="text-muted-foreground text-sm mb-4">Record what happened on {formatTimelineDate(selectedDate)}</p>
+
+              {/* Hidden file input for photo upload */}
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: 'none' }}
+                onChange={handlePhotoFileChange}
+              />
 
               <div className="space-y-4">
                 {entries.map((entry, idx) => (
@@ -1054,6 +1102,37 @@ export default function DailyPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Photo upload area — shown for photo type or when photos already attached */}
+                    {(entry.activityType === 'photo' || (entryPhotos[entry.id] && entryPhotos[entry.id].length > 0)) && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => openPhotoPicker(entry.id)}
+                          disabled={uploadingEntryId === entry.id}
+                          className="flex items-center gap-2 text-sm text-[#00bcd4] hover:text-[#00acc1] bg-[#00bcd4]/10 hover:bg-[#00bcd4]/20 px-3 py-2 rounded-lg transition-colors w-full justify-center"
+                        >
+                          <Camera className="w-4 h-4" />
+                          {uploadingEntryId === entry.id
+                            ? 'Uploading…'
+                            : entryPhotos[entry.id]?.length
+                            ? `${entryPhotos[entry.id].length} photo${entryPhotos[entry.id].length > 1 ? 's' : ''} attached — add more`
+                            : 'Choose photos'}
+                        </button>
+                        {entryPhotos[entry.id]?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {entryPhotos[entry.id].map((url, i) => (
+                              <img
+                                key={i}
+                                src={url}
+                                alt=""
+                                className="w-12 h-12 rounded object-cover border border-border"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -1071,7 +1150,7 @@ export default function DailyPage() {
                   type="button" 
                   variant="ghost"
                   className="w-full text-muted-foreground hover:text-foreground hover:bg-muted h-11"
-                  onClick={() => setShowDailyModal(false)}
+                  onClick={() => { setShowDailyModal(false); setEntryPhotos({}); }}
                 >
                   Cancel
                 </Button>
