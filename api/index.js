@@ -486,6 +486,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         .from('expenses')
         .select('id, description, amount, expense_date, source, created_at, disputed, category')
         .eq('project_id', projectId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
       const result = await expenseQuery;
       expError = result.error;
@@ -495,6 +496,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
         .from('expenses')
         .select('id, description, amount, expense_date, source, created_at, disputed')
         .eq('project_id', projectId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
         expError = fallback.error;
         expenseRows = (fallback.data || []).map((e) => ({ ...e, category: null }));
@@ -2249,7 +2251,8 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
       const { data: expenseRows } = await supabase
         .from('expenses')
         .select('amount, expense_date, created_at')
-        .eq('project_id', projectId);
+        .eq('project_id', projectId)
+        .is('deleted_at', null);
 
       const { data: logRows } = await supabase
         .from('daily_logs')

@@ -1360,8 +1360,9 @@ async function upsertDailyLog(
 async function handleBudgetQuery(from: string, projectId: string, lang?: string): Promise<void> {
   const { data: project } = await supabase
     .from('projects').select('budget, name').eq('id', projectId).single();
+  // Filter soft-deleted expenses to stay consistent with the dashboard
   const { data: expenses } = await supabase
-    .from('expenses').select('amount').eq('project_id', projectId);
+    .from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
 
   const totalSpent = (expenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
   const budget = parseFloat(String(project?.budget || 0));
@@ -1372,7 +1373,7 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
   // Uses spannedDays < 4 check to handle single-day projects without inflating.
   const { data: allExpensesForBurn } = await supabase
     .from('expenses').select('amount, expense_date, created_at')
-    .eq('project_id', projectId);
+    .eq('project_id', projectId).is('deleted_at', null);
   let weeklyBurn = 0;
   const allExpensesArr = allExpensesForBurn || [];
   const totalSpentAll = allExpensesArr.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
@@ -1436,6 +1437,7 @@ async function handleGreeting(
       .from('expenses')
       .select('description, amount, created_at')
       .eq('project_id', currentProject.id)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(3);
 
@@ -2269,6 +2271,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       .from('expenses')
       .select('description, amount, expense_date')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .gte('expense_date', periodStart)
       .lte('expense_date', periodEnd)
       .order('expense_date', { ascending: false });
@@ -2369,6 +2372,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     .from('expenses')
     .select('description, amount, expense_date, created_at')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .gte('expense_date', fromDate)
     .order('expense_date', { ascending: false })
     .limit(500);
@@ -2643,6 +2647,7 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
   }
   const query = supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -2677,6 +2682,7 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
   }
   const { data: expenses } = await supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -2931,7 +2937,7 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
     }
   }
 
-  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId);
+  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
   const { data: proj } = await supabase.from('projects').select('budget').eq('id', projectId).single();
   const totalSpentNow = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
   const budgetVal = parseFloat(String(proj?.budget || 0));
@@ -3098,8 +3104,8 @@ async function runAgent(
     materialTxRes,
   ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(120),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(5000),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(120),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(5000),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
@@ -3639,9 +3645,9 @@ export async function sendDailyHeartbeat(): Promise<void> {
 
     const dailySpend = (todayExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
 
-    // Total spend
+    // Total spend (exclude soft-deleted to match dashboard)
     const { data: allExpenses } = await supabase
-      .from('expenses').select('amount').eq('project_id', project.id);
+      .from('expenses').select('amount').eq('project_id', project.id).is('deleted_at', null);
     const totalSpent = (allExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
     const budget = parseFloat(String(project.budget || 0));
     const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
@@ -4421,7 +4427,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Budget alert: proactive warning when >= 80% or exceeded
         const { data: proj } = await supabase.from('projects').select('budget, name').eq('id', pendingData.project_id!).single();
         const budgetTotal = parseFloat(String(proj?.budget || 0));
-        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!);
+        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!).is('deleted_at', null);
         const totalSpentNow = (allEx || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
         const pctNow = budgetTotal > 0 ? (totalSpentNow / budgetTotal) * 100 : 0;
         let budgetAlert = '';
