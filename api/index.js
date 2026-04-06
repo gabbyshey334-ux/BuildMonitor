@@ -28,6 +28,47 @@ async function getLinkedUserIdsForAuth(supabase, userId) {
   return [...ids];
 }
 
+/**
+ * Unified weekly burn-rate calculation.
+ * Handles single-day and sparse data gracefully:
+ *   - If all expenses span < 4 days → use (totalSpent / unique spending days) * 7
+ *   - Otherwise → use (totalSpent / days elapsed since first expense) * 7
+ * expenses must be an array of objects with .expense_date or .created_at fields.
+ */
+function computeWeeklyBurnRate(expenses, totalSpent) {
+  if (!expenses || expenses.length === 0 || totalSpent <= 0) return 0;
+
+  const dates = expenses
+    .map((e) => {
+      const d = (e.expense_date || e.created_at || '').toString().split('T')[0];
+      return d ? new Date(d + 'T12:00:00').getTime() : null;
+    })
+    .filter(Boolean);
+
+  if (dates.length === 0) return 0;
+
+  const firstMs = Math.min(...dates);
+  const lastMs = Math.max(...dates);
+  const spannedDays = Math.max(1, (lastMs - firstMs) / 86400000);
+  const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
+
+  const uniqueDates = new Set(
+    expenses
+      .map((e) => (e.expense_date || e.created_at || '').toString().split('T')[0])
+      .filter(Boolean)
+  );
+  const daysWithSpending = Math.max(1, uniqueDates.size);
+
+  if (spannedDays < 4) {
+    // Too early: project only has a few days of history.
+    // Use per-active-day average × 7 to give a realistic weekly extrapolation.
+    return Math.round((totalSpent / daysWithSpending) * 7);
+  }
+
+  // Normal case: enough history — use days elapsed since first expense.
+  return Math.round((totalSpent / daysSinceFirst) * 7);
+}
+
 /** True if user owns the project (directly or via linked profile) or is manager_id. */
 async function userHasProjectAccess(supabase, projectId, userId) {
   const allowed = await getLinkedUserIdsForAuth(supabase, userId);
@@ -468,12 +509,8 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       const spent = expenses.reduce((sum, e) => sum + parseFloat(String(e.amount || 0)), 0);
       const remaining = Math.max(0, budgetTotal - spent);
       const percentage = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
-      const minDate = expenses.length
-        ? Math.min(...expenses.map((e) => new Date(e.expense_date || e.created_at).getTime()))
-        : Date.now();
-      const daysSinceStart = Math.max(1, (Date.now() - minDate) / 86400000);
-      const dailyBurnRate = spent / daysSinceStart;
-      const weeklyBurnRate = dailyBurnRate * 7;
+      const weeklyBurnRate = computeWeeklyBurnRate(expenses, spent);
+      const dailyBurnRate = weeklyBurnRate / 7;
       const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
 
       const summary = {
@@ -2243,19 +2280,7 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
       const totalSpent = expenses.reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
       const remaining = Math.max(0, budgetTotal - totalSpent);
 
-      // Unified burn-rate: divide total spent by actual days elapsed since first expense date.
-      // This avoids the "project created months ago but only started spending yesterday" inflation.
-      let weeklyBurnRate = 0;
-      if (expenses.length > 0) {
-        const firstMs = Math.min(
-          ...expenses.map((e) => {
-            const d = (e.expense_date || e.created_at || '').toString().split('T')[0];
-            return d ? new Date(d + 'T12:00:00').getTime() : Date.now();
-          })
-        );
-        const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
-        weeklyBurnRate = Math.round((totalSpent / daysSinceFirst) * 7);
-      }
+      const weeklyBurnRate = computeWeeklyBurnRate(expenses, totalSpent);
       const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
       const budgetRunout = weeksRemaining != null && weeksRemaining < 9999
         ? new Date(Date.now() + weeksRemaining * 7 * 86400000).toISOString().split('T')[0]

@@ -506,6 +506,7 @@ export default function DailyPage() {
   };
 
   const openPhotoPicker = (entryId: number) => {
+    console.log('[Photo] ref:', photoInputRef.current, 'entryId:', entryId);
     setPhotoTargetEntryId(entryId);
     photoInputRef.current?.click();
   };
@@ -993,6 +994,16 @@ export default function DailyPage() {
           Log Activity
         </button>
 
+        {/* Hidden file input — must be at root level (outside conditional block) so ref stays mounted */}
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handlePhotoFileChange}
+        />
+
         {/* Modal */}
         {showDailyModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -1008,16 +1019,6 @@ export default function DailyPage() {
                 </button>
               </div>
               <p className="text-muted-foreground text-sm mb-4">Record what happened on {formatTimelineDate(selectedDate)}</p>
-
-              {/* Hidden file input for photo upload */}
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                style={{ display: 'none' }}
-                onChange={handlePhotoFileChange}
-              />
 
               <div className="space-y-4">
                 {entries.map((entry, idx) => (
