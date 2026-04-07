@@ -17,23 +17,16 @@ const USER_FRIENDLY_ERRORS: Record<number, string> = {
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    // Separate JSON parse from error throwing — inner throws were being caught
+    let message: string;
     try {
-      // Try to parse JSON error response from server
       const errorData = await res.json();
-      
-      // If server provides a user-friendly message, use it
-      if (errorData.message) {
-        throw new Error(errorData.message);
-      }
-      
-      // Fall back to status-based message
-      const userMessage = USER_FRIENDLY_ERRORS[res.status] || 'An unexpected error occurred';
-      throw new Error(userMessage);
-    } catch (parseError) {
-      // If JSON parsing fails, use status-based message
-      const userMessage = USER_FRIENDLY_ERRORS[res.status] || 'An unexpected error occurred';
-      throw new Error(userMessage);
+      // Prefer server-provided message > error field > status-based fallback
+      message = errorData.message || errorData.error || USER_FRIENDLY_ERRORS[res.status] || 'An unexpected error occurred';
+    } catch {
+      message = USER_FRIENDLY_ERRORS[res.status] || 'An unexpected error occurred';
     }
+    throw new Error(message);
   }
 }
 

@@ -63,8 +63,8 @@ export default function ResetPassword() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
       return;
     }
     if (password !== confirmPassword) {
@@ -162,11 +162,9 @@ export default function ResetPassword() {
                   Your password has been set successfully. Redirecting you to sign in…
                 </p>
               </div>
-              <Link href="/login">
-                <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
-                  Go to Sign In
-                </Button>
-              </Link>
+              <Button asChild className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                <Link href="/login">Go to Sign In</Link>
+              </Button>
             </div>
 
           ) : (
@@ -195,11 +193,9 @@ export default function ResetPassword() {
                   <p className="text-muted-foreground text-sm leading-relaxed">
                     Open the link in your reset email to land here with a valid token. If you don't have one, request a new link below.
                   </p>
-                  <Link href="/forgot-password">
-                    <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
-                      Request reset link
-                    </Button>
-                  </Link>
+                  <Button asChild className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                    <Link href="/forgot-password">Request reset link</Link>
+                  </Button>
                 </div>
               )}
 
@@ -210,11 +206,9 @@ export default function ResetPassword() {
                     <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
                     <p>{error}</p>
                   </div>
-                  <Link href="/forgot-password">
-                    <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
-                      Request new reset link
-                    </Button>
-                  </Link>
+                  <Button asChild className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg">
+                    <Link href="/forgot-password">Request new reset link</Link>
+                  </Button>
                 </div>
               )}
 

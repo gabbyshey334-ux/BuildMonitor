@@ -472,13 +472,16 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-      const { data: projectRow, error: projectError } = await supabase
+      const hasAccess = await userHasProjectAccess(supabase, projectId, userId);
+      if (!hasAccess) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+      const { data: projectRow } = await supabase
         .from('projects')
         .select('id, name, budget')
         .eq('id', projectId)
-        .eq('user_id', userId)
         .maybeSingle();
-      if (projectError || !projectRow) {
+      if (!projectRow) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
@@ -4507,8 +4510,8 @@ app.get('/api/test/project-creation', async (req, res) => {
   }
 });
 
-// Test Supabase and Database connection
-app.get('/api/test/supabase', async (req, res) => {
+// Test Supabase and Database connection (admin/dev only — requires auth)
+app.get('/api/test/supabase', requireAuth, async (req, res) => {
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;

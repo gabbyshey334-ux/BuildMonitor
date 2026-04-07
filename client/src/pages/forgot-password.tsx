@@ -121,11 +121,9 @@ export default function ForgotPassword() {
               <p className="text-sm text-muted-foreground mt-2">
                 Please click the link in the email to reset your password.
               </p>
-              <Link href="/login">
-                <Button className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-6">
-                  Back to Sign In
-                </Button>
-              </Link>
+              <Button asChild className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-6">
+                <Link href="/login">Back to Sign In</Link>
+              </Button>
             </div>
           ) : (
             // Form State

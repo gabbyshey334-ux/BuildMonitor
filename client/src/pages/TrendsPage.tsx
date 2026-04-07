@@ -315,10 +315,10 @@ export default function TrendsPage() {
             <div className="flex-1">
               {materials.mostUsed.length > 0 ? (
                 <div className="space-y-4">
-                  {materials.mostUsed.slice(0, 5).map((m, i) => {
-                    // Calculate mock percentage for visual bar since we don't have max capacity
-                    const max = Math.max(...materials.mostUsed.map(x => x.quantity));
-                    const pct = (m.quantity / max) * 100;
+                  {(() => {
+                    const maxQty = Math.max(1, ...materials.mostUsed.map(x => x.quantity));
+                    return materials.mostUsed.slice(0, 5).map((m, i) => {
+                    const pct = (m.quantity / maxQty) * 100;
                     
                     return (
                       <div key={m.name} className="group">
@@ -336,7 +336,8 @@ export default function TrendsPage() {
                         </div>
                       </div>
                     );
-                  })}
+                    });
+                  })()}
                 </div>
               ) : (
                 <EmptyState message="No material data available" icon={Package} />

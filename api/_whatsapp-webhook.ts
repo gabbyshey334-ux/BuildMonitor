@@ -1285,11 +1285,12 @@ async function checkPriceAnomaly(
   if (!quantity || quantity <= 0) return null;
   const unitPrice = amount / quantity;
 
-  // Get historical prices for this item on this project
+  // Get historical prices for this item on this project (exclude soft-deleted)
   const { data: history } = await supabase
     .from('expenses')
     .select('amount, quantity_logged')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${item}%`)
     .not('quantity_logged', 'is', null)
     .order('created_at', { ascending: false })
@@ -1425,7 +1426,7 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
         : Math.round((totalSpentAll / daysSinceFirst) * 7);
     }
   }
-  const weeksLeft = weeklyBurn > 0 ? Math.round(remaining / weeklyBurn) : null;
+  const weeksLeft = weeklyBurn > 0 ? Math.floor(remaining / weeklyBurn) : null;
 
   const msg = await ai(
     `Give the user a natural budget summary for their project:
@@ -1864,7 +1865,6 @@ async function handleMaterialLog(
       .from('materials_inventory')
       .insert({
         project_id: projectId,
-        user_id: userId,
         name: materialName,
         quantity: qty,
         unit: unit || 'units',
@@ -2528,6 +2528,7 @@ async function handleNaturalLanguageQuery(
         .from('expenses')
         .select('description, amount, expense_date, created_at')
         .eq('project_id', projectId)
+        .is('deleted_at', null)
         .ilike('description', `%${material}%`)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -2966,9 +2967,9 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
   const { data: proj } = await supabase.from('projects').select('budget').eq('id', projectId).single();
   const totalSpentNow = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
   const budgetVal = parseFloat(String(proj?.budget || 0));
-  const pct = budgetVal > 0 ? Math.round((totalSpentNow / budgetVal) * 100) : 0;
+  const pct = budgetVal > 0 ? Math.min(100, Math.round((totalSpentNow / budgetVal) * 100)) : 0;
   let budgetNote = '';
-  if (pct >= 100) budgetNote = '\n🚨 Budget exceeded!';
+  if (totalSpentNow >= budgetVal && budgetVal > 0) budgetNote = '\n🚨 Budget exceeded!';
   else if (pct >= 80) budgetNote = `\n⚠️ Budget at ${pct}% — running low.`;
 
   return { success: true, reply: `✅ Logged! ${description || 'Expense'} — UGX ${fmt(amt)}.${budgetNote}`, data: { amount: amt, description } };
@@ -3012,8 +3013,23 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
 
   if (action === 'use' || action === 'used') {
     if (!existing) return { success: false, reply: `"${material_name}" is not in your inventory yet. Log a purchase first.` };
-    const newQty = Math.max(0, parseFloat(String(existing.quantity || 0)) - qty);
+    const currentQty = parseFloat(String(existing.quantity || 0));
+    if (qty > currentQty) {
+      return { success: false, reply: `❌ Cannot use ${qty} ${unit || existing.unit || 'units'} of ${material_name} — only ${currentQty} ${existing.unit || 'units'} in stock.` };
+    }
+    const newQty = Math.max(0, currentQty - qty);
     await supabase.from('materials_inventory').update({ quantity: newQty, last_used_at: now, updated_at: now }).eq('id', existing.id);
+    // Log usage transaction
+    await supabase.from('material_transactions').insert({
+      material_id: existing.id,
+      project_id: projectId,
+      transaction_type: 'usage',
+      quantity: -qty,
+      unit_cost: 0,
+      total_cost: 0,
+      description: `Used ${qty} ${unit || existing.unit || 'units'} of ${material_name}`,
+      source: 'whatsapp',
+    });
     const lowWarn = newQty <= 5 ? ' ⚠️ Low stock!' : '';
     return { success: true, reply: `✅ Updated! Used ${qty} ${unit || existing.unit || 'units'} of ${material_name}. Remaining: ${newQty} ${unit || existing.unit || 'units'}.${lowWarn}`, data: { newQty } };
   }
@@ -3673,12 +3689,13 @@ export async function sendDailyHeartbeat(): Promise<void> {
       .eq('log_date', today)
       .maybeSingle();
 
-    // Today's expenses
+    // Today's expenses (exclude soft-deleted; filter by expense_date for accuracy)
     const { data: todayExpenses } = await supabase
       .from('expenses')
       .select('amount')
       .eq('project_id', project.id)
-      .gte('created_at', `${today}T00:00:00`);
+      .is('deleted_at', null)
+      .eq('expense_date', today);
 
     const dailySpend = (todayExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
 
@@ -3687,7 +3704,7 @@ export async function sendDailyHeartbeat(): Promise<void> {
       .from('expenses').select('amount').eq('project_id', project.id).is('deleted_at', null);
     const totalSpent = (allExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
     const budget = parseFloat(String(project.budget || 0));
-    const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+    const pct = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
 
     const hadActivity = todayLog !== null;
 
@@ -3832,9 +3849,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isYes || isNo) {
         if (isYes) {
           try {
-            const pendingNameNorm = String(pendingMaterial.material_name || '')
-              .toLowerCase()
-              .trim();
+            const pendingNameNorm = normalizeMaterialName(String(pendingMaterial.material_name || ''));
             const { data: existing } = await supabase
               .from('materials_inventory')
               .select('id, quantity, unit')
@@ -3871,7 +3886,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('materials_inventory')
                 .insert({
                   project_id: pendingMaterial.project_id,
-                  user_id: userId,
                   name: pendingNameNorm,
                   quantity: pendingMaterial.quantity,
                   unit: pendingMaterial.unit || 'units',
@@ -4084,6 +4098,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isOwner && isDispute) {
         const { data: lastExpense } = await supabase.from('expenses')
           .select('id, description, amount').eq('project_id', project.id)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastExpense) {
           await supabase.from('expenses').update({ disputed: true }).eq('id', lastExpense.id);

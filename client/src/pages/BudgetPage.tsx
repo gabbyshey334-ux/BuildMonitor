@@ -742,7 +742,7 @@ export default function BudgetPage() {
       weeklyMap[key].total += amt;
     });
     return Object.entries(weeklyMap)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([, a], [, b]) => a.date.getTime() - b.date.getTime())
       .map(([week, { total, date }]) => ({ week, total, date }));
   }, [expenses]);
 
