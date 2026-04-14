@@ -30,10 +30,13 @@ function formatUgx(n: number) {
 }
 
 function formatDate(s: string) {
-  return new Date(s + "T12:00:00").toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  const d = new Date(s + "T12:00:00");
+  const oneYearFromNow = new Date(Date.now() + 365 * 86400000);
+  const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+  if (d > oneYearFromNow) {
+    options.year = "numeric";
+  }
+  return d.toLocaleDateString("en-US", options);
 }
 
 function TrendsSkeleton() {

@@ -1427,6 +1427,9 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
     }
   }
   const weeksLeft = weeklyBurn > 0 ? Math.floor(remaining / weeklyBurn) : null;
+  const budgetRunoutDate = weeksLeft !== null
+    ? new Date(Date.now() + weeksLeft * 7 * 86400000).toISOString().split('T')[0]
+    : null;
 
   const msg = await ai(
     `Give the user a natural budget summary for their project:
@@ -1434,7 +1437,7 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
     Budget: ${fmt(budget)} UGX
     Used: ${pct}%
     Remaining: ${fmt(remaining)} UGX
-    ${weeksLeft !== null ? 'At current rate: ~' + weeksLeft + ' weeks of budget left' : ''}
+    ${weeksLeft !== null ? 'At current rate: ~' + weeksLeft + ' weeks of budget left (projected runout date: ' + budgetRunoutDate + ')' : ''}
     ${pct > 80 ? 'IMPORTANT: Warn them they have used over 80% of budget!' : ''}
     Be conversational, not just a list of numbers.`,
     `Budget summary: Spent: ${fmt(totalSpent)} UGX | Budget: ${fmt(budget)} UGX | Used: ${pct}% | Remaining: ${fmt(remaining)} UGX`,
@@ -3302,6 +3305,9 @@ async function runAgent(
     }
   }
   const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
+  const projectedRunoutDate = weeksRemaining !== null
+    ? new Date(now.getTime() + weeksRemaining * 7 * 86400000).toISOString().split('T')[0]
+    : null;
 
   const workerLogs = dailyLogs.filter((l) => l.workers && l.workers > 0);
   const avgWorkersPerDay = workerLogs.length > 0
@@ -3346,6 +3352,7 @@ async function runAgent(
       burnRate: {
         weeklyUgx: weeklyBurnRate,
         weeksRemaining,
+        projectedRunoutDate,
         projectedOverBudget: remaining <= 0,
       },
       workers: {
@@ -3415,7 +3422,7 @@ All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, 
 - this week → analytics.spendingPeriods.thisWeek (= ${fmt(spendThisWeek)} UGX)
 - last week → analytics.spendingPeriods.lastWeek (= ${fmt(spendLastWeek)} UGX)
 - month vs last month → use thisMonth, lastMonth, and monthOverMonthChangePercent (${momChange !== null ? momChange + '%' : 'N/A'})
-- Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining at this rate' : 'unknown weeks remaining'}
+- Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining at this rate (projected runout: ' + projectedRunoutDate + ')' : 'unknown weeks remaining'}
 - Workers today: ${workersToday}, average: ${avgWorkersPerDay}/day, peak: ${peakWorkers}
 - What I spend most on: analytics.spendingByCategory and analytics.topItemsBySpend
 
