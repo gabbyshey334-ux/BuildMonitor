@@ -209,6 +209,7 @@ type IntentType =
   | 'BUDGET_UPDATE'
   | 'ISSUE_REPORT'
   | 'PROJECT_QUERY'
+  | 'ADD_PURCHASES_TO_INVENTORY'
   | 'GREETING';
 
 interface IntentResult {
@@ -946,6 +947,14 @@ function preClassifyIntent(message: string): IntentResult | null {
     return { intent: 'EXPENSE_LOG', extracted: { description: message.trim() } };
   }
 
+  // ADD_PURCHASES_TO_INVENTORY — user wants to sync recent purchases into inventory stock
+  if (
+    /(?:log|add|put|also\s+add|please\s+add|can\s+you\s+add).*(?:into|to|in)\s*(?:my\s+)?inventory|(?:that|those|them)\s+.*(?:into|to|in)\s*(?:my\s+)?inventory|(?:what\s+(?:i|we)\s+bought|stuff\s+(?:i|we)\s+bought|my\s+purchases?|recent\s+purchases?).*inventory|log\s+(?:that|those|it|them).*inventory|add\s+(?:that|those|it|them).*inventory/i.test(m) &&
+    !/used|consumed|deduct|reduce|expense\s+log/i.test(m)
+  ) {
+    return { intent: 'ADD_PURCHASES_TO_INVENTORY', extracted: {} };
+  }
+
   // MATERIAL_QUERY — inventory/stock questions; exclude worker-related and require material context
   if (
     /how (much|many).*(?:do|did) (?:i|we) have|current stock|stock.*left/i.test(m) &&
@@ -1144,6 +1153,16 @@ EXPENSE_LOG examples (always has numbers):
 - MULTI-ITEM: "I bought 10 bags cement at 30k each and 5 wood poles at 10k each" → return items: [{item:"cement",quantity:10,unit:"bags",amount:300000},{item:"wood poles",quantity:5,unit:"pieces",amount:50000}]
 CRITICAL: For multi-item messages with commas listing different things each with a price, ALWAYS return intent EXPENSE_LOG with items array. Parse each item separately. 30k = 30000, 4k = 4000, 150k = 150000.
 
+ADD_PURCHASES_TO_INVENTORY examples (user wants to add their already-logged expense purchases into inventory stock):
+- "Please log that into my inventory as well"
+- "Add what I bought to inventory"
+- "Add those to my inventory"
+- "Log the stuff I bought into inventory"
+- "Please add my recent purchases to inventory"
+- "Add that to my inventory too"
+- "Put what we bought in inventory"
+Use ADD_PURCHASES_TO_INVENTORY when the user is referring to purchases they already logged (as expenses) and now wants them reflected in inventory stock. Never use MATERIAL_LOG for these vague retroactive requests.
+
 MATERIAL_LOG examples:
 - "Received 50 bags cement from Hima"
 - "Used 5 bags for foundation"
@@ -1215,7 +1234,7 @@ Return ONLY valid JSON:
   const validIntents: IntentType[] = [
     'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
     'BUDGET_QUERY', 'MATERIAL_QUERY', 'BUDGET_UPDATE', 'WEATHER_DELAY', 'SMART_QUERY', 'LIST_PROJECTS',
-    'ISSUE_REPORT', 'PROJECT_QUERY', 'GREETING',
+    'ISSUE_REPORT', 'PROJECT_QUERY', 'ADD_PURCHASES_TO_INVENTORY', 'GREETING',
   ];
 
   function parseIntentResponse(content: string): IntentResult | null {
@@ -4426,13 +4445,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (existing) {
               const newQty = parseFloat(String(existing.quantity || 0)) + ent.quantity;
               const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
-              await supabase.from('materials_inventory').update({
+              const { error: invUpdateErr } = await supabase.from('materials_inventory').update({
                 quantity: newQty,
                 unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
                 total_cost: newTotalCost,
                 last_purchased_at: now,
                 updated_at: now,
               }).eq('id', existing.id);
+              if (invUpdateErr) {
+                console.error('[Expense Confirm] Inventory update failed for', ent.materialName, ':', invUpdateErr.message);
+              }
               await supabase.from('material_transactions').insert({
                 material_id: existing.id,
                 project_id: pendingData.project_id!,
@@ -4446,7 +4468,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               });
               materialLines.push(`📦 ${ent.quantity} ${ent.unit} of ${ent.materialName} added. Total stock: ${newQty} ${ent.unit}.`);
             } else {
-              const { data: inserted } = await supabase.from('materials_inventory').insert({
+              const { data: inserted, error: invInsertErr } = await supabase.from('materials_inventory').insert({
                 project_id: pendingData.project_id!,
                 // user_id intentionally omitted — profiles.id ≠ auth.users.id for WhatsApp-only users
                 name: nameNorm,
@@ -4458,6 +4480,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 last_purchased_at: now,
                 updated_at: now,
               }).select('id').single();
+              if (invInsertErr) {
+                console.error('[Expense Confirm] Inventory insert failed for', ent.materialName, ':', invInsertErr.message, invInsertErr.code, invInsertErr.details);
+              }
               if (inserted?.id) {
                 await supabase.from('material_transactions').insert({
                   material_id: inserted.id,
@@ -4635,6 +4660,142 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
   await sendMessage(from, msg);
 }
 
+async function handleAddPurchasesToInventory(
+  from: string,
+  userId: string,
+  projectId: string,
+  lang?: string
+): Promise<void> {
+  // Fetch recent material-like expenses (last 60 days, up to 30 rows)
+  const since = new Date();
+  since.setDate(since.getDate() - 60);
+  const { data: recentExpenses } = await supabase
+    .from('expenses')
+    .select('description, amount, quantity_logged, expense_date')
+    .eq('project_id', projectId)
+    .is('deleted_at', null)
+    .gte('expense_date', since.toISOString().split('T')[0])
+    .order('expense_date', { ascending: false })
+    .limit(30);
+
+  if (!recentExpenses || recentExpenses.length === 0) {
+    await sendMessage(from, await ai(
+      'Tell the user there are no recent expenses found to sync to inventory.',
+      'No recent expenses found to add to inventory.',
+      150, lang
+    ));
+    return;
+  }
+
+  const added: string[] = [];
+  const alreadyPresent: string[] = [];
+  const descPattern = /^(\d+(?:\.\d+)?)\s*(bags?|kg|kgs?|tonnes?|pieces?|pcs?|rods?|bars?|sheets?|poles?|litres?|rolls?|units?)?\s+(?:of\s+)?(.+)$/i;
+
+  for (const exp of recentExpenses) {
+    const desc = (exp.description || '').trim();
+    const descLower = desc.toLowerCase();
+
+    const isMaterialExp =
+      MATERIAL_KEYWORDS.some((k) => descLower.includes(k)) &&
+      !SKIP_KEYWORDS.some((k) => descLower.includes(k));
+    if (!isMaterialExp) continue;
+
+    // Parse quantity, unit and material name from stored description
+    let qty = exp.quantity_logged ? parseFloat(String(exp.quantity_logged)) : 0;
+    let unit = 'units';
+    let materialName = '';
+
+    const mDesc = desc.match(descPattern);
+    if (mDesc) {
+      if (!qty || qty <= 0) qty = parseFloat(mDesc[1]);
+      if (mDesc[2]) unit = mDesc[2].toLowerCase();
+      materialName = mDesc[3].trim();
+    } else {
+      // Fallback: use the keyword as the material name
+      const kw = MATERIAL_KEYWORDS.find((k) => descLower.includes(k));
+      if (kw) materialName = kw;
+    }
+
+    if (!materialName || qty <= 0) continue;
+
+    const nameNorm = normalizeMaterialName(materialName);
+    if (nameNorm.length < 2 || GARBAGE_MATERIAL_NAMES.includes(nameNorm)) continue;
+
+    const amount = exp.amount ? parseFloat(String(exp.amount)) : 0;
+    const unitCost = qty > 0 && amount > 0 ? amount / qty : 0;
+    const now = new Date().toISOString();
+
+    const { data: existing } = await supabase
+      .from('materials_inventory')
+      .select('id, quantity')
+      .eq('project_id', projectId)
+      .eq('name', nameNorm)
+      .maybeSingle();
+
+    if (existing) {
+      // Already in inventory — skip to avoid double-counting
+      alreadyPresent.push(`${materialName} (${existing.quantity} ${unit} already tracked)`);
+      continue;
+    }
+
+    // Not yet in inventory — insert it
+    const { data: inserted, error: insertErr } = await supabase
+      .from('materials_inventory')
+      .insert({
+        project_id: projectId,
+        name: nameNorm,
+        quantity: qty,
+        unit,
+        unit_cost: unitCost,
+        total_cost: amount,
+        source: 'whatsapp',
+        last_purchased_at: now,
+        updated_at: now,
+      })
+      .select('id')
+      .single();
+
+    if (insertErr) {
+      console.error('[AddPurchasesToInventory] Insert error for', materialName, ':', insertErr.message, insertErr.code);
+      continue;
+    }
+
+    if (inserted?.id) {
+      await supabase.from('material_transactions').insert({
+        material_id: inserted.id,
+        project_id: projectId,
+        user_id: userId,
+        transaction_type: 'purchase',
+        quantity: qty,
+        unit_cost: unitCost,
+        total_cost: amount,
+        description: `${qty} ${unit} added via inventory sync from expenses`,
+        source: 'whatsapp',
+      });
+      added.push(`${qty} ${unit} of ${materialName}`);
+    }
+  }
+
+  if (added.length === 0 && alreadyPresent.length === 0) {
+    await sendMessage(from, await ai(
+      'Tell the user no material purchases were found in their recent expenses. Labor, transport, and service expenses are not added to inventory.',
+      'No material purchases found in recent expenses. Labor and service costs are not tracked as inventory.',
+      200, lang
+    ));
+    return;
+  }
+
+  const addedLines = added.length ? `Added to inventory:\n${added.map((a) => `- ${a}`).join('\n')}` : '';
+  const presentLines = alreadyPresent.length ? `Already tracked:\n${alreadyPresent.map((a) => `- ${a}`).join('\n')}` : '';
+  const summary = [addedLines, presentLines].filter(Boolean).join('\n\n');
+
+  await sendMessage(from, await ai(
+    `Tell the user their recent purchases have been synced to inventory. Summary:\n${summary}\nBe brief and friendly.`,
+    `Done! Here is your inventory update:\n\n${summary}`,
+    300, lang
+  ));
+}
+
 async function routeIntent(
   intent: IntentType,
   extracted: Record<string, unknown>,
@@ -4661,6 +4822,9 @@ async function routeIntent(
       break;
     case 'MATERIAL_LOG':
       await handleMaterialLog(from, userId, project.id, extracted, rawMessage, lang);
+      break;
+    case 'ADD_PURCHASES_TO_INVENTORY':
+      await handleAddPurchasesToInventory(from, userId, project.id, lang);
       break;
     case 'LABOR_LOG':
       await handleLaborLog(from, project.id, extracted, rawMessage, lang);
