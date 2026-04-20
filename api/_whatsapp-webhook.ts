@@ -1008,8 +1008,8 @@ function preClassifyIntent(message: string): IntentResult | null {
     };
   }
 
-  // MATERIAL used patterns — also match "today we used 4 bricks" / "used 4 bricks"
-  if (/used|consumed|applied|finished\s+using/i.test(m) && /\d/.test(m)) {
+  // MATERIAL used patterns — only trigger on explicit usage/consumption words (NOT "applied for" or "for the site")
+  if (/\b(?:used|consumed|finished\s+using|use\s+up)\b/i.test(m) && /\d/.test(m)) {
     const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?|bricks?|rods?|bars?)/i);
     const itemMatch = message.match(/(?:used|consumed)\s+\d+\s+\w+\s+(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+on|\s*$)/i);
     const usedEndMatch = message.match(/(?:used|consumed|update)\s+.*?(\d+)\s+(bags?|kg|bricks?|pieces?|units?|rods?|bars?|sheets?)\s*[,.]?\s*$/i);
@@ -1164,10 +1164,11 @@ ADD_PURCHASES_TO_INVENTORY examples (user wants to add their already-logged expe
 Use ADD_PURCHASES_TO_INVENTORY when the user is referring to purchases they already logged (as expenses) and now wants them reflected in inventory stock. Never use MATERIAL_LOG for these vague retroactive requests.
 
 MATERIAL_LOG examples:
-- "Received 50 bags cement from Hima"
-- "Used 5 bags for foundation"
-- "2 trips of sand delivered"
-- "consumed 10 bags cement today"
+- "Received 50 bags cement from Hima" → action: "bought" (adds to stock)
+- "2 trips of sand delivered" → action: "bought" (adds to stock)
+- "Used 5 bags cement for foundation" → action: "used" (deducts from stock)
+- "consumed 10 bags cement today" → action: "used" (deducts from stock)
+CRITICAL: action must be "bought" for received/delivered/got/arrived/purchased messages (stock increases). action must be "used" ONLY when the user explicitly says used/consumed. Never set action "used" just because a message contains "for" — "Received cement for 1,900,000" is a purchase (action: bought), NOT usage.
 
 LABOR_LOG examples:
 - "6 workers today"
@@ -1223,7 +1224,7 @@ Return ONLY valid JSON:
     "amount": number_in_UGX,
     "quantity": number,
     "unit": "bags/kg/etc",
-    "action": "bought|used|received",
+    "action": "bought (for received/delivered/purchased = adds stock) | used (ONLY for consumed/used = deducts stock)",
     "vendor": "vendor name if mentioned",
     "worker_count": number,
     "note": "for progress updates",
@@ -1726,7 +1727,10 @@ async function handleMaterialLog(
     if (!item) item = qm[3].trim();
     if (!unit || unit === 'units') unit = qm[2].toLowerCase();
   }
-  const effectiveAction = /used|consumed|for\s+foundation|for\s+/i.test(rawMessage) ? 'used' : action;
+  // Only treat as 'used' when the message explicitly contains used/consumed/deducted.
+  // NEVER match on "for " alone — purchase messages like "Received cement for 1,900,000"
+  // contain "for" but are purchases, not usage, and should ADD to inventory.
+  const effectiveAction = /\b(?:used|consumed|use up|deducted?|finished using)\b/i.test(rawMessage) ? 'used' : action;
 
   // BUG 8: Alternative extraction for "today we used 4 bricks" / "used 4 bricks, update the inventory"
   if ((!item || item === 'material') && effectiveAction === 'used') {
