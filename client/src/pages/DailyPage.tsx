@@ -31,6 +31,28 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { uploadPhotoDirectly } from "@/lib/uploadPhoto";
 
+// Normalize a single photo entry that may be a plain URL string, a JSON-stringified
+// object, or a proper { url } object — always returns a clean URL string or null.
+function extractPhotoUrl(e: unknown): string | null {
+  if (typeof e === 'string') {
+    const t = e.trim();
+    if (t.startsWith('{') || t.startsWith('"')) {
+      try {
+        const parsed = JSON.parse(t);
+        if (parsed && typeof parsed === 'object' && (parsed as any).url) return (parsed as any).url;
+      } catch { /* not JSON */ }
+    }
+    return t.startsWith('http') ? t : null;
+  }
+  if (e && typeof e === 'object' && (e as any).url) return (e as any).url;
+  return null;
+}
+
+function toPhotoUrls(raw: unknown[] | null | undefined): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(extractPhotoUrl).filter((u): u is string => u !== null);
+}
+
 // Types
 type ActivityType = 'delivery' | 'progress' | 'photo' | 'labor' | 'expense' | 'other';
 
@@ -146,7 +168,7 @@ function DailyTimelineRow({
   const [textOpen, setTextOpen] = useState(false);
   const timeDisplay = formatTime12Hour(entry.log_time);
   const typeLabel = activityTypeLabel(entry);
-  const photos = entry.photo_urls ?? [];
+  const photos = toPhotoUrls(entry.photo_urls);
   const hasPhotos = photos.length > 0;
   const longText =
     (entry.description?.length ?? 0) > DESC_PREVIEW_LEN && !hasPhotos;
@@ -848,16 +870,19 @@ export default function DailyPage() {
                           {dailyLog.notes}
                         </div>
                       )}
-                      {dailyLog.photo_urls && dailyLog.photo_urls.length > 0 && (
-                        <div className="flex flex-wrap gap-2 pt-1.5">
-                          {dailyLog.photo_urls.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block relative group overflow-hidden rounded-lg shadow-sm">
-                              <img src={url} alt="" className="w-12 h-12 sm:w-14 sm:h-14 object-cover border border-border group-hover:scale-110 transition-transform duration-300" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      {dailyLog.photo_urls && dailyLog.photo_urls.length > 0 && (() => {
+                        const cleanUrls = toPhotoUrls(dailyLog.photo_urls);
+                        return cleanUrls.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 pt-1.5">
+                            {cleanUrls.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block relative group overflow-hidden rounded-lg shadow-sm">
+                                <img src={url} alt="" className="w-12 h-12 sm:w-14 sm:h-14 object-cover border border-border group-hover:scale-110 transition-transform duration-300" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                              </a>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 </div>

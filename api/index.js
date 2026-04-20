@@ -86,6 +86,36 @@ async function userHasProjectAccess(supabase, projectId, userId) {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// ─── Photo URL Normalizer ────────────────────────────────────────────────────
+// The daily_logs.photo_urls column can store three formats due to mixed writes:
+//   1. Plain URL string:          "https://..."
+//   2. Object:                    { url: "https://...", caption: null, tag: null }
+//   3. JSON-stringified object:   '{"url":"https://...","caption":null,"tag":null}'
+// This helper always returns a { url, caption, tag } object regardless of input format.
+function normalizePhotoEntry(e) {
+  if (typeof e === 'string') {
+    const t = e.trim();
+    if (t.startsWith('{') || t.startsWith('"')) {
+      try {
+        const parsed = JSON.parse(t);
+        if (parsed && typeof parsed === 'object' && parsed.url) {
+          return { url: parsed.url, caption: parsed.caption ?? null, tag: parsed.tag ?? null };
+        }
+      } catch { /* not JSON — fall through */ }
+    }
+    return t.startsWith('http') ? { url: t, caption: null, tag: null } : null;
+  }
+  if (e && typeof e === 'object' && e.url) {
+    return { url: e.url, caption: e.caption ?? null, tag: e.tag ?? null };
+  }
+  return null;
+}
+
+function normalizePhotoUrls(raw) {
+  const arr = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return arr.map(normalizePhotoEntry).filter(Boolean);
+}
+
 // Create Express app
 const app = express();
 
@@ -1118,7 +1148,11 @@ app.get('/api/daily-logs', requireAuth, async (req, res) => {
       return res.status(500).json({ success: false, error: error.message });
     }
     
-    return res.json({ success: true, data: logRow || null });
+    const log = logRow ? {
+      ...logRow,
+      photo_urls: normalizePhotoUrls(logRow.photo_urls).map((p) => p.url),
+    } : null;
+    return res.json({ success: true, data: log });
   } catch (err) {
     console.error('[GET /api/daily-logs]', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to fetch daily log' });
@@ -1323,8 +1357,7 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
     const newEntry = { url: photoUrl, caption: captionStr, tag: tagStr };
 
     const raw = existing?.photo_urls;
-    let entries = Array.isArray(raw) ? raw : raw ? [raw] : [];
-    entries = entries.map((e) => (typeof e === 'string' ? { url: e, caption: null, tag: null } : { url: e?.url || e, caption: e?.caption ?? null, tag: e?.tag ?? null }));
+    let entries = normalizePhotoUrls(raw);
     entries.push(newEntry);
 
     if (existing) {
@@ -2114,9 +2147,7 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
       // Recent logs with entries
       const recentLogs = logs.slice(0, 10).map((l) => {
         const raw = l.photo_urls;
-        const photoEntries = Array.isArray(raw)
-          ? raw.map((e) => (typeof e === 'string' ? { url: e, caption: null, tag: null } : { url: e?.url || e, caption: e?.caption ?? null, tag: e?.tag ?? null }))
-          : raw ? [{ url: raw, caption: null, tag: null }] : [];
+        const photoEntries = normalizePhotoUrls(raw);
         const photoUrls = photoEntries.map((p) => p.url);
         return {
           id: l.id,
@@ -2138,7 +2169,7 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
       let totalPhotoEntries = 0;
       logs.forEach((l) => {
         // Photos in photo_urls
-        const urls = Array.isArray(l.photo_urls) ? l.photo_urls : (l.photo_urls ? [l.photo_urls] : []);
+        const urls = normalizePhotoUrls(l.photo_urls);
         totalPhotos += urls.length;
         
         // Photos in activity_entries

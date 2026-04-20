@@ -1384,9 +1384,22 @@ async function upsertDailyLog(
     if (data.notes && existing.notes) {
       updateData.notes = `${existing.notes}\n${data.notes}`;
     }
-    // Append photos
+    // Append photos — normalize existing entries to plain URL strings first so
+    // the column never accumulates mixed types (strings, objects, JSON-stringified objects).
     if (data.photo_urls && existing.photo_urls) {
-      updateData.photo_urls = [...(existing.photo_urls || []), ...data.photo_urls];
+      const existingUrls = (Array.isArray(existing.photo_urls) ? existing.photo_urls : [existing.photo_urls])
+        .map((e: any) => {
+          if (typeof e === 'string') {
+            const t = e.trim();
+            if (t.startsWith('{') || t.startsWith('"')) {
+              try { const p = JSON.parse(t); if (p?.url) return p.url; } catch { /* not JSON */ }
+            }
+            return t.startsWith('http') ? t : null;
+          }
+          return (e && typeof e === 'object' && e.url) ? e.url : null;
+        })
+        .filter(Boolean) as string[];
+      updateData.photo_urls = [...existingUrls, ...data.photo_urls];
     }
     // Append activity_entries
     if (data.activity_entries && data.activity_entries.length > 0) {
