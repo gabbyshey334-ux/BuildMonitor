@@ -156,9 +156,18 @@ export function DebugPanel() {
       },
       {
         label: "Inventory value",
-        api: "(not in summary)",
+        api: formatCurrency(
+          (summary as { inventory?: { totalValue?: number } }).inventory?.totalValue,
+          currency,
+        ),
         client: formatCurrency(inventoryValue, currency),
-        match: true,
+        match:
+          Math.abs(
+            safeNum(
+              (summary as { inventory?: { totalValue?: number } }).inventory
+                ?.totalValue,
+            ) - inventoryValue,
+          ) < 0.5,
       },
       {
         label: "Top category",

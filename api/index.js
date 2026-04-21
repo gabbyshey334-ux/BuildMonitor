@@ -281,7 +281,13 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         projectRow = projectData;
 
         let expenseRowCount = 0;
-        let expenseRowsForCumulative = [];
+        // DO NOT redeclare `expenseRowsForCumulative` with `let` here — the
+        // outer binding at the top of this handler holds the rows every
+        // downstream derivation (firstExpenseDate, calcBurnRate,
+        // sumByCategory, cumulativeCosts) reads from. A block-scoped shadow
+        // previously lived here and silently zeroed the summary payload:
+        // totalSpent worked (outer scope) but categoryTotals / burn /
+        // firstExpenseDate all read `[]`. See Debug Panel diff 2026-04-20.
         if (projectRow) {
           const { data: expenseRows, error: expenseError } = await supabase
             .from('expenses')
@@ -521,6 +527,10 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
             : null,
         },
         categoryTotals,
+        inventory: {
+          totalValue: inventoryTotalValue,
+          itemCount: materialsRows.length,
+        },
         progress: {
           overallPercentage: 0,
           phases: [],
