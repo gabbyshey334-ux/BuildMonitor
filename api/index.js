@@ -257,6 +257,8 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       let materialsRows = [];
       let openIssuesCount = 0;
       let criticalIssuesCount = 0;
+      let totalTasksCount = 0;
+      let completedTasksCount = 0;
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -328,6 +330,38 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           console.warn('[Summary] Issues count failed:', issueErr?.message);
           openIssuesCount = 0;
           criticalIssuesCount = 0;
+        }
+
+        // Task-based progress: completed tasks ÷ total tasks.
+        //
+        // This is the ONLY honest progress number the system can produce today.
+        // We previously returned a hardcoded 0, and earlier than that returned
+        // `min(100, spent/budget)` which conflated money with schedule and
+        // misled owners whose projects were "67% done" purely because they
+        // had overspent. Until phases/milestones land, task completion is the
+        // correct proxy.
+        //
+        // Soft-deleted tasks are excluded so cancelled work can't game the
+        // percentage. Tasks with status 'done' are treated as completed
+        // alongside 'completed' because the WhatsApp agent writes either.
+        try {
+          const { count: totalCount } = await supabase
+            .from('tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .is('deleted_at', null);
+          const { count: doneCount } = await supabase
+            .from('tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .is('deleted_at', null)
+            .in('status', ['completed', 'done']);
+          totalTasksCount = totalCount ?? 0;
+          completedTasksCount = doneCount ?? 0;
+        } catch (taskErr) {
+          console.warn('[Summary] Tasks count failed:', taskErr?.message);
+          totalTasksCount = 0;
+          completedTasksCount = 0;
         }
 
         console.log('[Summary Debug]', {
@@ -532,7 +566,13 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           itemCount: materialsRows.length,
         },
         progress: {
-          overallPercentage: 0,
+          // Integer 0..100 so the UI can render {progressPct}% directly without
+          // floating noise or an unbounded value if data is missing.
+          overallPercentage: totalTasksCount > 0
+            ? Math.min(100, Math.max(0, Math.round((completedTasksCount / totalTasksCount) * 100)))
+            : 0,
+          completedTasks: completedTasksCount,
+          totalTasks: totalTasksCount,
           phases: [],
           milestones: [],
         },

@@ -214,13 +214,27 @@ html {
    Component utilities
    ──────────────────────────────────────────────────────────────────── */
 @layer components {
+  /*
+   * .jt-card — the dashboard's primary container.
+   *
+   * We bake padding into the utility so every `<div className="jt-card">`
+   * on the dashboard renders with consistent breathing room. Before this,
+   * only SkeletonCard / ProjectCard / DataTable added padding explicitly,
+   * and the six jt-cards on DashboardPage (Budget Health, Spend Over
+   * Time, Category Breakdown, Recent Expenses, and the two rows below)
+   * rendered with content flush against the card edges.
+   *
+   * Consumers that want no padding (e.g. DataTable wraps a full-bleed
+   * table) keep using `p-0` — Tailwind's utilities layer ranks above the
+   * components layer, so those overrides still win.
+   */
   .jt-card {
-    @apply bg-card border border-border rounded-card;
+    @apply bg-card border border-border rounded-card p-5 md:p-6;
     box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.2);
   }
   .jt-card-raised {
     background: hsl(var(--popover));
-    @apply border border-border rounded-card;
+    @apply border border-border rounded-card p-5 md:p-6;
     box-shadow: 0 8px 48px rgba(0,0,0,0.5);
   }
 

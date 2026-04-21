@@ -190,18 +190,44 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     [expenses],
   );
 
-  const progressPct = useMemo(() => {
-    const summaryProgress = (summaryData as { progress?: { overallPercentage?: number } })
-      ?.progress?.overallPercentage;
-    if (typeof summaryProgress === "number" && summaryProgress > 0) {
-      return Math.round(summaryProgress);
+  const progressInfo = useMemo(() => {
+    const summaryProgress = (
+      summaryData as {
+        progress?: {
+          overallPercentage?: number;
+          completedTasks?: number;
+          totalTasks?: number;
+        };
+      }
+    )?.progress;
+
+    const typedTasks = tasks as Array<{ status?: string }>;
+    const fallbackTotal = typedTasks.length;
+    const fallbackDone = typedTasks.filter(
+      (tk) => tk.status === "completed" || tk.status === "done",
+    ).length;
+
+    const total =
+      typeof summaryProgress?.totalTasks === "number"
+        ? summaryProgress.totalTasks
+        : fallbackTotal;
+    const completed =
+      typeof summaryProgress?.completedTasks === "number"
+        ? summaryProgress.completedTasks
+        : fallbackDone;
+
+    let pct = 0;
+    if (typeof summaryProgress?.overallPercentage === "number") {
+      pct = Math.round(summaryProgress.overallPercentage);
+    } else if (total > 0) {
+      pct = Math.round((completed / total) * 100);
     }
-    const typed = tasks as Array<{ status?: string }>;
-    const completed = typed.filter((tk) => tk.status === "completed").length;
-    const total = typed.length;
-    if (total > 0) return Math.round((completed / total) * 100);
-    return 0;
+    pct = Math.min(100, Math.max(0, pct));
+
+    return { pct, completed, total };
   }, [tasks, summaryData]);
+
+  const progressPct = progressInfo.pct;
 
   const scheduleStatus: {
     label: string;
@@ -708,17 +734,25 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         <KPICard
           index={0}
           label="Progress"
-          value={`${progressPct}%`}
+          value={progressInfo.total > 0 ? `${progressPct}%` : "—"}
           sub={
-            <span className="flex items-center gap-1.5">
-              <span className="h-1 flex-1 rounded-full bg-muted/40 overflow-hidden">
-                <span
-                  className="h-full block rounded-full bg-jenga-primary"
-                  style={{ width: `${progressPct}%` }}
-                />
+            progressInfo.total > 0 ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 flex-1 rounded-full bg-muted/40 overflow-hidden">
+                  <span
+                    className="h-full block rounded-full bg-jenga-primary transition-all"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </span>
+                <span className="text-[11px] shrink-0">
+                  {progressInfo.completed}/{progressInfo.total} tasks
+                </span>
               </span>
-              <span className="text-[11px]">Complete</span>
-            </span>
+            ) : (
+              <span className="text-[11px]">
+                Add tasks to track progress
+              </span>
+            )
           }
           icon={TrendingUp}
           accent="primary"
