@@ -26,8 +26,14 @@ const MAX_WIDTH: Record<NonNullable<PageWrapperProps["maxWidth"]>, string> = {
  * Mobile-first page wrapper. Guarantees:
  *   - No horizontal overflow at any breakpoint
  *   - Responsive horizontal padding (12 → 16 → 24 → 32)
- *   - Bottom padding that clears the mobile nav bar on < lg
+ *   - Bottom padding that clears the mobile nav bar on < lg, including the
+ *     iOS home-indicator safe area (env(safe-area-inset-bottom))
  *   - Sets the page <title> if provided
+ *
+ * The `pb-mobile-nav-offset` utility in `index.css` resolves to
+ * `calc(4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)))` — that is,
+ * 64px nav + 8-24px safe area. That guarantees the last item on every page
+ * is always visible above the bottom navigation on mobile.
  */
 export function PageWrapper({
   title,
@@ -43,10 +49,10 @@ export function PageWrapper({
         "w-full max-w-full min-h-full overflow-x-hidden",
         "px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8",
         "pt-4 sm:pt-5 md:pt-6",
-        noBottomPadding ? "pb-4" : "pb-24 lg:pb-8",
+        noBottomPadding ? "pb-4" : "pb-mobile-nav-offset lg:pb-8",
       )}
     >
-      <div className={cn("mx-auto w-full", MAX_WIDTH[maxWidth], className)}>
+      <div className={cn("mx-auto w-full min-w-0", MAX_WIDTH[maxWidth], className)}>
         {children}
       </div>
     </div>

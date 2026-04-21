@@ -29,7 +29,13 @@ import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { JengaTrackLogo } from "@/components/ui/Logo";
 
-const SIDEBAR_OPEN_KEY = "jengatrack-sidebar-open";
+// Bumped from "jengatrack-sidebar-open" -> "-v2" on 2026-04-20 so every user
+// starts with an EXPANDED sidebar after the responsive rebuild. The old key
+// kept many accounts stuck in icon-only mode because a stale `false` from an
+// earlier session was still being honoured. The new key has no prior value so
+// the `return true` default wins on first render; user toggles persist as
+// before under the v2 key.
+const SIDEBAR_OPEN_KEY = "jengatrack-sidebar-open-v2";
 
 const MAIN_NAV = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },

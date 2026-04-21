@@ -104,7 +104,9 @@ export function KPICard({
           />
         )
       : typeof value === "string" || typeof value === "number" ? (
-          <span className="font-mono tabular-nums text-[28px] md:text-[32px] leading-none font-semibold tracking-tight">
+          // Responsive scalar — fits "999+ days" / "43.15B" in 150-190px card on
+          // 320-414px viewports. Mobile: 20px → sm: 24px → md: 28-32px.
+          <span className="font-mono tabular-nums text-xl sm:text-2xl md:text-[28px] lg:text-[32px] leading-none font-semibold tracking-tight block max-w-full overflow-hidden text-ellipsis whitespace-nowrap">
             {value}
           </span>
         ) : (
@@ -121,7 +123,9 @@ export function KPICard({
       whileHover={{ y: -2 }}
       className={cn(
         "group relative overflow-hidden rounded-card border border-border bg-card text-left",
-        "p-5 md:p-6 transition-shadow hover:shadow-card-hover",
+        // Tighter padding on mobile to reclaim width for the value.
+        "p-3 sm:p-4 md:p-5 lg:p-6 transition-shadow hover:shadow-card-hover",
+        "min-w-0 w-full max-w-full",
         onClick ? "cursor-pointer" : "cursor-default",
         className,
       )}
@@ -135,17 +139,17 @@ export function KPICard({
         )}
       />
 
-      <div className="relative flex flex-col h-full">
-        <div className="flex items-start justify-between">
+      <div className="relative flex flex-col h-full min-w-0">
+        <div className="flex items-start justify-between gap-2 min-w-0">
           {Icon ? (
             <div
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-lg ring-1 bg-muted/40",
+                "flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg ring-1 bg-muted/40 shrink-0",
                 tone.fg,
                 tone.ring,
               )}
             >
-              <Icon size={18} strokeWidth={2.25} />
+              <Icon size={16} strokeWidth={2.25} />
             </div>
           ) : (
             <span />
@@ -153,7 +157,7 @@ export function KPICard({
           {trend && (
             <span
               className={cn(
-                "text-[10px] font-semibold uppercase tracking-wider",
+                "text-[10px] font-semibold uppercase tracking-wider shrink-0 truncate max-w-[45%]",
                 trend.direction === "up" && "text-jenga-success",
                 trend.direction === "down" && "text-jenga-danger",
                 trend.direction === "flat" && "text-muted-foreground",
@@ -164,10 +168,12 @@ export function KPICard({
           )}
         </div>
 
-        <p className="jt-eyebrow mt-4">{label}</p>
-        <div className="mt-1.5 text-foreground">{rendered}</div>
+        <p className="jt-eyebrow mt-3 md:mt-4 truncate min-w-0">{label}</p>
+        <div className="mt-1.5 text-foreground min-w-0 max-w-full overflow-hidden">
+          {rendered}
+        </div>
         {sub && (
-          <div className="mt-1.5 text-[12px] text-muted-foreground leading-snug">
+          <div className="mt-1.5 text-[11px] md:text-[12px] text-muted-foreground leading-snug min-w-0 break-words">
             {sub}
           </div>
         )}

@@ -59,11 +59,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         <main
           className={cn(
             "flex-1 w-full max-w-full overflow-x-hidden",
-            // Clear mobile bottom nav (64px + safe area) on < lg.
-            "pb-24 lg:pb-0",
+            // Clear mobile BottomNav (64px) + iOS/Android safe-area on < lg.
+            // The `pb-mobile-nav-offset` utility resolves to
+            //   calc(4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)))
+            // so devices with a home indicator (iPhone X+) get extra padding
+            // and the last item on every page stays visible.
+            "pb-mobile-nav-offset lg:pb-0",
           )}
         >
-          <div className="mx-auto w-full max-w-[1600px] px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-5 md:pt-6 pb-4 md:pb-8">
+          <div className="mx-auto w-full max-w-[1600px] min-w-0 px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-5 md:pt-6 pb-4 md:pb-8">
             {children}
           </div>
         </main>

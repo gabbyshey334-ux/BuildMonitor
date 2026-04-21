@@ -51,6 +51,7 @@ import {
   spendOverTime,
   safeNum,
   formatCurrency,
+  formatDaysRemaining,
 } from "@/lib/analytics";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { KPICard } from "@/components/ui/KPICard";
@@ -145,18 +146,35 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     (issuesData as { issues?: unknown[] } | undefined)?.issues ?? [];
 
   // ─── Computed analytics (via analytics.ts) ───────────────────────────
+  //
+  // IMPORTANT: the dashboard is locked to `effectiveProjectId`. We NEVER fall
+  // back to `currentProject.totalBudget` (which is populated from the projects
+  // list endpoint and could briefly hold the previous project's values during
+  // a project switch). When the summary endpoint has not yet returned for the
+  // active project we render a skeleton above; `budgetHealth` deliberately
+  // returns a zero-state rather than fabricating numbers from context.
   const budgetHealth = useMemo(() => {
     const sb = (summaryData as { budget?: { total?: number; spent?: number } })?.budget;
     if (sb && typeof sb.total === "number") {
       return computeBudgetHealth(sb.total, sb.spent ?? 0);
     }
-    const totalBudget = safeNum((currentProject as { totalBudget?: number } | null)?.totalBudget);
-    const spent = (expenses as Array<{ amount?: number | string }>).reduce(
-      (s, e) => s + safeNum(e.amount),
-      0,
-    );
-    return computeBudgetHealth(totalBudget, spent);
-  }, [currentProject, summaryData, expenses]);
+    return computeBudgetHealth(0, 0);
+  }, [summaryData]);
+
+  if (import.meta.env.DEV && summaryData) {
+    const sb = (summaryData as { budget?: { total?: number; spent?: number; dailyBurnRate?: number; daysRemaining?: number | null; firstExpenseDate?: string | null } }).budget;
+    if (sb) {
+      // eslint-disable-next-line no-console
+      console.debug("[dashboard]", {
+        projectId: effectiveProjectId,
+        total: sb.total,
+        spent: sb.spent,
+        firstExpenseDate: sb.firstExpenseDate,
+        dailyRate: sb.dailyBurnRate,
+        daysRemaining: sb.daysRemaining,
+      });
+    }
+  }
 
   const burn = useMemo(
     () => computeBurn(expenses as never, budgetHealth.remaining),
@@ -687,7 +705,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       />
 
       {/* KPI Row */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 min-w-0">
         <KPICard
           index={0}
           label="Progress"
@@ -712,17 +730,38 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           label="Budget Used"
           value={<CurrencyValue value={budgetHealth.spent} currency={currency} compact size="xl" />}
           sub={
-            <span>
-              of{" "}
-              <CurrencyValue
-                value={budgetHealth.total}
-                currency={currency}
-                compact
-                size="xs"
-                tone="muted"
-              />{" "}
-              · {budgetHealth.rawPercent.toFixed(1)}%
-            </span>
+            budgetHealth.total > 0 ? (
+              <span className="block min-w-0">
+                <span className="block truncate">
+                  of{" "}
+                  <CurrencyValue
+                    value={budgetHealth.total}
+                    currency={currency}
+                    compact
+                    size="xs"
+                    tone="muted"
+                  />
+                </span>
+                <span
+                  className={cn(
+                    "block truncate font-semibold",
+                    budgetHealth.overBudget
+                      ? "text-jenga-danger"
+                      : budgetHealth.rawPercent >= 85
+                        ? "text-jenga-danger"
+                        : budgetHealth.rawPercent >= 70
+                          ? "text-jenga-warning"
+                          : "text-jenga-success",
+                  )}
+                >
+                  {budgetHealth.overBudget
+                    ? `${budgetHealth.rawPercent.toFixed(1)}% · OVER BUDGET`
+                    : `${budgetHealth.rawPercent.toFixed(1)}%`}
+                </span>
+              </span>
+            ) : (
+              <span className="block truncate text-jenga-warning">No budget set</span>
+            )
           }
           icon={DollarSign}
           accent={
@@ -748,7 +787,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           index={2}
           label="Schedule"
           value={
-            <span className="font-display font-semibold text-[22px] leading-none">
+            <span className="font-display font-semibold text-base sm:text-lg md:text-xl lg:text-[22px] leading-none block truncate max-w-full">
               {scheduleStatus.label}
             </span>
           }
@@ -757,9 +796,9 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               ? `${summary.schedule.daysAhead} days ahead`
               : summary?.schedule?.daysBehind
                 ? `${summary.schedule.daysBehind} days behind`
-                : burn.daysRemaining === Infinity
+                : !Number.isFinite(burn.daysRemaining)
                   ? "No burn rate yet"
-                  : `~${burn.daysRemaining} days of runway`
+                  : `${formatDaysRemaining(burn.daysRemaining)} of runway`
           }
           icon={Calendar}
           accent={scheduleStatus.tone === "success" ? "success" : scheduleStatus.tone === "warning" ? "warning" : "danger"}
@@ -856,7 +895,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             <div>
               <dt className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Runway</dt>
               <dd className="font-mono tabular-nums text-sm text-foreground">
-                {burn.daysRemaining === Infinity ? "∞" : `${burn.daysRemaining} days`}
+                {formatDaysRemaining(burn.daysRemaining)}
                 {burn.isEarlyEstimate && (
                   <span className="ml-1.5 text-[10px] text-jenga-warning">est.</span>
                 )}
@@ -974,23 +1013,29 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                     </>
                   ) : (
                     <>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-jenga-primary/10 text-jenga-primary group-hover:bg-jenga-primary group-hover:text-[#0D0F0E] transition-colors">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-jenga-primary/10 text-jenga-primary group-hover:bg-jenga-primary group-hover:text-[#0D0F0E] transition-colors">
                         <DollarSign className="h-4 w-4" />
                       </div>
+                      {/* Description + time: takes remaining space and CAN shrink/truncate. */}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-foreground truncate">
                           {expense.description || "—"}
                         </div>
-                        <div className="text-[11px] font-mono text-muted-foreground">
+                        <div className="text-[11px] font-mono text-muted-foreground truncate">
                           {timeAgo(expense.created_at || expense.expense_date || "")}
                         </div>
                       </div>
-                      <CurrencyValue
-                        value={expense.amount}
-                        currency={currency}
-                        size="sm"
-                        className="font-semibold"
-                      />
+                      {/* Amount: NEVER shrinks, NEVER wraps, always fully visible.
+                          Use compact formatting on mobile so large numbers fit. */}
+                      <div className="shrink-0 text-right">
+                        <CurrencyValue
+                          value={expense.amount}
+                          currency={currency}
+                          size="sm"
+                          compact
+                          className="font-semibold"
+                        />
+                      </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button

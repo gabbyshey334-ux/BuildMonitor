@@ -24,6 +24,22 @@ import twilio from 'twilio';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
+import {
+  calcBudgetPercent,
+  calcBurnRate,
+  calcInventoryTotal,
+  findFirstExpenseDate,
+  normalizeCategory,
+  sumExpenses,
+  sumByCategory,
+  resolveTransactionType,
+  dateKey,
+} from '../shared/calculations.js';
+import {
+  formatCurrency as fmtMoney,
+  formatDate as fmtDate,
+  formatProjectionDate,
+} from '../shared/formatting.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
@@ -1419,61 +1435,57 @@ async function upsertDailyLog(
 // ─── Intent Handlers ──────────────────────────────────────────────────────────
 
 async function handleBudgetQuery(from: string, projectId: string, lang?: string): Promise<void> {
+  // Pull the project with its currency so we never reply with "UGX" to a KES/USD project.
   const { data: project } = await supabase
-    .from('projects').select('budget, name').eq('id', projectId).single();
-  // Single query with date fields for both totalSpent and burn rate calculation
+    .from('projects').select('budget, name, currency').eq('id', projectId).single();
   const { data: expenses } = await supabase
-    .from('expenses').select('amount, expense_date, created_at').eq('project_id', projectId).is('deleted_at', null);
+    .from('expenses')
+    .select('amount, expense_date, created_at, category, deleted_at')
+    .eq('project_id', projectId)
+    .is('deleted_at', null);
 
-  // Single query with all fields needed for both totalSpent AND burn rate
-  const allExpensesArr = expenses || [];
-  const totalSpent = allExpensesArr.reduce((s: any, e: any) => s + parseFloat(String(e.amount || 0)), 0);
-  const budget = parseFloat(String(project?.budget || 0));
-  const pct = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
-  const remaining = budget > 0 ? Math.max(0, budget - totalSpent) : 0;
+  const allExpensesArr = (expenses || []) as any[];
+  const currency = String((project as any)?.currency || 'UGX').toUpperCase();
+  const budget = parseFloat(String((project as any)?.budget || 0));
 
-  // Unified burn-rate: mirrors dashboard's computeWeeklyBurnRate logic exactly.
-  // Uses spannedDays < 4 check to handle single-day projects without inflating.
-  let weeklyBurn = 0;
-  const totalSpentAll = totalSpent;
-  if (allExpensesArr.length > 0 && totalSpentAll > 0) {
-    const burnDates = allExpensesArr
-      .map((e: any) => {
-        const d = (e.expense_date || e.created_at || '').toString().split('T')[0];
-        return d ? new Date(d + 'T12:00:00').getTime() : null;
-      })
-      .filter((t: any): t is number => t !== null);
-    if (burnDates.length > 0) {
-      const firstMs = Math.min(...burnDates);
-      const lastMs = Math.max(...burnDates);
-      const spannedDays = Math.max(1, (lastMs - firstMs) / 86400000);
-      const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
-      const uniqueDates = new Set(
-        allExpensesArr
-          .map((e: any) => (e.expense_date || e.created_at || '').toString().split('T')[0])
-          .filter(Boolean)
-      );
-      const daysWithSpending = Math.max(1, uniqueDates.size);
-      weeklyBurn = spannedDays < 4
-        ? Math.round((totalSpentAll / daysWithSpending) * 7)
-        : Math.round((totalSpentAll / daysSinceFirst) * 7);
-    }
-  }
-  const weeksLeft = weeklyBurn > 0 ? Math.floor(remaining / weeklyBurn) : null;
-  const budgetRunoutDate = weeksLeft !== null
-    ? new Date(Date.now() + weeksLeft * 7 * 86400000).toISOString().split('T')[0]
+  // All math goes through the shared, unit-tested calculators — no inline percent/burn logic.
+  const totalSpent = sumExpenses(allExpensesArr);
+  const health = calcBudgetPercent(totalSpent, budget);
+  const firstExpense = findFirstExpenseDate(allExpensesArr);
+  const burn = calcBurnRate(totalSpent, budget, firstExpense, currency);
+
+  // Human date for projected exhaustion — always includes the year.
+  const projectedDateDisplay = burn.projectedExhaustionDate
+    ? formatProjectionDate(burn.projectedExhaustionDate)
     : null;
+
+  const disclaimer = burn.disclaimer
+    ? `\nNote: ${burn.disclaimer}.`
+    : '';
+
+  const runoutLine = !Number.isFinite(burn.daysRemaining)
+    ? 'Budget is not being spent yet — runway is effectively unlimited.'
+    : burn.daysRemaining === 0
+      ? `Budget exhausted as of ${projectedDateDisplay ?? fmtDate(new Date())}.`
+      : `At current rate: ~${burn.displayDaysRemaining} of budget left (projected runout: ${projectedDateDisplay}).`;
+
+  const warning = health.isOver
+    ? 'IMPORTANT: Warn them they are OVER budget.'
+    : health.raw > 80
+      ? 'IMPORTANT: Warn them they have used over 80% of budget!'
+      : '';
 
   const msg = await ai(
     `Give the user a natural budget summary for their project:
-    Total spent: ${fmt(totalSpent)} UGX
-    Budget: ${fmt(budget)} UGX
-    Used: ${pct}%
-    Remaining: ${fmt(remaining)} UGX
-    ${weeksLeft !== null ? 'At current rate: ~' + weeksLeft + ' weeks of budget left (projected runout date: ' + budgetRunoutDate + ')' : ''}
-    ${pct > 80 ? 'IMPORTANT: Warn them they have used over 80% of budget!' : ''}
+    Total spent: ${fmtMoney(totalSpent, currency)}
+    Budget: ${fmtMoney(budget, currency)}
+    Used: ${health.display}
+    Remaining: ${fmtMoney(health.remaining, currency)}
+    ${runoutLine}${disclaimer}
+    ${warning}
+    Only use the figures provided. Do not estimate or invent numbers.
     Be conversational, not just a list of numbers.`,
-    `Budget summary: Spent: ${fmt(totalSpent)} UGX | Budget: ${fmt(budget)} UGX | Used: ${pct}% | Remaining: ${fmt(remaining)} UGX`,
+    `Budget summary: Spent: ${fmtMoney(totalSpent, currency)} | Budget: ${fmtMoney(budget, currency)} | Used: ${health.display} | Remaining: ${fmtMoney(health.remaining, currency)}`,
     300,
     lang
   );
@@ -2756,11 +2768,21 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
   }
   const expense = expenses[0];
   const amt = parseFloat(String(expense.amount || 0));
-  const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+  // Soft-delete only: budget/analytics must be able to exclude this row, and
+  // we must preserve audit history. Never hard-delete money rows.
+  const { error } = await supabase
+    .from('expenses')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', expense.id)
+    .is('deleted_at', null);
   if (error) return { success: false, reply: 'Failed to delete that expense. Please try again.' };
+  // Look up the project currency so we don't reply "UGX" to a KES/USD project.
+  const { data: projRow } = await supabase
+    .from('projects').select('currency').eq('id', projectId).maybeSingle();
+  const currency = String((projRow as any)?.currency || 'UGX').toUpperCase();
   return {
     success: true,
-    reply: `✅ Deleted! Expense "${expense.description}" — UGX ${fmt(amt)} has been removed. Your budget and dashboard have been updated.`,
+    reply: `✅ Deleted! Expense "${expense.description}" — ${fmtMoney(amt, currency)} has been removed. Your budget and dashboard have been updated.`,
     data: { deleted: expense.description, amount: amt },
   };
 }

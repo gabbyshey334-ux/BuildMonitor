@@ -249,11 +249,18 @@ export function computeBurn(
   const dailyRate = totalSpent / Math.max(1, divisor);
   const weeklyRate = Math.round(dailyRate * 7);
 
+  // Days remaining is an UNCAPPED calculation — callers that want to display
+  // the value must apply the display rules from `formatDaysRemaining()` below
+  // ("∞" / "1+ year runway" / "999+ days" / "Budget exhausted"). Previously
+  // this was capped at 999 and the UI rendered "~999 days of runway" whenever
+  // the budget was big relative to burn, which was indistinguishable from a
+  // genuine 999-day runway. See Investigation 3.
   let daysRemaining: number;
-  if (dailyRate <= 0) daysRemaining = Infinity;
+  if (remainingBudget <= 0) daysRemaining = 0;
+  else if (dailyRate <= 0) daysRemaining = Infinity;
   else {
     const raw = Math.max(0, remainingBudget) / dailyRate;
-    daysRemaining = Math.min(999, Math.round(raw));
+    daysRemaining = Math.max(0, Math.floor(raw));
   }
 
   return {
@@ -264,6 +271,29 @@ export function computeBurn(
     daysWithSpending,
     daysSinceFirst,
   };
+}
+
+/**
+ * Human-readable runway from `computeBurn().daysRemaining`.
+ *
+ *   Infinity  → "∞"                 (no spend recorded yet)
+ *   0         → "Budget exhausted"  (and caller should use danger color)
+ *   ≤ 365     → "N days"
+ *   ≤ 999     → "M+ months" where M = floor(days/30)  // smoother long runway
+ *   > 999     → "999+ days"         (display cap only; calc itself uncapped)
+ *
+ * Use this instead of hardcoded "~X days of runway" strings.
+ */
+export function formatDaysRemaining(days: number): string {
+  if (!Number.isFinite(days)) return "∞";
+  if (days <= 0) return "Budget exhausted";
+  if (days === 1) return "1 day";
+  if (days <= 365) return `${days} days`;
+  if (days <= 999) {
+    const years = days / 365;
+    return years >= 1.95 ? `${Math.round(years)}+ year runway` : `1+ year runway`;
+  }
+  return "999+ days";
 }
 
 // ─── Category totals ─────────────────────────────────────────────────────
@@ -442,7 +472,9 @@ export function weeklyByCategory(
 
   for (let i = weeks - 1; i >= 0; i--) {
     const weekDate = addDays(now, -i * 7);
-    const key = format(weekDate, "MMM d");
+    // Always include the year — multi-year projects otherwise collide
+    // ("14 Aug" 2024 vs 2025) and time-series keys silently overwrite.
+    const key = format(weekDate, "dd MMM yyyy");
     result[key] = {};
   }
 
@@ -454,7 +486,7 @@ export function weeklyByCategory(
     );
     if (diffWeeks < 0 || diffWeeks >= weeks) continue;
     const weekDate = addDays(now, -diffWeeks * 7);
-    const key = format(weekDate, "MMM d");
+    const key = format(weekDate, "dd MMM yyyy");
     const cat = categorise(e);
     allCats.add(cat);
     result[key] = result[key] || {};

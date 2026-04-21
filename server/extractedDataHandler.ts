@@ -1,6 +1,8 @@
 import { IStorage } from './storage.js';
 import { Request, Response } from 'express';
 import { z } from 'zod';
+import { calcBudgetPercent } from '../shared/calculations.js';
+import { formatCurrency as fmtMoney } from '../shared/formatting.js';
 
 const extractedExpenseSchema = z.object({
   type: z.literal('expense'),
@@ -375,15 +377,16 @@ async function handleQuery(
 
     if (question.includes('budget') || question.includes('spent') || question.includes('balance')) {
       const analytics = await storage.getProjectAnalytics(data.projectId);
-      const remaining = analytics.totalBudget - analytics.totalSpent;
-      const percentUsed = ((analytics.totalSpent / analytics.totalBudget) * 100).toFixed(1);
-      
+      // Use shared calculator — safe when budget is 0 (no Infinity%).
+      const health = calcBudgetPercent(analytics.totalSpent, analytics.totalBudget);
+      const currency = String((project as any).currency || 'UGX').toUpperCase();
+
       return {
         success: true,
         type: 'query',
         message: 'Budget query answered',
         data: analytics,
-        confirmationMessage: `📊 Project Budget:\n• Total: ${formatUGX(analytics.totalBudget)}\n• Spent: ${formatUGX(analytics.totalSpent)} (${percentUsed}%)\n• Remaining: ${formatUGX(remaining)}\n• Cash on hand: ${formatUGX(analytics.cashBalance)}`,
+        confirmationMessage: `📊 Project Budget:\n• Total: ${fmtMoney(analytics.totalBudget, currency)}\n• Spent: ${fmtMoney(analytics.totalSpent, currency)} (${health.display})\n• Remaining: ${fmtMoney(health.remaining, currency)}\n• Cash on hand: ${fmtMoney(analytics.cashBalance, currency)}`,
       };
     }
 

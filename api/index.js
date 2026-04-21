@@ -15,6 +15,23 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
+import {
+  calcBudgetPercent,
+  calcBurnRate,
+  calcInventoryTotal,
+  findFirstExpenseDate,
+  normalizeCategory,
+  sumByCategory,
+  sumExpenses,
+  isNonDeleted,
+  dateKey,
+} from '../shared/calculations.js';
+import {
+  formatCurrency,
+  formatDate,
+  formatDaysRemaining,
+  formatProjectionDate,
+} from '../shared/formatting.js';
 
 /** Linked WhatsApp profile IDs + auth user id — mirrors GET /api/projects. */
 async function getLinkedUserIdsForAuth(supabase, userId) {
@@ -254,7 +271,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         }
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
-          .select('id, name, budget, status, created_at')
+          .select('id, name, budget, currency, status, created_at')
           .eq('id', projectId)
           .maybeSingle();
         if (projectError || !projectData) {
@@ -268,19 +285,20 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         if (projectRow) {
           const { data: expenseRows, error: expenseError } = await supabase
             .from('expenses')
-            .select('amount, expense_date')
+            .select('id, amount, expense_date, created_at, category, deleted_at')
             .eq('project_id', projectId)
             .is('deleted_at', null);
           if (expenseError) console.error('[Summary] Supabase expenses error:', expenseError);
           expenseRowCount = (expenseRows || []).length;
-          totalSpent = (expenseRows || []).reduce((sum, row) => sum + parseFloat(String(row.amount || 0)), 0);
+          // Use shared sumExpenses() for float-safe (integer-cents) arithmetic.
+          totalSpent = sumExpenses(expenseRows || []);
           expenseRowsForCumulative = expenseRows || [];
         }
 
         if (projectRow) {
           const { data: materialsData, error: materialsError } = await supabase
             .from('materials_inventory')
-            .select('id, name, quantity, unit')
+            .select('id, name, quantity, unit, unit_cost, low_stock_threshold')
             .eq('project_id', projectId);
           if (materialsError) console.error('[Summary] Supabase materials_inventory error:', materialsError);
           materialsRows = materialsData || [];
@@ -321,7 +339,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       if (!projectRow && initializeDatabase()) {
         const dbConnection = initializeDatabase();
         const projectResult = await dbConnection.execute(sql`
-          SELECT id, name, budget, status, created_at
+          SELECT id, name, budget, currency, status, created_at
           FROM projects
           WHERE id = ${projectId} AND user_id = ${userId}
           LIMIT 1
@@ -329,20 +347,24 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
 
         if (projectRow) {
+          // CRITICAL: exclude soft-deleted expenses from every aggregate.
+          // Missing this filter caused silent inflation of totals when the
+          // Supabase client path was unavailable.
           const expenseResult = await dbConnection.execute(sql`
-            SELECT amount, expense_date
+            SELECT amount, expense_date, created_at, category, deleted_at
             FROM expenses
             WHERE project_id = ${projectId}
+              AND deleted_at IS NULL
           `);
           const rows = Array.isArray(expenseResult) ? expenseResult : (expenseResult?.rows || []);
-          totalSpent = rows.reduce((sum, row) => sum + parseFloat(String(row?.amount || 0)), 0);
+          totalSpent = sumExpenses(rows);
           expenseRowsForCumulative = rows;
         }
 
         if (projectRow) {
           try {
             const matResult = await dbConnection.execute(sql`
-              SELECT id, name, quantity, unit
+              SELECT id, name, quantity, unit, unit_cost, low_stock_threshold
               FROM materials_inventory
               WHERE project_id = ${projectId}
             `);
@@ -365,13 +387,32 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
+      const projectCurrency = String(projectRow.currency || 'UGX').toUpperCase();
       const budgetAmount = parseFloat(String(projectRow.budget ?? '0'));
+      // Shared calculators — one source of truth across dashboard, API, and bot.
+      const budgetHealth = calcBudgetPercent(totalSpent, budgetAmount);
+      const firstExpense = findFirstExpenseDate(expenseRowsForCumulative);
+      const burn = calcBurnRate(totalSpent, budgetAmount, firstExpense, projectCurrency);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[summary]', {
+          projectId,
+          currency: projectCurrency,
+          budget: budgetAmount,
+          totalSpent,
+          firstExpenseDate: firstExpense ? firstExpense.toISOString().slice(0, 10) : null,
+          dailyRate: burn.dailyRate,
+          daysRemaining: burn.daysRemaining,
+          display: burn.displayDaysRemaining,
+        });
+      }
       const remaining = Math.max(0, budgetAmount - totalSpent);
-      const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
-      // Use unified burn rate formula (same as Budget & Costs and Trends pages)
-      const weeklyBurnRate = computeWeeklyBurnRate(expenseRowsForCumulative, totalSpent);
-      const dailyBurnRate = weeklyBurnRate / 7;
-      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
+      const percentage = budgetHealth.visual;
+      const weeklyBurnRate = burn.weeklyRate;
+      const dailyBurnRate = burn.dailyRate;
+      const weeksRemaining =
+        Number.isFinite(burn.daysRemaining) && weeklyBurnRate > 0
+          ? burn.daysRemaining / 7
+          : null;
 
       // Build cumulative costs by date (for Budget & Costs section)
       const byDate = {};
@@ -422,6 +463,8 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           id: row.id,
           name: row.name || 'Material',
           unit: row.unit || 'units',
+          unit_cost: row.unit_cost != null ? parseFloat(String(row.unit_cost)) : null,
+          low_stock_threshold: row.low_stock_threshold ?? null,
           currentStock: qty,
           totalStock: qty,
           stockPercent: qty > 0 ? 100 : 0,
@@ -433,7 +476,16 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         used: 0,
         remaining: parseFloat(String(row.quantity || 0)),
       }));
-      const inventorySection = { items, usage };
+      const inventoryTotalValue = calcInventoryTotal(materialsRows);
+      const inventorySection = { items, usage, totalValue: inventoryTotalValue };
+
+      // Authoritative category totals — case-folded, soft-delete aware.
+      const categoryTotals = sumByCategory(expenseRowsForCumulative);
+
+      // Projected exhaustion ISO date (YYYY-MM-DD for machine consumers).
+      const budgetRunoutIso = burn.projectedExhaustionDate
+        ? dateKey(burn.projectedExhaustionDate)
+        : null;
 
       return res.json({
         success: true,
@@ -441,21 +493,34 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           id: projectRow.id,
           name: projectRow.name,
           budget_amount: projectRow.budget,
+          currency: projectCurrency,
           status: projectRow.status,
           created_at: projectRow.created_at,
         },
+        currency: projectCurrency,
         budget: {
           total: budgetAmount,
           spent: totalSpent,
           remaining,
           percentage: Math.round(percentage * 10) / 10,
+          rawPercent: Math.round(budgetHealth.raw * 10) / 10,
+          status: budgetHealth.status,
+          isOver: budgetHealth.isOver,
+          display: budgetHealth.display,
           dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
           weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
           weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
-          budgetRunout: weeksRemaining != null && weeksRemaining < 9999
-            ? new Date(Date.now() + Math.floor(weeksRemaining) * 7 * 86400000).toISOString().split('T')[0]
+          daysRemaining: Number.isFinite(burn.daysRemaining) ? burn.daysRemaining : null,
+          daysRemainingDisplay: burn.displayDaysRemaining,
+          isEarlyEstimate: burn.isEarlyEstimate,
+          disclaimer: burn.disclaimer,
+          firstExpenseDate: firstExpense ? dateKey(firstExpense) : null,
+          budgetRunout: budgetRunoutIso,
+          budgetRunoutDisplay: burn.projectedExhaustionDate
+            ? formatProjectionDate(burn.projectedExhaustionDate)
             : null,
         },
+        categoryTotals,
         progress: {
           overallPercentage: 0,
           phases: [],
@@ -508,7 +573,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
       const { data: projectRow } = await supabase
         .from('projects')
-        .select('id, name, budget')
+        .select('id, name, budget, currency')
         .eq('id', projectId)
         .maybeSingle();
       if (!projectRow) {
@@ -516,6 +581,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
 
       const budgetTotal = parseFloat(String(projectRow.budget || 0));
+      const projectCurrency = String(projectRow.currency || 'UGX').toUpperCase();
 
       let expenseRows;
       let expError;
@@ -545,36 +611,48 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
 
       const expenses = expenseRows || [];
-      const spent = expenses.reduce((sum, e) => sum + parseFloat(String(e.amount || 0)), 0);
+      // Shared, float-safe totals + unified burn-rate formula.
+      const spent = sumExpenses(expenses);
       const remaining = Math.max(0, budgetTotal - spent);
-      const percentage = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
-      const weeklyBurnRate = computeWeeklyBurnRate(expenses, spent);
-      const dailyBurnRate = weeklyBurnRate / 7;
-      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
+      const budgetHealth = calcBudgetPercent(spent, budgetTotal);
+      const firstExpenseDate = findFirstExpenseDate(expenses);
+      const burn = calcBurnRate(spent, budgetTotal, firstExpenseDate, projectCurrency);
+      const percentage = budgetHealth.visual;
+      const weeklyBurnRate = burn.weeklyRate;
+      const dailyBurnRate = burn.dailyRate;
+      const weeksRemaining =
+        Number.isFinite(burn.daysRemaining) && weeklyBurnRate > 0
+          ? burn.daysRemaining / 7
+          : null;
 
       const summary = {
         total: budgetTotal,
         spent,
         remaining,
         percentage: Math.round(percentage * 10) / 10,
+        rawPercent: Math.round(budgetHealth.raw * 10) / 10,
+        status: budgetHealth.status,
+        isOver: budgetHealth.isOver,
+        display: budgetHealth.display,
         dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
         weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
         weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
+        daysRemaining: Number.isFinite(burn.daysRemaining) ? burn.daysRemaining : null,
+        daysRemainingDisplay: burn.displayDaysRemaining,
+        isEarlyEstimate: burn.isEarlyEstimate,
+        disclaimer: burn.disclaimer,
+        currency: projectCurrency,
       };
 
-      const byCategoryMap = {};
-      for (const e of expenses) {
-        const cat = (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General';
-        if (!byCategoryMap[cat]) byCategoryMap[cat] = { total: 0, count: 0 };
-        byCategoryMap[cat].total += parseFloat(String(e.amount || 0));
-        byCategoryMap[cat].count += 1;
-      }
-      const byCategory = Object.entries(byCategoryMap).map(([category, v]) => ({
-        category,
-        total: v.total,
-        count: v.count,
-        percentage: spent > 0 ? Math.round((v.total / spent) * 1000) / 10 : 0,
-      })).sort((a, b) => b.total - a.total);
+      // Case-folded, soft-delete aware category totals via shared helper.
+      // Prevents "Materials"/"materials"/"MATERIALS" from splitting into three
+      // buckets where each shows <100% of the true category share.
+      const byCategory = sumByCategory(expenses).map((c) => ({
+        category: c.name,
+        total: c.amount,
+        count: c.count,
+        percentage: c.percent,
+      }));
 
       // This week / last week totals for spending spike alert
       const now = new Date();
@@ -614,29 +692,21 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
       const byMonth = Object.values(byMonthMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(({ month, amount }) => ({ month, amount }));
 
-      const recent = expenses.slice(0, 20).map((e) => ({
+      const toClientExpense = (e) => ({
         id: e.id,
         description: e.description || '',
         amount: parseFloat(String(e.amount || 0)),
-        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
+        // Normalize: "materials"/"MATERIALS"/"  Labour  " → canonical title case;
+        // null/empty → "Uncategorized".
+        category: normalizeCategory(e.category),
         expense_date: e.expense_date,
         vendor: null,
         source: e.source || null,
         created_at: e.created_at,
         disputed: !!e.disputed,
-      }));
-
-      const expensesForClient = expenses.map((e) => ({
-        id: e.id,
-        description: e.description || '',
-        amount: parseFloat(String(e.amount || 0)),
-        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
-        expense_date: e.expense_date,
-        vendor: null,
-        source: e.source || null,
-        created_at: e.created_at,
-        disputed: !!e.disputed,
-      }));
+      });
+      const recent = expenses.slice(0, 20).map(toClientExpense);
+      const expensesForClient = expenses.map(toClientExpense);
 
       let vendors = [];
       try {
@@ -655,6 +725,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 
       return res.json({
         success: true,
+        currency: projectCurrency,
         summary,
         byCategory,
         byMonth,
@@ -713,7 +784,12 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('id, currency')
+      .eq('id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle();
     if (!projectRow) {
       console.error('[POST expenses] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
@@ -728,16 +804,17 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
     const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
+    // Inherit currency from the project — never hardcode UGX.
     const insertPayload = {
       project_id: projectId,
       user_id: userId,
       description: (description && String(description).trim()) ? String(description).trim() : 'Expense',
       amount,
       expense_date: today,
-      currency: 'UGX',
+      currency: String(projectRow.currency || 'UGX').toUpperCase(),
       source: body.source || 'dashboard',
     };
-    if (category !== undefined) insertPayload.category = category || 'Other';
+    if (category !== undefined) insertPayload.category = normalizeCategory(category);
     if (vendor !== undefined) insertPayload.vendor = vendor && String(vendor).trim() ? String(vendor).trim() : null;
 
     const { data: expense, error } = await supabase
@@ -860,10 +937,13 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
+    // Only operate on non-deleted rows — prevents re-running delete on a
+    // already-soft-deleted expense from re-triggering cache invalidations.
     const { data: expenseRow, error: fetchErr } = await supabase
       .from('expenses')
       .select('id, project_id')
       .eq('id', expenseId)
+      .is('deleted_at', null)
       .maybeSingle();
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
@@ -877,10 +957,12 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     if (!projectRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
+    // Soft delete — preserves audit trail and matches the rest of the product.
     const { error: deleteErr } = await supabase
       .from('expenses')
-      .delete()
-      .eq('id', expenseId);
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', expenseId)
+      .is('deleted_at', null);
     if (deleteErr) {
       console.error('[DELETE expense]', deleteErr.message);
       return res.status(500).json({ success: false, error: deleteErr.message || 'Failed to delete' });
@@ -908,10 +990,12 @@ app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
+    // Only permit edits on non-soft-deleted rows — matches DELETE behaviour.
     const { data: expenseRow, error: fetchErr } = await supabase
       .from('expenses')
       .select('id, project_id')
       .eq('id', expenseId)
+      .is('deleted_at', null)
       .maybeSingle();
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
@@ -935,11 +1019,13 @@ app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
     const updates = { updated_at: new Date().toISOString() };
     if (description !== undefined) updates.description = description;
     if (amount !== undefined) updates.amount = amount;
+    if (body.category !== undefined) updates.category = normalizeCategory(body.category);
 
     const { data: updated, error: updateErr } = await supabase
       .from('expenses')
       .update(updates)
       .eq('id', expenseId)
+      .is('deleted_at', null)
       .select()
       .single();
     if (updateErr) {
@@ -3204,6 +3290,9 @@ app.get('/api/projects', requireAuth, async (req, res) => {
     }
 
     // Fetch projects: owned by user (or linked profiles) OR managed by user
+    // NOTE: we intentionally do NOT select the stale `projects.spent` column —
+    // spent is always computed live from expenses below so the list can never
+    // disagree with reality. See Investigation 1, RC #2.
     const { data: projectsOwned, error: errOwned } = await supabase
       .from('projects')
       .select(`
@@ -3212,7 +3301,6 @@ app.get('/api/projects', requireAuth, async (req, res) => {
         name,
         description,
         budget,
-        spent,
         currency,
         status,
         created_at,
@@ -3238,7 +3326,6 @@ app.get('/api/projects', requireAuth, async (req, res) => {
         name,
         description,
         budget,
-        spent,
         currency,
         status,
         created_at,
@@ -3268,21 +3355,32 @@ app.get('/api/projects', requireAuth, async (req, res) => {
     let dailyLogMax = {}; // project_id -> lastLogDate
 
     if (projectIds.length > 0) {
+      // All monetary values are in the project's base currency unit (e.g. UGX
+      // shillings). NEVER multiply / divide by 1000 or 1_000_000 here — only
+      // for display formatting at the edge.
       const { data: expenseRows } = await supabase
         .from('expenses')
-        .select('project_id, amount, created_at')
+        .select('project_id, amount, created_at, deleted_at')
         .in('project_id', projectIds)
         .is('deleted_at', null);
       if (expenseRows && Array.isArray(expenseRows)) {
+        // Accumulate in integer cents to avoid float drift on big totals.
+        const centsSums = {};
         for (const row of expenseRows) {
           const pid = row.project_id;
           if (!pid) continue;
           if (!expenseSums[pid]) expenseSums[pid] = { totalSpent: 0, lastActivity: null };
-          expenseSums[pid].totalSpent += parseFloat(row.amount || 0);
+          const amt = parseFloat(row.amount);
+          if (Number.isFinite(amt) && amt > 0) {
+            centsSums[pid] = (centsSums[pid] || 0) + Math.round(amt * 100);
+          }
           const at = row.created_at;
           if (at && (!expenseSums[pid].lastActivity || new Date(at) > new Date(expenseSums[pid].lastActivity))) {
             expenseSums[pid].lastActivity = at;
           }
+        }
+        for (const pid of Object.keys(centsSums)) {
+          expenseSums[pid].totalSpent = centsSums[pid] / 100;
         }
       }
       const { data: logRows } = await supabase
@@ -3299,12 +3397,25 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       }
     }
 
-    // Transform to match frontend expectations — use real spent & last activity from DB
+    // Transform to match frontend expectations.
+    //
+    //   ▸ `spent` is ALWAYS the live sum of non-deleted expense rows. The
+    //     stored `projects.spent` column is explicitly ignored because it has
+    //     no writer keeping it fresh (see Investigation 1, RC #2).
+    //   ▸ `progress` is NOT returned. Previously this field held
+    //     `Math.min(100, spent/budget)` masquerading as construction progress
+    //     and contradicted the dashboard's `progress.overallPercentage`. Until
+    //     the product has a real milestone/tasks-based progress source, the
+    //     list endpoint should not invent one.
     const transformedProjects = (projects || []).map(project => {
       const pid = project.id;
-      const fromExpenses = expenseSums[pid] || {};
-      const realSpent = fromExpenses.totalSpent != null ? fromExpenses.totalSpent : parseFloat(project.spent || 0);
-      const lastExpenseAt = fromExpenses.lastActivity || null;
+      const fromExpenses = expenseSums[pid];
+      // Zero (not the stale stored column) when no non-deleted expenses exist.
+      const realSpent =
+        fromExpenses && Number.isFinite(fromExpenses.totalSpent)
+          ? fromExpenses.totalSpent
+          : 0;
+      const lastExpenseAt = fromExpenses ? fromExpenses.lastActivity : null;
       const lastLogDate = dailyLogMax[pid] || null;
       const projectUpdated = project.updated_at || project.created_at || null;
       const lastActivity = [lastExpenseAt, lastLogDate, projectUpdated]
@@ -3314,24 +3425,24 @@ app.get('/api/projects', requireAuth, async (req, res) => {
           const t = new Date(d).getTime();
           return !latest || t > new Date(latest).getTime() ? d : latest;
         }, null);
-      const budget = parseFloat(project.budget || 0);
-      const progress = budget > 0 ? Math.min(100, Math.round((realSpent / budget) * 100)) : 0;
+      const budgetRaw = parseFloat(project.budget);
+      const budget = Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : 0;
 
       return {
-      id: project.id,
-      userId: project.user_id,
-      name: project.name,
-      description: project.description,
+        id: project.id,
+        userId: project.user_id,
+        name: project.name,
+        description: project.description,
         budget,
         budgetAmount: budget,
         spent: realSpent,
         totalSpent: realSpent,
-      currency: project.currency || 'UGX',
-      status: project.status || 'active',
-        progress,
+        currency: project.currency || 'UGX',
+        status: project.status || 'active',
+        hasBudget: budget > 0,
         lastActivity: lastActivity || project.updated_at || project.created_at,
-      createdAt: project.created_at,
-      updatedAt: project.updated_at,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at,
       };
     });
 

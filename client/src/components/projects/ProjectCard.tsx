@@ -3,7 +3,7 @@
 import React from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { MoreHorizontal, MapPin, Clock, TrendingUp, Wallet } from "lucide-react";
+import { MoreHorizontal, MapPin, Clock, Wallet, AlertTriangle } from "lucide-react";
 import type { Project } from "@/contexts/ProjectContext";
 import { useProject } from "@/contexts/ProjectContext";
 import { cn } from "@/lib/utils";
@@ -39,27 +39,14 @@ function formatRelativeTime(lastActivityAt?: string): string {
     if (diffDays < 7) return `${diffDays}d ago`;
     const diffWeeks = Math.floor(diffDays / 7);
     if (diffWeeks < 4) return `${diffWeeks}w ago`;
-    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return d.toLocaleDateString(undefined, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
   } catch {
     return "Recently";
   }
-}
-
-function calculateHealthStatus(
-  progress: number,
-  budgetSpentPercent: number,
-): { label: string; tone: StatusTone } {
-  const variance = budgetSpentPercent - progress;
-  if (variance > 25 || budgetSpentPercent > 95) {
-    return { label: "Over Budget", tone: "danger" };
-  }
-  if (variance > 10 || budgetSpentPercent > 80) {
-    return { label: "At Risk", tone: "warning" };
-  }
-  if (budgetSpentPercent === 0 && progress === 0) {
-    return { label: "Not Started", tone: "neutral" };
-  }
-  return { label: "On Track", tone: "success" };
 }
 
 function statusTone(status?: string): StatusTone {
@@ -80,11 +67,39 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
   const { setCurrentProject } = useProject();
   const currency = project.currency || "UGX";
 
-  const health = computeBudgetHealth(project.spentAmount ?? 0, project.totalBudget ?? 0);
-  const budgetPct = health.displayPercent;
-  const progress = project.progress ?? Math.round(Math.min(100, budgetPct * 0.9));
+  // CRITICAL: computeBudgetHealth signature is (totalBudget, totalSpent).
+  // Until 2026-04-20 this call passed them swapped, which inverted Spent/Budget
+  // labels on every project card and made over-budget projects look healthy.
+  // See Investigation 1, RC #1.
+  const health = computeBudgetHealth(project.totalBudget ?? 0, project.spentAmount ?? 0);
+  const hasBudget = health.total > 0;
+  const hasExpenses = health.spent > 0;
 
-  const healthStatus = calculateHealthStatus(progress, budgetPct);
+  // Bar fill is clamped to [0,100] for visual; raw % can exceed 100 (over-budget).
+  const budgetFillPct = hasBudget ? Math.min(100, health.displayPercent) : 0;
+  const budgetRawPct = health.rawPercent;
+
+  // Health / status — derived from the same numbers shown on the card so the
+  // badge and the bar can never disagree.
+  //
+  // • No budget configured   → "No Budget"   (neutral)
+  // • No expenses yet        → "Not Started" (neutral)
+  // • Over budget            → "Over Budget" (danger)
+  // • ≥ 85 %                 → "At Risk"     (warning)
+  // • ≥ 70 %                 → "Attention"   (warning)
+  // • otherwise              → "On Track"    (success)
+  const healthStatus: { label: string; tone: StatusTone } = !hasBudget
+    ? { label: "No Budget", tone: "neutral" }
+    : !hasExpenses
+      ? { label: "Not Started", tone: "neutral" }
+      : health.overBudget
+        ? { label: "Over Budget", tone: "danger" }
+        : budgetRawPct >= 85
+          ? { label: "At Risk", tone: "warning" }
+          : budgetRawPct >= 70
+            ? { label: "Attention", tone: "warning" }
+            : { label: "On Track", tone: "success" };
+
   const statusLabel = (project.status || "active").replace("_", " ");
 
   const handleClick = () => {
@@ -98,19 +113,21 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
     }
   };
 
-  const progressBarColor =
-    progress >= 80
-      ? "bg-jenga-success"
-      : progress >= 40
-        ? "bg-jenga-primary"
-        : "bg-jenga-secondary";
-
-  const budgetBarColor =
-    health.status === "danger"
+  const budgetBarColor = health.overBudget
+    ? "bg-jenga-danger"
+    : health.status === "danger"
       ? "bg-jenga-danger"
       : health.status === "warning"
         ? "bg-jenga-warning"
         : "bg-jenga-success";
+
+  const budgetPctClass = health.overBudget
+    ? "text-jenga-danger"
+    : health.status === "danger"
+      ? "text-jenga-danger"
+      : health.status === "warning"
+        ? "text-jenga-warning"
+        : "text-jenga-success";
 
   return (
     <motion.div
@@ -128,7 +145,7 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
           role="link"
           onClick={handleClick}
           className={cn(
-            "block h-full jt-card p-5 cursor-pointer relative overflow-hidden",
+            "block h-full jt-card p-5 cursor-pointer relative overflow-hidden min-w-0",
             "transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
             "hover:border-jenga-primary/40 hover:-translate-y-0.5",
             "hover:shadow-[0_12px_40px_-8px_rgba(224,123,57,0.25)]",
@@ -158,93 +175,100 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
               )}
             </div>
             <StatusBadge tone={statusTone(project.status)} size="sm" dot>
-              {statusLabel}
+              <span className="capitalize">{statusLabel}</span>
             </StatusBadge>
           </div>
 
-          {/* Progress + Budget bars */}
-          <div className="space-y-3 mb-4 relative z-10">
-            <div>
-              <div className="flex justify-between items-center text-xs mb-1.5">
-                <span className="text-muted-foreground font-medium flex items-center gap-1.5">
-                  <TrendingUp className="h-3 w-3" />
-                  Progress
+          {/* Budget Used — the ONLY progress-like bar until we have a real
+              milestone-based progress source. This removes the previous dual
+              "Progress + Budget Used" display that showed contradictory % (the
+              list endpoint's `progress` field was budget-used % masquerading
+              as construction progress). */}
+          <div className="mb-4 relative z-10">
+            {hasBudget ? (
+              <>
+                <div className="flex justify-between items-center text-xs mb-1.5 min-w-0 gap-2">
+                  <span className="text-muted-foreground font-medium flex items-center gap-1.5 min-w-0">
+                    <Wallet className="h-3 w-3 shrink-0" />
+                    <span className="truncate">Budget Used</span>
+                  </span>
+                  <span
+                    className={cn(
+                      "font-mono tabular-nums font-semibold shrink-0",
+                      budgetPctClass,
+                    )}
+                  >
+                    {health.overBudget
+                      ? `${budgetRawPct.toFixed(0)}%`
+                      : `${Math.round(budgetFillPct)}%`}
+                  </span>
+                </div>
+                <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
+                  <motion.div
+                    className={cn("h-full rounded-full", budgetBarColor)}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${budgetFillPct}%` }}
+                    transition={{
+                      duration: 0.8,
+                      ease: [0.16, 1, 0.3, 1],
+                      delay: 0.15,
+                    }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between gap-2 text-xs min-w-0 rounded-btn border border-dashed border-jenga-warning/40 bg-jenga-warning/5 px-3 py-2">
+                <span className="text-jenga-warning font-medium flex items-center gap-1.5 min-w-0">
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  <span className="truncate">No budget set</span>
                 </span>
-                <span className="text-foreground font-mono tabular-nums font-semibold">
-                  {progress}%
-                </span>
-              </div>
-              <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
-                <motion.div
-                  className={cn("h-full rounded-full", progressBarColor)}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${progress}%` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-                />
-              </div>
-            </div>
-
-            <div>
-              <div className="flex justify-between items-center text-xs mb-1.5">
-                <span className="text-muted-foreground font-medium flex items-center gap-1.5">
-                  <Wallet className="h-3 w-3" />
-                  Budget Used
-                </span>
-                <span
-                  className={cn(
-                    "font-mono tabular-nums font-semibold",
-                    (health.status === "danger" || health.status === "critical") &&
-                      "text-jenga-danger",
-                    health.status === "warning" && "text-jenga-warning",
-                    health.status === "healthy" && "text-jenga-success",
-                  )}
+                <Link
+                  href={`/settings?project=${project.id}`}
+                  className="text-jenga-primary font-semibold hover:underline shrink-0"
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {budgetPct.toFixed(0)}%
-                </span>
+                  Set budget →
+                </Link>
               </div>
-              <div className="h-1.5 w-full bg-muted/60 rounded-full overflow-hidden">
-                <motion.div
-                  className={cn("h-full rounded-full", budgetBarColor)}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, budgetPct)}%` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Budget amounts */}
+          {/* Budget amounts row — uses compact formatting so even 30B fits. */}
           <div className="pt-3 border-t border-border/60 relative z-10">
-            <div className="flex justify-between items-baseline text-xs">
-              <span className="text-muted-foreground">Spent</span>
-              <div className="flex items-baseline gap-1.5">
+            <div className="flex items-baseline justify-between gap-2 text-xs min-w-0">
+              <span className="text-muted-foreground shrink-0">Spent</span>
+              <div className="flex items-baseline gap-1.5 min-w-0 font-mono tabular-nums whitespace-nowrap overflow-hidden">
                 <CurrencyValue
                   value={health.spent}
                   currency={currency}
                   compact
                   size="sm"
-                  tone="accent"
+                  tone={health.overBudget ? "danger" : "accent"}
                 />
-                <span className="text-muted-foreground text-[11px]">/</span>
-                <CurrencyValue
-                  value={health.total}
-                  currency={currency}
-                  compact
-                  size="sm"
-                  tone="muted"
-                />
+                {hasBudget && (
+                  <>
+                    <span className="text-muted-foreground text-[11px] shrink-0">/</span>
+                    <CurrencyValue
+                      value={health.total}
+                      currency={currency}
+                      compact
+                      size="sm"
+                      tone="muted"
+                    />
+                  </>
+                )}
               </div>
             </div>
           </div>
 
           {/* Footer: health + last activity */}
-          <div className="flex items-center justify-between mt-3 relative z-10">
+          <div className="flex items-center justify-between gap-2 mt-3 relative z-10 min-w-0">
             <StatusBadge tone={healthStatus.tone} size="sm" dot>
               {healthStatus.label}
             </StatusBadge>
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono">
-              <Clock className="h-3 w-3" />
-              {formatRelativeTime(project.lastActivityAt)}
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-mono truncate min-w-0">
+              <Clock className="h-3 w-3 shrink-0" />
+              <span className="truncate">{formatRelativeTime(project.lastActivityAt)}</span>
             </span>
           </div>
         </div>

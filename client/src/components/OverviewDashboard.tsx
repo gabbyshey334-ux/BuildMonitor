@@ -151,8 +151,13 @@ export default function OverviewDashboard({ project, onTabChange, userRole = 'ow
   const categoryData = Object.values(categoryBreakdown).slice(0, 5);
 
   // Prepare spending over time data (last 7 days)
+  // Include the year so keys never collide across years in multi-year projects.
   const spendingOverTime = recentExpenses.reduce((acc, expense) => {
-    const date = new Date(expense.expenseDate).toLocaleDateString('en-UG', { month: 'short', day: 'numeric' });
+    const date = new Date(expense.expenseDate).toLocaleDateString('en-UG', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
     const amount = Number(expense.amount);
     if (acc[date]) {
       acc[date] += amount;

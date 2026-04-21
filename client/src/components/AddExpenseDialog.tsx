@@ -4,6 +4,9 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { useProject } from "@/contexts/ProjectContext";
+import { formatCurrency } from "@shared/formatting.js";
+import { invalidateProjectQueries } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -79,6 +82,9 @@ export default function AddExpenseDialog({
 }: AddExpenseDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentProject } = useProject();
+  const projectId = currentProject?.id;
+  const projectCurrency = (currentProject?.currency || "UGX").toUpperCase();
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   // Fetch categories from API
@@ -130,17 +136,22 @@ export default function AddExpenseDialog({
     onSuccess: (data) => {
       console.log("[AddExpense] Expense created successfully:", data.expense);
 
-      // Show success toast
+      // Toast uses the project's currency — never hardcoded UGX.
       toast({
         title: "Expense added!",
-        description: `${data.expense.description} - UGX ${data.expense.amount.toLocaleString()}`,
+        description: `${data.expense.description} — ${formatCurrency(
+          data.expense.amount,
+          projectCurrency,
+        )}`,
       });
 
-      // Invalidate queries to refresh the lists
-      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/summary"] });
+      // Invalidate every project-scoped query so dashboard, budget page, trends,
+      // and category totals refresh immediately. Previously only legacy keys
+      // (["/api/expenses"], ["/api/dashboard/summary"]) were invalidated, which
+      // did not match the keys actually consumed by the pages, leaving stale
+      // totals visible for up to 30s.
+      invalidateProjectQueries(queryClient, projectId);
 
-      // Reset form and close dialog
       form.reset({
         description: "",
         amount: undefined,

@@ -23,12 +23,15 @@ export interface CurrencyValueProps {
   numericOnly?: boolean;
 }
 
+// Responsive sizes — mobile values must fit inside a ~115-150px-wide KPI
+// card at 320-375px viewports. "UGX 43.15B" is 10 mono glyphs wide so we
+// cap `xl` at text-base (16px) on xs and only scale up from sm+.
 const SIZE_MAP = {
   xs: "text-xs",
   sm: "text-sm",
   md: "text-base",
-  lg: "text-xl md:text-2xl",
-  xl: "text-2xl md:text-4xl",
+  lg: "text-base xs:text-lg sm:text-xl md:text-2xl",
+  xl: "text-base xs:text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl",
 } as const;
 
 const TONE_MAP = {
@@ -67,7 +70,7 @@ export function CurrencyValue({
   return (
     <span
       className={cn(
-        "font-mono tabular-nums whitespace-nowrap",
+        "font-mono tabular-nums whitespace-nowrap inline-block max-w-full overflow-hidden text-ellipsis leading-tight",
         SIZE_MAP[size],
         TONE_MAP[tone],
         className,
@@ -75,6 +78,7 @@ export function CurrencyValue({
       data-numeric="true"
       data-value={safeNum(value)}
       data-currency={currency}
+      title={`${currency} ${safeNum(value).toLocaleString()}`}
     >
       {prefix}
       {formatted}

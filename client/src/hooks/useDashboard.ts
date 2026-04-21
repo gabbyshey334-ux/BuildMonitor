@@ -9,18 +9,40 @@ export interface ProjectSummaryResponse {
     id: string;
     name: string;
     budget_amount: string | null;
+    currency?: string;
     status: string;
     created_at: string;
   };
+  /** Project currency (UGX / KES / USD…) — use with formatCurrency instead of hardcoding. */
+  currency?: string;
   budget: {
     total: number;
     spent: number;
     remaining: number;
+    /** 0-100 clamped for progress rings. */
     percentage: number;
+    /** True percentage (can exceed 100 when over budget). */
+    rawPercent?: number;
+    status?: "healthy" | "warning" | "danger" | "over" | "no-budget";
+    isOver?: boolean;
+    display?: string;
     dailyBurnRate: number;
     weeklyBurnRate: number;
-    weeksRemaining: number;
+    weeksRemaining: number | null;
+    daysRemaining?: number | null;
+    daysRemainingDisplay?: string;
+    isEarlyEstimate?: boolean;
+    disclaimer?: string | null;
+    firstExpenseDate?: string | null;
+    budgetRunout?: string | null;
+    budgetRunoutDisplay?: string | null;
   };
+  categoryTotals?: Array<{
+    name: string;
+    amount: number;
+    count: number;
+    percent: number;
+  }>;
   schedule: {
     status: "On Track" | "At Risk" | "Delayed";
     daysAhead: number;

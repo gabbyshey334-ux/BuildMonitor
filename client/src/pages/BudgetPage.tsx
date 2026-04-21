@@ -5,6 +5,12 @@ import { Link } from "wouter";
 import { useProject } from "@/contexts/ProjectContext";
 import { useProjects } from "@/hooks/useProjects";
 import { useProjectExpenses, useProjectMaterials, useProjectTasks } from "@/hooks/useDashboard";
+import {
+  calcBudgetPercent,
+  calcBurnRate,
+  findFirstExpenseDate,
+  sumExpenses,
+} from "../../../shared/calculations.js";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -683,50 +689,24 @@ export default function BudgetPage() {
     return isNaN(parsed) ? 0 : parsed;
   }, [currentProject]);
 
-  const totalSpent = useMemo(
-    () =>
-      expenses.reduce(
-        (sum, e) =>
-          sum + (parseFloat(String(e.amount ?? 0).replace(/,/g, "")) || 0),
-        0
-      ),
-    [expenses]
-  );
+  // All numeric truth comes from shared calculators — zero inline burn/percent math.
+  // This keeps BudgetPage, the /summary API, and the WhatsApp bot perfectly aligned.
+  const totalSpent = useMemo(() => sumExpenses(expenses as any[]), [expenses]);
 
-  const balance = budget - totalSpent;
-  const percentSpent = useMemo(() => pct(totalSpent, budget), [totalSpent, budget]);
-  const overBudget = budget > 0 && totalSpent > budget;
+  const health = useMemo(() => calcBudgetPercent(totalSpent, budget), [totalSpent, budget]);
+  const balance = health.remaining;
+  const percentSpent = health.visual;
+  const overBudget = health.isOver;
 
-  // Unified burn rate — identical logic to api/index.js computeWeeklyBurnRate
-  const weeklyBurn = useMemo(() => {
-    if (!expenses.length || totalSpent <= 0) return 0;
-    const dates = expenses
-      .map((e) => {
-        const d = String(e.expense_date || e.created_at || "").split("T")[0];
-        return d ? new Date(d + "T12:00:00").getTime() : null;
-      })
-      .filter((t): t is number => t !== null);
-    if (dates.length === 0) return 0;
-    const firstMs = Math.min(...dates);
-    const lastMs = Math.max(...dates);
-    const spannedDays = Math.max(1, (lastMs - firstMs) / 86400000);
-    const daysSinceFirst = Math.max(1, (Date.now() - firstMs) / 86400000);
-    const uniqueDates = new Set(
-      expenses
-        .map((e) => String(e.expense_date || e.created_at || "").split("T")[0])
-        .filter(Boolean)
-    );
-    const daysWithSpending = Math.max(1, uniqueDates.size);
-    if (spannedDays < 4) {
-      return Math.round((totalSpent / daysWithSpending) * 7);
-    }
-    return Math.round((totalSpent / daysSinceFirst) * 7);
-  }, [expenses, totalSpent]);
+  const burn = useMemo(() => {
+    const firstExpense = findFirstExpenseDate(expenses as any[]);
+    return calcBurnRate(totalSpent, budget, firstExpense, __currentCurrency);
+  }, [expenses, totalSpent, budget]);
 
-  const weeksRemaining =
-    weeklyBurn > 0
-      ? Math.min(999, Math.max(0, Math.round(balance / weeklyBurn)))
-      : null;
+  const weeklyBurn = burn.weeklyRate;
+  const weeksRemaining = Number.isFinite(burn.daysRemaining)
+    ? Math.min(999, Math.max(0, Math.round(burn.daysRemaining / 7)))
+    : null;
 
   // ── Category totals ──────────────────────────────────────────────────────────
   const categoryTotals = useMemo(() => {

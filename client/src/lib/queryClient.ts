@@ -1,6 +1,43 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { getToken } from "./authToken";
 
+/**
+ * Query keys that are scoped to a single project. When any mutation changes
+ * project data (add/edit/delete expense, add material txn, update daily log),
+ * every one of these must be invalidated so the UI reflects the new totals.
+ *
+ * Extend this list — never hand-roll invalidations in individual components.
+ */
+export const PROJECT_QUERY_KEYS = [
+  "api/projects/summary",      // useProjectSummary (hooks/useDashboard)
+  "project-expenses",           // useProjectExpenses
+  "materials",                  // useProjectMaterials
+  "materials-daily-summary",    // useMaterialsDailySummary
+  "materials-daily-date",       // useMaterialsForDate
+  "project-daily",              // useProjectDaily
+  "project-trends",             // useProjectTrends
+  "tasks",                      // useProjectTasks
+] as const;
+
+/**
+ * Invalidate every project-scoped query for the given project. Pass no id to
+ * invalidate across all projects (e.g. on project switch).
+ */
+export function invalidateProjectQueries(
+  client: QueryClient,
+  projectId?: string | null,
+) {
+  if (!projectId) {
+    for (const key of PROJECT_QUERY_KEYS) {
+      client.invalidateQueries({ queryKey: [key] });
+    }
+    return;
+  }
+  for (const key of PROJECT_QUERY_KEYS) {
+    client.invalidateQueries({ queryKey: [key, projectId] });
+  }
+}
+
 // User-friendly error messages for common HTTP status codes
 const USER_FRIENDLY_ERRORS: Record<number, string> = {
   400: 'Please check the information you entered',

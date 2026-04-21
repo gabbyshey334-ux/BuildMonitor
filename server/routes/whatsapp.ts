@@ -44,6 +44,8 @@ import {
   InsertImage,
   InsertWhatsappMessage,
 } from '../../shared/schema.js';
+import { calcBudgetPercent } from '../../shared/calculations.js';
+import { formatCurrency as fmtMoney } from '../../shared/formatting.js';
 
 const router = Router();
 
@@ -833,13 +835,15 @@ async function handleLogExpense(
     
     const [expense] = await db.insert(expenses).values(newExpense).returning();
     
-    const formattedAmount = formatAmount(parsed.amount!, parsed.currency || 'UGX');
+    const currency = String(
+      parsed.currency || (project as any).currency || 'UGX',
+    ).toUpperCase();
+    const formattedAmount = fmtMoney(parsed.amount!, currency);
     const totalSpent = await calculateProjectTotal(project.id);
     const budget = parseFloat(project.budgetAmount);
-    const remaining = budget - totalSpent;
-    const percentUsed = (totalSpent / budget) * 100;
-    
-    // Get today's spending
+    // Shared calculator — handles budget=0 without returning Infinity%.
+    const health = calcBudgetPercent(totalSpent, budget);
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todaySpent = await db.select({
@@ -854,20 +858,22 @@ async function handleLogExpense(
           isNull(expenses.deletedAt)
         )
       );
-    
-    const formattedTodaySpent = formatAmount(parseFloat(todaySpent[0].total.toString()), 'UGX');
-    const formattedRemaining = formatAmount(remaining, 'UGX');
-    
+
+    const formattedTodaySpent = fmtMoney(
+      parseFloat(todaySpent[0].total.toString()),
+      currency,
+    );
+    const formattedRemaining = fmtMoney(health.remaining, currency);
+
     console.log(`[handleLogExpense] ${requestId} - Expense created: ${expense.id}`);
-    
-    // Professional response format
+
     return `✅ *Expense Logged*\n\n` +
            `📝 *${parsed.description}*\n` +
            `💰 *${formattedAmount}*\n` +
            `📊 Project: ${project.name}\n\n` +
            `📈 *Today's Total:* ${formattedTodaySpent}\n` +
            `💵 *Remaining Budget:* ${formattedRemaining}\n` +
-           `📊 *Budget Used:* ${percentUsed.toFixed(1)}%`;
+           `📊 *Budget Used:* ${health.display}`;
     
   } catch (error: any) {
     console.error(`[handleLogExpense] ${requestId} - Error:`, error);
@@ -959,21 +965,22 @@ async function handleSetBudget(
       })
       .where(eq(projects.id, project.id));
     
-    const formattedBudget = formatAmount(parsed.amount!, 'UGX');
+    const currency = String((project as any).currency || 'UGX').toUpperCase();
+    const formattedBudget = fmtMoney(parsed.amount!, currency);
     const totalSpent = await calculateProjectTotal(project.id);
-    const formattedSpent = formatAmount(totalSpent, 'UGX');
-    const remaining = parsed.amount! - totalSpent;
-    const formattedRemaining = formatAmount(remaining, 'UGX');
-    const percentUsed = (totalSpent / parsed.amount!) * 100;
-    
+    const formattedSpent = fmtMoney(totalSpent, currency);
+    // Shared calculator — handles amount=0 gracefully.
+    const health = calcBudgetPercent(totalSpent, parsed.amount!);
+    const formattedRemaining = fmtMoney(health.remaining, currency);
+
     console.log(`[handleSetBudget] ${requestId} - Budget updated for project: ${project.id}`);
-    
+
     return `✅ *Budget Updated*\n\n` +
            `📊 Project: ${project.name}\n` +
            `💰 *New Budget:* ${formattedBudget}\n` +
            `💵 *Already Spent:* ${formattedSpent}\n` +
            `💸 *Remaining:* ${formattedRemaining}\n` +
-           `📊 *Used:* ${percentUsed.toFixed(1)}%`;
+           `📊 *Used:* ${health.display}`;
     
   } catch (error: any) {
     console.error(`[handleSetBudget] ${requestId} - Error:`, error);
@@ -1000,9 +1007,10 @@ async function handleQueryExpenses(
     
     const totalSpent = await calculateProjectTotal(project.id);
     const budget = parseFloat(project.budgetAmount);
-    const remaining = budget - totalSpent;
-    const percentUsed = (totalSpent / budget) * 100;
-    
+    // Shared calculator — safe when budget is 0 (no Infinity/NaN).
+    const health = calcBudgetPercent(totalSpent, budget);
+    const currency = String((project as any).currency || 'UGX').toUpperCase();
+
     const expenseCount = await db.select({ count: sql<number>`count(*)` })
       .from(expenses)
       .where(
@@ -1012,7 +1020,7 @@ async function handleQueryExpenses(
           isNull(expenses.deletedAt)
         )
       );
-    
+
     const topCategories = await db.select({
       categoryName: expenseCategories.name,
       total: sql<number>`SUM(CAST(${expenses.amount} AS DECIMAL))`,
@@ -1029,30 +1037,30 @@ async function handleQueryExpenses(
       .groupBy(expenseCategories.name)
       .orderBy(desc(sql`SUM(CAST(${expenses.amount} AS DECIMAL))`))
       .limit(3);
-    
+
     console.log(`[handleQueryExpenses] ${requestId} - Total spent: ${totalSpent}`);
-    
+
     let message = `📊 *${project.name} - Expense Report*\n\n`;
-    message += `💰 *Budget:* ${formatAmount(budget, 'UGX')}\n`;
-    message += `💵 *Spent:* ${formatAmount(totalSpent, 'UGX')} (${percentUsed.toFixed(1)}%)\n`;
-    message += `💸 *Remaining:* ${formatAmount(remaining, 'UGX')}\n`;
+    message += `💰 *Budget:* ${fmtMoney(budget, currency)}\n`;
+    message += `💵 *Spent:* ${fmtMoney(totalSpent, currency)} (${health.display})\n`;
+    message += `💸 *Remaining:* ${fmtMoney(health.remaining, currency)}\n`;
     message += `📝 *Total Expenses:* ${expenseCount[0].count}\n\n`;
-    
+
     if (topCategories.length > 0) {
       message += `🔝 *Top Categories:*\n`;
       topCategories.forEach((cat, idx) => {
         const catName = cat.categoryName || 'Uncategorized';
-        const catAmount = formatAmount(parseFloat(cat.total.toString()), 'UGX');
+        const catAmount = fmtMoney(parseFloat(cat.total.toString()), currency);
         message += `${idx + 1}. ${catName}: ${catAmount}\n`;
       });
     }
-    
-    if (remaining < 0) {
-      message += `\n⚠️ *Warning:* You're over budget by ${formatAmount(Math.abs(remaining), 'UGX')}!`;
-    } else if (percentUsed >= 80) {
-      message += `\n⚠️ *Warning:* You've used ${percentUsed.toFixed(1)}% of your budget.`;
+
+    if (health.isOver) {
+      message += `\n⚠️ *Warning:* You're over budget by ${fmtMoney(Math.abs(health.remaining), currency)}!`;
+    } else if (health.raw >= 80) {
+      message += `\n⚠️ *Warning:* You've used ${health.display} of your budget.`;
     }
-    
+
     return message;
     
   } catch (error: any) {

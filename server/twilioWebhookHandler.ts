@@ -8,6 +8,8 @@ import {
   validateTwilioSignature,
   type TwilioWebhookPayload,
 } from "./twilio.js";
+import { calcBudgetPercent } from "../shared/calculations.js";
+import { formatCurrency as fmtMoney } from "../shared/formatting.js";
 
 /**
  * Twilio WhatsApp Webhook Handler
@@ -159,14 +161,18 @@ async function processWhatsAppMessage(
     // Report command
     if (lowerMessage.includes('report') || lowerMessage.includes('summary')) {
       const analytics = await storage.getProjectAnalytics(defaultProject.id);
-      const percentUsed = (analytics.totalSpent / analytics.totalBudget) * 100;
-      
+      // Use shared calculator — zero-budget safe; no Infinity/NaN possible.
+      const health = calcBudgetPercent(analytics.totalSpent, analytics.totalBudget);
+      const currency = String(
+        (defaultProject as any).currency || 'UGX',
+      ).toUpperCase();
+
       return `📊 *Project Report: ${defaultProject.name}*\n\n` +
-        `💰 Budget: ${formatCurrency(analytics.totalBudget)} UGX\n` +
-        `💸 Spent: ${formatCurrency(analytics.totalSpent)} UGX\n` +
-        `📉 Remaining: ${formatCurrency(analytics.totalBudget - analytics.totalSpent)} UGX\n` +
-        `📊 Used: ${percentUsed.toFixed(1)}%\n\n` +
-        `💵 Cash Balance: ${formatCurrency(analytics.cashBalance)} UGX`;
+        `💰 Budget: ${fmtMoney(analytics.totalBudget, currency)}\n` +
+        `💸 Spent: ${fmtMoney(analytics.totalSpent, currency)}\n` +
+        `📉 Remaining: ${fmtMoney(health.remaining, currency)}\n` +
+        `📊 Used: ${health.display}\n\n` +
+        `💵 Cash Balance: ${fmtMoney(analytics.cashBalance, currency)}`;
     }
 
     // Tasks command
