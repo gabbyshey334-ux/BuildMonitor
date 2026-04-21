@@ -859,13 +859,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       </section>
 
       {/* Middle row: ring + spend chart */}
-      <section className="grid gap-6 xl:grid-cols-3 mb-8">
+      <section className="grid gap-6 xl:grid-cols-3 mb-8 w-full min-w-0">
         {/* Budget Health Ring */}
-        <div className="jt-card xl:col-span-1">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="jt-h2">Budget Health</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+        <div className="jt-card xl:col-span-1 w-full min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+            <div className="flex-1 min-w-0">
+              <h2 className="jt-h2 truncate">Budget Health</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 Live spend vs. total allocation
               </p>
             </div>
@@ -939,7 +939,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
 
         {/* Spend over time — chart owns its own legend, range selector, and
             summary strip. We keep just the title/subtitle in the card frame. */}
-        <div className="jt-card xl:col-span-2">
+        <div className="jt-card xl:col-span-2 w-full min-w-0 overflow-hidden">
           <div className="mb-4">
             <h2 className="jt-h2">Spend Over Time</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -951,13 +951,13 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       </section>
 
       {/* Third row: category breakdown + recent activity */}
-      <section className="grid gap-6 lg:grid-cols-2 mb-8">
-        <div className="jt-card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="jt-h2">Category Breakdown</h2>
+      <section className="grid gap-6 lg:grid-cols-2 mb-8 w-full min-w-0">
+        <div className="jt-card w-full min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+            <h2 className="jt-h2 flex-1 min-w-0 truncate">Category Breakdown</h2>
             <Link
               href={`/budget?project=${effectiveProjectId}`}
-              className="jt-link text-xs"
+              className="jt-link text-xs shrink-0 whitespace-nowrap"
             >
               View Budget →
             </Link>
@@ -969,17 +969,17 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           />
         </div>
 
-        <div className="jt-card flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="jt-h2">Recent Expenses</h2>
+        <div className="jt-card flex flex-col w-full min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+            <h2 className="jt-h2 flex-1 min-w-0 truncate">Recent Expenses</h2>
             <Link
               href={`/budget?project=${effectiveProjectId}`}
-              className="jt-link text-xs"
+              className="jt-link text-xs shrink-0 whitespace-nowrap"
             >
               View all →
             </Link>
           </div>
-          <div className="flex-1 space-y-1">
+          <div className="flex-1 space-y-1 w-full min-w-0">
             {recentExpenses.length === 0 ? (
               <EmptyState
                 title="No expenses yet"
@@ -994,7 +994,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   initial={{ opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
-                  className="group flex items-center gap-3 rounded-btn px-2 py-2.5 hover:bg-muted/40 transition-colors"
+                  className="group flex items-center gap-3 rounded-btn px-2 py-2.5 hover:bg-muted/40 transition-colors w-full min-w-0 overflow-hidden"
                 >
                   {editingExpenseId === expense.id ? (
                     <>
@@ -1034,7 +1034,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                         <DollarSign className="h-4 w-4" />
                       </div>
                       {/* Description + time: takes remaining space and CAN shrink/truncate. */}
-                      <div className="flex-1 min-w-0">
+                      <div className="flex-1 min-w-0 overflow-hidden">
                         <div className="text-sm font-medium text-foreground truncate">
                           {expense.description || "—"}
                         </div>
@@ -1044,20 +1044,20 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                       </div>
                       {/* Amount: NEVER shrinks, NEVER wraps, always fully visible.
                           Use compact formatting on mobile so large numbers fit. */}
-                      <div className="shrink-0 text-right">
+                      <div className="shrink-0 pl-2 text-right">
                         <CurrencyValue
                           value={expense.amount}
                           currency={currency}
                           size="sm"
                           compact
-                          className="font-semibold"
+                          className="font-semibold whitespace-nowrap"
                         />
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            className="p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all"
+                            className="p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground hover:bg-muted transition-all shrink-0"
                             aria-label="Actions"
                           >
                             <MoreVertical className="h-4 w-4" />
@@ -1091,12 +1091,12 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       </section>
 
       {/* Issues + quick actions */}
-      <section id="issues-section" className="grid gap-6 lg:grid-cols-2 mb-4">
-        <div className="jt-card">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="jt-h2">Issues & Risks</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
+      <section id="issues-section" className="grid gap-6 lg:grid-cols-2 mb-4 w-full min-w-0">
+        <div className="jt-card w-full min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+            <div className="flex-1 min-w-0">
+              <h2 className="jt-h2 truncate">Issues & Risks</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
                 Open items that need attention
               </p>
             </div>
@@ -1163,9 +1163,9 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           </div>
         </div>
 
-        <div className="jt-card">
+        <div className="jt-card w-full min-w-0 overflow-hidden">
           <h2 className="jt-h2 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 w-full min-w-0">
             {[
               {
                 icon: Plus,
