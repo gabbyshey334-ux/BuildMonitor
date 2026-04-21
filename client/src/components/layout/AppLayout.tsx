@@ -43,28 +43,46 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsJson]);
 
   return (
-    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
+    // OUTER shell: DO NOT set max-w-[100vw] here — 100vw includes the vertical
+    // scrollbar on Windows/Linux and causes the right ~15px to be clipped on
+    // laptops. width:100% (inherited from html/body) already follows the
+    // visible viewport exactly.
+    <div className="min-h-screen w-full overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
       <Sidebar open={open} onToggle={toggle} />
 
       {/*
-        Right pane: width = 100vw - sidebar.
-        `min-w-0 overflow-hidden` prevents any wide child (chart, KPI row, table)
-        from pushing the pane beyond that width. Without min-w-0 a flex/grid
-        child with intrinsic content can override the parent's width and cause
-        horizontal overflow — exactly the symptom reported (4th KPI off-screen).
+        Right pane.
+
+        Why padding-left (NOT margin-left):
+          margin-left does NOT shrink an element's width. Previously we had
+          `w-full lg:ml-sidebar-open`, which made this pane 100vw wide AND
+          shifted it 220px to the right, pushing its right edge 220px past
+          the viewport. The outer `overflow-x-hidden` then silently clipped
+          that final 220px — that is exactly why the 4th KPI card (and the
+          right-most column on every other page) was being cut off on laptop
+          screens.
+
+          Using padding-left on a block element WITH the default
+          box-sizing:border-box means the content box shrinks by the padding,
+          so children sized `w-full` correctly resolve to
+          `viewport - sidebar` and nothing overflows.
+
+        The pane itself intentionally has NO explicit width — a block element
+        naturally fills its parent's content box, which is what we want. Any
+        `w-*` / `max-w-*` class here would re-introduce the original bug.
       */}
       <div
         className={cn(
-          "min-h-screen flex flex-col w-full max-w-full min-w-0 overflow-x-hidden",
-          "transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          open ? "lg:ml-sidebar-open" : "lg:ml-sidebar-closed",
+          "min-h-screen flex flex-col min-w-0",
+          "transition-[padding-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          open ? "lg:pl-sidebar-open" : "lg:pl-sidebar-closed",
         )}
       >
         <TopBar onMenuClick={toggle} showHamburger />
 
         <main
           className={cn(
-            "flex-1 w-full max-w-full min-w-0 overflow-x-hidden",
+            "flex-1 min-w-0 overflow-x-hidden",
             "pb-mobile-nav-offset lg:pb-0",
           )}
         >

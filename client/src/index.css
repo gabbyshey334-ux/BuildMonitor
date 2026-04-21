@@ -348,12 +348,17 @@ html {
    Prevent horizontal overflow at every breakpoint. Do NOT clamp vertical
    height — the page must scroll naturally when content exceeds the
    viewport. Only the horizontal axis is fixed to the viewport.
+
+   IMPORTANT: we intentionally do NOT set `max-width: 100vw` here. `100vw`
+   includes the width of the classic vertical scrollbar on Windows/Linux
+   (typ. 12–17px), which made html/body wider than the actual visible
+   content area and clipped the rightmost ~15px on every page on laptop
+   screens. `width: 100%` already matches the visible viewport exactly.
    ──────────────────────────────────────────────────────────────────── */
 html,
 body,
 #root {
   overflow-x: hidden;
-  max-width: 100vw;
   width: 100%;
 }
 
