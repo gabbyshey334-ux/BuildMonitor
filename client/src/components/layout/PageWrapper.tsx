@@ -7,35 +7,51 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 export interface PageWrapperProps {
   /** Page title, used for <title> tag ("Page | JengaTrack"). */
   title?: string;
+  /** Maximum content width. Default: 1600px. */
+  maxWidth?: "default" | "narrow" | "wide" | "full";
+  /** Remove bottom padding reserved for mobile nav (use on pages with own sticky footer). */
+  noBottomPadding?: boolean;
   className?: string;
   children: React.ReactNode;
 }
 
+const MAX_WIDTH: Record<NonNullable<PageWrapperProps["maxWidth"]>, string> = {
+  narrow: "max-w-3xl",
+  default: "max-w-[1600px]",
+  wide: "max-w-[1920px]",
+  full: "max-w-full",
+};
+
 /**
- * Zero-scroll page wrapper.
- *
- * Fills the full height of <main> (which is `flex-1 min-h-0 overflow-hidden`
- * inside AppLayout), stacks its children vertically, and clips at the page
- * boundary. Horizontal padding only — vertical space is distributed by the
- * page's own flex children (`shrink-0` for fixed sections, `flex-1 min-h-0`
- * for the one scrollable region, if any).
- *
- * IMPORTANT: Do not add padding-bottom here for mobile bottom-nav clearance —
- * AppLayout already reserves that space at the shell level via
- * `pb-mobile-nav-offset lg:pb-0`.
+ * Mobile-first page wrapper. Guarantees:
+ *   - No horizontal overflow at any breakpoint
+ *   - Responsive horizontal padding (12 → 16 → 24 → 32)
+ *   - Bottom padding that clears the mobile nav bar on < lg, including the
+ *     iOS home-indicator safe area (env(safe-area-inset-bottom))
+ *   - Natural vertical growth — pages scroll when their content exceeds
+ *     the viewport (only the horizontal axis is clamped)
+ *   - Sets the page <title> if provided
  */
-export function PageWrapper({ title, className, children }: PageWrapperProps) {
+export function PageWrapper({
+  title,
+  maxWidth = "default",
+  noBottomPadding = false,
+  className,
+  children,
+}: PageWrapperProps) {
   usePageTitle(title);
   return (
     <div
       className={cn(
-        "h-full w-full min-w-0 flex flex-col",
-        "overflow-hidden",
-        "px-4 sm:px-6 lg:px-8",
-        className,
+        "w-full max-w-full min-h-full overflow-x-hidden",
+        "px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8",
+        "pt-4 sm:pt-5 md:pt-6",
+        noBottomPadding ? "pb-4" : "pb-mobile-nav-offset lg:pb-8",
       )}
     >
-      {children}
+      <div className={cn("mx-auto w-full min-w-0", MAX_WIDTH[maxWidth], className)}>
+        {children}
+      </div>
     </div>
   );
 }

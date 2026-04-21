@@ -43,34 +43,33 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsJson]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-jenga-bg text-foreground bg-jenga-radial">
-      {/* Fixed desktop sidebar (overlay, hidden < lg).
-          Content column offsets itself via lg:ml-sidebar-* below. */}
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
       <Sidebar open={open} onToggle={toggle} />
 
-      {/* Content column — fills remaining height exactly, never scrolls itself. */}
       <div
         className={cn(
-          "flex flex-col flex-1 min-w-0 h-screen overflow-hidden",
+          "min-h-screen flex flex-col w-full max-w-full",
           "transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          // Offset the fixed sidebar on lg+.
+          // Sidebar offset ONLY from lg up — mobile has zero left margin.
           open ? "lg:ml-sidebar-open" : "lg:ml-sidebar-closed",
-          // Reserve vertical space for the fixed BottomNav on mobile/tablet.
-          // This is LAYOUT-level padding on the shell (not on PageWrapper),
-          // so each page's <main> flex area stops at the top of the nav.
-          "pb-mobile-nav-offset lg:pb-0",
         )}
       >
         <TopBar onMenuClick={toggle} showHamburger />
 
-        {/* Page slot — fills all remaining height. min-h-0 lets it shrink
-            below intrinsic content height so children can take over scrolling. */}
-        <main className="flex-1 min-h-0 min-w-0 overflow-hidden">
-          {children}
+        <main
+          className={cn(
+            "flex-1 w-full max-w-full overflow-x-hidden",
+            // Clear the fixed mobile BottomNav (+ iOS/Android safe-area) on < lg.
+            "pb-mobile-nav-offset lg:pb-0",
+          )}
+        >
+          <div className="mx-auto w-full max-w-[1600px] min-w-0 px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-5 md:pt-6 pb-4 md:pb-8">
+            {children}
+          </div>
         </main>
-      </div>
 
-      <BottomNav />
+        <BottomNav />
+      </div>
     </div>
   );
 }
