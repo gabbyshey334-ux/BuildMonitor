@@ -937,32 +937,16 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
           </dl>
         </div>
 
-        {/* Spend over time */}
+        {/* Spend over time — chart owns its own legend, range selector, and
+            summary strip. We keep just the title/subtitle in the card frame. */}
         <div className="jt-card xl:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="jt-h2">Spend Over Time</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Daily expenses with cumulative total
-              </p>
-            </div>
-            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-jenga-primary" />
-                Daily
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-jenga-secondary" />
-                Cumulative
-              </span>
-            </div>
+          <div className="mb-4">
+            <h2 className="jt-h2">Spend Over Time</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Daily spend and running total
+            </p>
           </div>
-          <SpendOverTimeChart
-            data={spendSeries}
-            currency={currency}
-            height={280}
-            budget={budgetHealth.total}
-          />
+          <SpendOverTimeChart data={spendSeries} currency={currency} />
         </div>
       </section>
 
