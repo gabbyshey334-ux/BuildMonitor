@@ -65,12 +65,12 @@ export function SpendOverTimeChart({
         <AreaChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
           <defs>
             <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#E07B39" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#E07B39" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="#93C54E" stopOpacity={0.35} />
+              <stop offset="95%" stopColor="#93C54E" stopOpacity={0.02} />
             </linearGradient>
             <linearGradient id="cumFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#C9A84C" stopOpacity={0.22} />
-              <stop offset="95%" stopColor="#C9A84C" stopOpacity={0.0} />
+              <stop offset="0%" stopColor="#218598" stopOpacity={0.22} />
+              <stop offset="95%" stopColor="#218598" stopOpacity={0.0} />
             </linearGradient>
           </defs>
           <CartesianGrid
@@ -114,7 +114,7 @@ export function SpendOverTimeChart({
               formatCurrency(value, currency, { compact: false }),
               name === "value" ? "Daily" : "Cumulative",
             ]}
-            cursor={{ stroke: "#E07B39", strokeWidth: 1, strokeDasharray: "3 3" }}
+            cursor={{ stroke: "#93C54E", strokeWidth: 1, strokeDasharray: "3 3" }}
           />
           {budget && budget > 0 && (
             <ReferenceLine
@@ -132,7 +132,7 @@ export function SpendOverTimeChart({
           <Area
             type="monotone"
             dataKey="value"
-            stroke="#E07B39"
+            stroke="#93C54E"
             strokeWidth={2}
             fill="url(#spendFill)"
             activeDot={{ r: 4, stroke: "#0D0F0E", strokeWidth: 2 }}
@@ -143,7 +143,7 @@ export function SpendOverTimeChart({
             <Area
               type="monotone"
               dataKey="cumulative"
-              stroke="#C9A84C"
+              stroke="#218598"
               strokeWidth={1.5}
               strokeDasharray="4 3"
               fill="url(#cumFill)"

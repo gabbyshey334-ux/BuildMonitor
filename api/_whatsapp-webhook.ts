@@ -1151,6 +1151,16 @@ IMPORTANT: Be aggressive about classifying expense and material messages. When i
 Amounts: 150K means 150,000 UGX, 1.5M means 1,500,000 UGX, 2B means 2,000,000,000 UGX. Always use these conversions in extracted.amount.
 CRITICAL amount parsing rules: K or k = multiply by 1,000 (4k=4000, 30k=30000, 150k=150000). M or m = multiply by 1,000,000. B or b = multiply by 1,000,000,000. Never multiply K by 10.
 
+CRITICAL FIELD SEMANTICS (READ CAREFULLY — these bugs have caused real data loss):
+- "amount" is ALWAYS the TOTAL PURCHASE PRICE of the transaction in UGX. It is NEVER the quantity, the unit count, or the per-unit price.
+  • "Bought 5 bags cement for 500,000" → amount: 500000 (total), quantity: 5, unit: "bags".
+  • "Bought 5 bags cement at 40k each" → amount: 200000 (5 × 40,000 TOTAL), quantity: 5, unit: "bags".
+  • "Bought cement 1,900,000" → amount: 1900000, quantity: 0 (unknown), unit: null.
+  • NEVER output amount: 5 when a user says "5 bags cement for 500,000". That 5 is the QUANTITY, not the amount.
+- "quantity" is ALWAYS the NUMBER OF ITEMS (bags / pieces / trips / kg / etc.). Never the price.
+- If a user mentions only a quantity and NO explicit price ("bought 5 bags cement"), set amount: 0 and let the bot ask. Do NOT guess a price.
+- If you are ever unsure whether a number is the amount or the quantity, check the unit: prices in Uganda are almost always ≥ 1,000 UGX. Any expense with amount < 1,000 in UGX should be treated as suspicious and typically means you confused quantity with amount.
+
 Common patterns you MUST classify correctly:
 
 EXPENSE_LOG examples (always has numbers):
@@ -1676,6 +1686,36 @@ async function handleExpenseLog(
   if (!quantity) {
     const qm = rawMessage.match(/(\d+(?:,\d{3})*)\s*(bags?|kg|tons?|pieces?|trips?|units?)/i);
     if (qm) { quantity = parseFloat(qm[1].replace(/,/g, '')); unit = unit || qm[2].toLowerCase(); }
+  }
+
+  // ── SANITY CHECK: "amount" looks like a quantity ─────────────────────
+  //
+  // Bug seen in the wild: "Bought 5 bags cement for 500,000" was stored as
+  // amount: 500 (the model grabbed the quantity/unit price). Any amount
+  // < 1,000 UGX is virtually impossible on a Ugandan construction site
+  // (minimum wage is ~10k/day, a single cement bag is ~38k). When we also
+  // have a plausible quantity, this is almost certainly a misparse — ask
+  // the user for the true total instead of silently logging junk data.
+  const messageHasPrice = /\b\d{1,3}(?:[.,]?\d{3}){1,3}\b|\d+\s*[kKmMbB]\b/.test(rawMessage);
+  if (amount > 0 && amount < 1000 && messageHasPrice) {
+    const reExtracted = parseAmount(rawMessage);
+    if (reExtracted >= 1000) {
+      console.warn('[ExpenseLog] Amount looked like a quantity, re-parsed:', amount, '→', reExtracted);
+      // If the extracted amount matches the quantity, it's almost certainly swapped.
+      if (quantity === 0 || amount === quantity) quantity = amount;
+      amount = reExtracted;
+    } else {
+      console.warn('[ExpenseLog] Amount suspiciously small, asking user:', amount);
+      await updateExpenseState(userId, 'awaiting_price', {
+        quantity: quantity || amount, item: item || 'expense',
+        unit: unit || 'units', project_id: projectId, vendor,
+      });
+      await sendMessage(
+        from,
+        `I saw a small number (${amount}) — did you mean that as the total cost in UGX, or was it a quantity? Please reply with the full amount. e.g. 500,000 UGX.`
+      );
+      return;
+    }
   }
 
   // If quantity + item but no price → ask for price

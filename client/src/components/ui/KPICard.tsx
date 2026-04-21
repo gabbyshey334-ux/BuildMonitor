@@ -24,13 +24,13 @@ const ACCENT_MAP: Record<KPIAccent, { fg: string; ring: string; glow: string; bl
     fg: "text-jenga-primary",
     ring: "ring-jenga-primary/20",
     glow: "bg-jenga-primary",
-    blob: "from-[#E07B39]/8 via-[#E07B39]/0 to-transparent",
+    blob: "from-[#93C54E]/8 via-[#93C54E]/0 to-transparent",
   },
   secondary: {
     fg: "text-jenga-secondary",
     ring: "ring-jenga-secondary/20",
     glow: "bg-jenga-secondary",
-    blob: "from-[#C9A84C]/8 via-[#C9A84C]/0 to-transparent",
+    blob: "from-[#218598]/8 via-[#218598]/0 to-transparent",
   },
   success: {
     fg: "text-jenga-success",

@@ -704,8 +704,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         }
       />
 
-      {/* KPI Row */}
-      <section className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-8 min-w-0">
+      {/* KPI Row — grid (never flex) so cards wrap, shrink, and never overflow. */}
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 w-full min-w-0 overflow-hidden">
         <KPICard
           index={0}
           label="Progress"

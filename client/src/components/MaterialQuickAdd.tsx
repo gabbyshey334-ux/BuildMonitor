@@ -25,7 +25,7 @@ export const quickMaterials: QuickMaterial[] = [
     name: "Bricks",
     unit: "units",
     icon: <Boxes className="w-5 h-5" />,
-    color: "bg-orange-600",
+    color: "bg-[var(--accent-secondary)]",
     commonQuantities: [500, 1000, 2000],
   },
   {

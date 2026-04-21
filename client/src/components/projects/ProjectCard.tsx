@@ -113,13 +113,15 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
     }
   };
 
+  // Healthy bar uses the brand PRIMARY GRADIENT (Fresh Fern → Ocean Pine)
+  // per Brand Guidelines v1.0. Warning/danger use solid semantic colors.
   const budgetBarColor = health.overBudget
     ? "bg-jenga-danger"
     : health.status === "danger"
       ? "bg-jenga-danger"
       : health.status === "warning"
         ? "bg-jenga-warning"
-        : "bg-jenga-success";
+        : "bg-gradient-to-r from-[#93C54E] to-[#218598]";
 
   const budgetPctClass = health.overBudget
     ? "text-jenga-danger"
@@ -148,15 +150,15 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             "block h-full jt-card p-5 cursor-pointer relative overflow-hidden min-w-0",
             "transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
             "hover:border-jenga-primary/40 hover:-translate-y-0.5",
-            "hover:shadow-[0_12px_40px_-8px_rgba(224,123,57,0.25)]",
+            "hover:shadow-[0_12px_40px_-8px_rgba(147,197,78,0.25)]",
           )}
         >
-          {/* Ambient glow on hover */}
+          {/* Ambient glow on hover — Fresh Fern */}
           <div
             className="absolute -top-20 -right-20 w-48 h-48 rounded-full pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
             style={{
               background:
-                "radial-gradient(circle, rgba(224,123,57,0.12) 0%, transparent 70%)",
+                "radial-gradient(circle, rgba(147,197,78,0.12) 0%, transparent 70%)",
             }}
             aria-hidden
           />

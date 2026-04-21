@@ -23,7 +23,7 @@ export interface BudgetRingProps {
 const STATUS_COLOR: Record<BudgetHealth["status"], string> = {
   healthy: "#4CAF7D",
   warning: "#E0A030",
-  danger: "#E07B39",
+  danger: "#D95F5F",
   critical: "#D95F5F",
 };
 

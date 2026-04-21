@@ -1,10 +1,12 @@
 import type { Config } from "tailwindcss";
 
 /**
- * JengaTrack Design System — "Industrial Precision meets African Warmth"
+ * JengaTrack Design System — Brand Guidelines v1.0
  *
- * Dark-mode first with rich earthy accent tones (burnt orange, golden amber,
- * deep terracotta) paired with the cold precision of a Figma/Linear dashboard.
+ * Primary palette:
+ *   Fresh Fern (#93C54E) — dominant highlight / CTA
+ *   Ocean Pine (#218598) — secondary accent
+ * Dark-mode first. Typography: League Spartan + Nunito Sans + JetBrains Mono.
  */
 export default {
   darkMode: ["class"],
@@ -12,12 +14,6 @@ export default {
   theme: {
     extend: {
       // Mobile-first breakpoint set.
-      //   xs → small budget Android (site managers' primary device)
-      //   sm → iPhone SE / 375px class
-      //   md → tablet portrait (768px)
-      //   lg → tablet landscape / small desktop (1024px)
-      //   xl → desktop (1280px)
-      //   2xl → large desktop
       screens: {
         xs: "320px",
         sm: "375px",
@@ -37,12 +33,35 @@ export default {
       spacing: {
         "sidebar": "var(--sidebar-width)",
         "sidebar-collapsed": "var(--sidebar-collapsed)",
-        "sidebar-open": "260px",
-        "sidebar-closed": "72px",
+        "sidebar-open": "220px",
+        "sidebar-closed": "60px",
         "topbar": "64px",
       },
       colors: {
-        // ─── JengaTrack Brand Palette ─────────────────────────────────────
+        // ─── JengaTrack Brand Palette (nested — spec shape) ───────────────
+        brand: {
+          "fresh-fern":  "#93C54E",
+          "ocean-pine":  "#218598",
+          "ash-gray":    "#E0E0E0",
+          "graphite":    "#2F3332",
+          "moss-green":  "#B4D68C",
+          "aqua-breeze": "#6EC1C0",
+        },
+
+        // ─── Flat brand scale (convenient Tailwind names) ─────────────────
+        "fresh-fern":    "#93C54E",
+        "ocean-pine":    "#218598",
+        "graphite":      "#2F3332",
+        "ash-gray":      "#E0E0E0",
+        "moss-green":    "#B4D68C",
+        "aqua-breeze":   "#6EC1C0",
+        "alert-red":     "#D95F5F",
+        "warning-yellow":"#E0A030",
+        "success-green": "#93C54E",
+        "brand-primary-start": "#93C54E",
+        "brand-primary-end":   "#218598",
+
+        // ─── Legacy `jenga.*` scale (wired through CSS vars) ──────────────
         jenga: {
           bg: "var(--jt-background)",
           surface: "var(--jt-surface)",
@@ -53,32 +72,19 @@ export default {
           "text-muted": "var(--jt-text-secondary)",
           "text-hint": "var(--jt-text-tertiary)",
           primary: "var(--jt-accent-primary)",
-          "primary-hover": "var(--jt-accent-primary-hover, #F08B49)",
+          "primary-hover": "var(--jt-accent-primary-hover)",
           secondary: "var(--jt-accent-secondary)",
-          gold: "var(--jt-accent-secondary)",
-          terracotta: "var(--jt-accent-terracotta, #9B4B2E)",
+          gold: "var(--jt-accent-secondary)",    // legacy alias
+          terracotta: "var(--jt-accent-secondary)",
           success: "var(--jt-accent-success)",
           warning: "var(--jt-accent-warning)",
           danger: "var(--jt-accent-danger)",
           info: "var(--jt-accent-info)",
-          whatsapp: "var(--jt-accent-whatsapp, #25D366)",
+          whatsapp: "var(--jt-accent-whatsapp)",
           sidebar: "var(--jt-sidebar-bg)",
         },
 
-        // Legacy brand palette kept for backward compatibility
-        "fresh-fern": "#93C54E",
-        "ocean-pine": "#218598",
-        graphite: "#2F3332",
-        "ash-gray": "#E2E8F0",
-        "alert-red": "#D95F5F",
-        "warning-yellow": "#E0A030",
-        "success-green": "#4CAF7D",
-        "moss-green": "#B4D68C",
-        "aqua-breeze": "#6EC1C0",
-        "brand-primary-start": "#E07B39",
-        "brand-primary-end": "#C9A84C",
-
-        // Shadcn tokens (wired to JT palette)
+        // ─── Shadcn tokens (wired to brand palette) ───────────────────────
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -131,24 +137,25 @@ export default {
         },
       },
       backgroundImage: {
+        // Brand primary gradient — Fresh Fern → Ocean Pine (spec §Gradients)
         "jenga-gradient":
-          "linear-gradient(135deg, #E07B39 0%, #C9A84C 100%)",
+          "linear-gradient(135deg, #93C54E 0%, #218598 100%)",
         "jenga-gradient-subtle":
-          "linear-gradient(135deg, rgba(224,123,57,0.14) 0%, rgba(201,168,76,0.10) 100%)",
+          "linear-gradient(135deg, rgba(147,197,78,0.14) 0%, rgba(33,133,152,0.10) 100%)",
         "jenga-radial":
-          "radial-gradient(ellipse at top, rgba(224,123,57,0.12), transparent 60%)",
+          "radial-gradient(ellipse at top, rgba(147,197,78,0.12), transparent 60%)",
         "brand-gradient":
-          "linear-gradient(135deg, #E07B39 0%, #C9A84C 100%)",
+          "linear-gradient(135deg, #93C54E 0%, #218598 100%)",
         "brand-gradient-dark":
-          "linear-gradient(135deg, #141714 0%, #0D0F0E 100%)",
+          "linear-gradient(135deg, #2F3332 0%, #000000 100%)",
         "brand-gradient-light":
-          "linear-gradient(135deg, #FFFFFF 0%, #F0EDE6 100%)",
+          "linear-gradient(135deg, #FFFFFF 0%, #E0E0E0 100%)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],
-        display: ["Syne", "system-ui", "sans-serif"],
-        heading: ["Syne", "League Spartan", "system-ui", "sans-serif"],
-        body: ["DM Sans", "Nunito Sans", "system-ui", "sans-serif"],
+        display: ["League Spartan", "system-ui", "sans-serif"],
+        heading: ["League Spartan", "system-ui", "sans-serif"],
+        body: ["Nunito Sans", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       boxShadow: {
@@ -156,10 +163,10 @@ export default {
         "card-hover":
           "0 2px 6px rgba(0,0,0,0.45), 0 8px 32px rgba(0,0,0,0.28)",
         modal: "0 8px 48px rgba(0,0,0,0.6)",
-        "focus-ring": "0 0 0 2px rgba(224,123,57,0.4)",
+        "focus-ring": "0 0 0 2px rgba(147,197,78,0.4)",
         "inner-line": "inset 0 1px 0 rgba(255,255,255,0.03)",
-        glow: "0 0 24px rgba(224,123,57,0.25)",
-        "glow-gold": "0 0 20px rgba(201,168,76,0.25)",
+        glow: "0 0 24px rgba(147,197,78,0.25)",
+        "glow-gold": "0 0 20px rgba(33,133,152,0.25)",
       },
       keyframes: {
         "accordion-down": {

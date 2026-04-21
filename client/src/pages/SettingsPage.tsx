@@ -297,8 +297,8 @@ export default function SettingsPage() {
     return (
       <div className="w-full min-h-[60vh] text-foreground flex items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
-            <Settings className="w-10 h-10 text-[#E07B39]" />
+          <div className="w-20 h-20 rounded-full bg-[#93C54E]/10 flex items-center justify-center mx-auto ring-1 ring-[#93C54E]/20">
+            <Settings className="w-10 h-10 text-[#93C54E]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("settings.title")}</h1>
@@ -308,7 +308,7 @@ export default function SettingsPage() {
           </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold"
+            className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-semibold"
           >
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
@@ -377,7 +377,7 @@ export default function SettingsPage() {
           {/* 2. Project Settings Card */}
           <div className="bg-card border border-border rounded-xl p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
-              <div className="p-2 rounded-lg bg-[#E07B39]/10 text-[#E07B39]">
+              <div className="p-2 rounded-lg bg-[#93C54E]/10 text-[#93C54E]">
                 <Settings className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold text-foreground">Project Settings</h2>
@@ -390,7 +390,7 @@ export default function SettingsPage() {
                   <Input
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39]"
+                    className="bg-muted border-border text-foreground focus:ring-[#93C54E] focus:border-[#93C54E]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -401,7 +401,7 @@ export default function SettingsPage() {
                       type="number"
                       value={form.budget}
                       onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                      className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39] pl-12"
+                      className="bg-muted border-border text-foreground focus:ring-[#93C54E] focus:border-[#93C54E] pl-12"
                     />
                   </div>
                 </div>
@@ -413,7 +413,7 @@ export default function SettingsPage() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
-                  className="w-full rounded-md bg-muted border border-border text-foreground focus:ring-2 focus:ring-[#E07B39] focus:border-transparent p-3 text-sm placeholder:text-muted-foreground resize-none"
+                  className="w-full rounded-md bg-muted border border-border text-foreground focus:ring-2 focus:ring-[#93C54E] focus:border-transparent p-3 text-sm placeholder:text-muted-foreground resize-none"
                 />
               </div>
 
@@ -449,7 +449,7 @@ export default function SettingsPage() {
                 <Button 
                   type="submit" 
                   disabled={saving}
-                  className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold min-w-[120px]"
+                  className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                   Save Changes
@@ -461,7 +461,7 @@ export default function SettingsPage() {
           {/* 3. Profile Settings Card */}
           <div className="bg-card border border-border rounded-xl p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
-              <div className="p-2 rounded-lg bg-[#E07B39]/10 text-[#E07B39]">
+              <div className="p-2 rounded-lg bg-[#93C54E]/10 text-[#93C54E]">
                 <User className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold text-foreground">Profile Settings</h2>
@@ -474,7 +474,7 @@ export default function SettingsPage() {
                   <Input
                     value={form.full_name}
                     onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                    className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39]"
+                    className="bg-muted border-border text-foreground focus:ring-[#93C54E] focus:border-[#93C54E]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -484,7 +484,7 @@ export default function SettingsPage() {
                     <Input
                       value={form.whatsapp_number}
                       onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                      className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39] pl-10"
+                      className="bg-muted border-border text-foreground focus:ring-[#93C54E] focus:border-[#93C54E] pl-10"
                     />
                   </div>
                 </div>
@@ -501,7 +501,7 @@ export default function SettingsPage() {
                 <Button 
                   type="submit" 
                   disabled={saving}
-                  className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold min-w-[120px]"
+                  className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                   Save Profile

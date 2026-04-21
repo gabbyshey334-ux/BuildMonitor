@@ -45,7 +45,7 @@ const features = [
     icon: Package,
     title: 'Materials Inventory',
     description: 'Keep track of materials and supplies',
-    color: 'from-orange-500 to-amber-500',
+    color: 'from-[#93C54E] to-[#218598]',
   },
   {
     icon: AlertCircle,

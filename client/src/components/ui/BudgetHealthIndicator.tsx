@@ -49,9 +49,9 @@ export function BudgetHealthIndicator({
     warning: {
       icon: AlertTriangle,
       label: "At Risk",
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-      borderColor: "border-orange-500/30",
+      color: "text-[#E0A030]",
+      bgColor: "bg-[#E0A030]/10",
+      borderColor: "border-[#E0A030]/30",
       pulseColor: "rgba(249, 115, 22, 0.6)",
     },
     critical: {
@@ -151,8 +151,8 @@ export function BudgetProgressBar({
   
   let barColor = "bg-emerald-500";
   if (actualPercentage >= 100) barColor = "bg-red-500";
-  else if (actualPercentage >= 90) barColor = "bg-orange-500";
-  else if (actualPercentage >= 70) barColor = "bg-amber-500";
+  else if (actualPercentage >= 90) barColor = "bg-[#D95F5F]";
+  else if (actualPercentage >= 70) barColor = "bg-[#E0A030]";
 
   return (
     <div className={cn("space-y-2", className)}>

@@ -53,7 +53,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
-  teal: "#E07B39",
+  teal: "#93C54E",
   green: "#4CAF7D",
   amber: "#f59e0b",
   red: "#ef4444",
@@ -62,7 +62,7 @@ const COLORS = {
 };
 
 const PROJECT_COLORS = [
-  "#E07B39", "#4CAF7D", "#3b82f6", "#f97316", "#ec4899",
+  "#93C54E", "#4CAF7D", "#3b82f6", "#f97316", "#ec4899",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ function BudgetComparisonSection({
     <div className="bg-card border border-border rounded-xl p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <PieChart className="w-5 h-5 text-[#E07B39]" />
+          <PieChart className="w-5 h-5 text-[#93C54E]" />
           Budget Comparison
         </h3>
       </div>
@@ -270,7 +270,7 @@ function BudgetComparisonSection({
         <div>
           <div className="flex justify-between text-xs mb-2">
             <span className="text-muted-foreground">Project Progress</span>
-            <span className="text-[#E07B39] font-medium">
+            <span className="text-[#93C54E] font-medium">
               {tasksPct !== null
                 ? `${progressPct}%`
                 : expenses.length > 0
@@ -280,7 +280,7 @@ function BudgetComparisonSection({
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#E07B39] to-[#0097a7] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
+              className="h-full rounded-full bg-gradient-to-r from-[#93C54E] to-[#218598] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
               style={{ width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%` }}
             />
           </div>
@@ -330,7 +330,7 @@ function BudgetComparisonSection({
       <div className={cn(
         "mt-6 py-3 px-4 rounded-lg text-xs font-medium flex items-center gap-2",
         gap > 5 ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : 
-        gap < -5 ? "bg-[#E07B39]/10 text-[#E07B39] border border-[#E07B39]/20" : 
+        gap < -5 ? "bg-[#93C54E]/10 text-[#93C54E] border border-[#93C54E]/20" : 
         "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
       )}>
         {gap > 5 ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -407,7 +407,7 @@ function AlertsSection({
                   <span className={cn(
                     "text-[10px] uppercase font-bold tracking-wide",
                     a.subtitle === "Budget Overrun" || a.subtitle === "Price Spike" ? "text-red-400" :
-                    a.subtitle === "Budget on track" ? "text-emerald-400" : "text-[#E07B39]"
+                    a.subtitle === "Budget on track" ? "text-emerald-400" : "text-[#93C54E]"
                   )}>
                     {a.subtitle}
                   </span>
@@ -469,7 +469,7 @@ function CostTrendChart({
     <div className="bg-card border border-border rounded-xl p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
         <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2 min-w-0">
-          <TrendingUp className="w-5 h-5 text-[#E07B39] shrink-0" />
+          <TrendingUp className="w-5 h-5 text-[#93C54E] shrink-0" />
           <span className="truncate">Cost Trend</span>
         </h3>
         <div className="flex bg-muted p-1 rounded-lg border border-border shrink-0">
@@ -480,7 +480,7 @@ function CostTrendChart({
               className={cn(
                 "px-3 py-1 text-xs font-medium rounded-md transition-all",
                 period === p 
-                  ? "bg-[#E07B39] text-black shadow-lg" 
+                  ? "bg-[#93C54E] text-black shadow-lg" 
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
@@ -528,17 +528,17 @@ function CostTrendChart({
             <Line
               type="monotone"
               dataKey="total"
-              stroke="#E07B39"
+              stroke="#93C54E"
               strokeWidth={3}
-              dot={{ r: 4, fill: "currentColor", stroke: "#E07B39", strokeWidth: 2 }}
-              activeDot={{ r: 6, fill: "#E07B39", stroke: "#fff", strokeWidth: 2 }}
+              dot={{ r: 4, fill: "currentColor", stroke: "#93C54E", strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: "#93C54E", stroke: "#fff", strokeWidth: 2 }}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       <div className="mt-4 flex items-center justify-between pt-4 border-t border-border">
-        <div className="flex items-center gap-3 pl-4 border-l-4 border-[#E07B39]">
+        <div className="flex items-center gap-3 pl-4 border-l-4 border-[#93C54E]">
           <div>
             <span className="text-2xl font-bold text-foreground block leading-none">
               {formatUgx(lastWeekSpend)}
@@ -549,7 +549,7 @@ function CostTrendChart({
           </div>
         </div>
         <div className="text-right">
-             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#E07B39] hover:bg-[#E07B39]/10">
+             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#93C54E] hover:bg-[#93C54E]/10">
                View Full Report <ArrowLeft className="w-3 h-3 ml-1 rotate-180" />
              </Button>
         </div>
@@ -916,8 +916,8 @@ export default function BudgetPage() {
     return (
       <div className="w-full min-h-[60vh] flex items-center justify-center text-center">
         <div className="max-w-md w-full space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
-            <DollarSign className="w-10 h-10 text-[#E07B39]" />
+          <div className="w-20 h-20 rounded-full bg-[#93C54E]/10 flex items-center justify-center mx-auto ring-1 ring-[#93C54E]/20">
+            <DollarSign className="w-10 h-10 text-[#93C54E]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("budget.title")}</h1>
@@ -925,7 +925,7 @@ export default function BudgetPage() {
               {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
             </p>
           </div>
-          <Button asChild className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold">
+          <Button asChild className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-semibold">
             <Link href="/projects">
               {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
             </Link>
@@ -971,7 +971,7 @@ export default function BudgetPage() {
             variant="outline"
             size="icon"
             aria-label="Refresh"
-            className="rounded-full w-11 h-11 shrink-0 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
+            className="rounded-full w-11 h-11 shrink-0 bg-card border-border text-muted-foreground hover:text-[#93C54E] hover:border-[#93C54E]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -1042,7 +1042,7 @@ allData={costTrendDataRaw}
         {expenses.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-4 sm:p-6 min-w-0">
             <h3 className="text-base sm:text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-[#E07B39]" />
+              <CreditCard className="w-5 h-5 text-[#93C54E]" />
               Expense history
             </h3>
             <div className="space-y-3 mb-4">
@@ -1054,7 +1054,7 @@ allData={costTrendDataRaw}
                     placeholder="Search expenses..."
                     value={expenseSearch}
                     onChange={(e) => setExpenseSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39] focus:border-transparent placeholder:text-muted-foreground"
+                    className="w-full pl-9 pr-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#93C54E] focus:border-transparent placeholder:text-muted-foreground"
                   />
                 </div>
                 <div className="flex items-center gap-2 min-w-0">
@@ -1063,7 +1063,7 @@ allData={costTrendDataRaw}
                     type="date"
                     value={expenseDateFrom}
                     onChange={(e) => setExpenseDateFrom(e.target.value)}
-                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
+                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#93C54E]"
                   />
                 </div>
                 <div className="flex items-center gap-2 min-w-0">
@@ -1072,13 +1072,13 @@ allData={costTrendDataRaw}
                     type="date"
                     value={expenseDateTo}
                     onChange={(e) => setExpenseDateTo(e.target.value)}
-                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
+                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#93C54E]"
                   />
                 </div>
                 <select
                   value={expenseSort}
                   onChange={(e) => setExpenseSort(e.target.value as "newest" | "oldest" | "highest" | "lowest")}
-                  className="sm:col-span-2 md:col-span-1 w-full md:w-auto px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
+                  className="sm:col-span-2 md:col-span-1 w-full md:w-auto px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#93C54E]"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
@@ -1118,7 +1118,7 @@ allData={costTrendDataRaw}
                           value={editExpenseDescription}
                           onChange={(e) => setEditExpenseDescription(e.target.value)}
                           placeholder="Description"
-                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#93C54E]"
                         />
                         <input
                           type="number"
@@ -1127,12 +1127,12 @@ allData={costTrendDataRaw}
                           value={editExpenseAmount}
                           onChange={(e) => setEditExpenseAmount(e.target.value)}
                           placeholder="Amount"
-                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#93C54E]"
                         />
                       </div>
                       <Button
                         size="sm"
-                        className="bg-[#E07B39] hover:bg-[#F08B49] text-black shrink-0"
+                        className="bg-[#93C54E] hover:bg-[#7ab03e] text-black shrink-0"
                         disabled={savingExpenseEdit}
                         onClick={() => handleSaveExpenseEdit(expense.id)}
                       >
@@ -1152,7 +1152,7 @@ allData={costTrendDataRaw}
                           })()}
                         </p>
                       </div>
-                      <span className="text-sm font-bold text-[#E07B39] shrink-0">{formatUgx(parseFloat(String(expense.amount || 0)))}</span>
+                      <span className="text-sm font-bold text-[#93C54E] shrink-0">{formatUgx(parseFloat(String(expense.amount || 0)))}</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button

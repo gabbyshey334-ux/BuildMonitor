@@ -22,7 +22,7 @@ export function MiniSparkline({
   data,
   width = 80,
   height = 24,
-  color = "#E07B39",
+  color = "#93C54E",
   fillColor,
   strokeWidth = 1.5,
   className,

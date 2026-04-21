@@ -46,11 +46,17 @@ export function AppLayout({ children }: AppLayoutProps) {
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
       <Sidebar open={open} onToggle={toggle} />
 
+      {/*
+        Right pane: width = 100vw - sidebar.
+        `min-w-0 overflow-hidden` prevents any wide child (chart, KPI row, table)
+        from pushing the pane beyond that width. Without min-w-0 a flex/grid
+        child with intrinsic content can override the parent's width and cause
+        horizontal overflow — exactly the symptom reported (4th KPI off-screen).
+      */}
       <div
         className={cn(
-          "min-h-screen flex flex-col w-full max-w-full",
+          "min-h-screen flex flex-col w-full max-w-full min-w-0 overflow-x-hidden",
           "transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          // Sidebar offset ONLY from lg up — mobile has zero left margin.
           open ? "lg:ml-sidebar-open" : "lg:ml-sidebar-closed",
         )}
       >
@@ -58,8 +64,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         <main
           className={cn(
-            "flex-1 w-full max-w-full overflow-x-hidden",
-            // Clear the fixed mobile BottomNav (+ iOS/Android safe-area) on < lg.
+            "flex-1 w-full max-w-full min-w-0 overflow-x-hidden",
             "pb-mobile-nav-offset lg:pb-0",
           )}
         >

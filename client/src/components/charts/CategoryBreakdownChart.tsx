@@ -14,7 +14,7 @@ export interface CategoryBreakdownChartProps {
   className?: string;
 }
 
-const COLORS = ["#E07B39", "#C9A84C", "#5B8FD9", "#4CAF7D", "#9B4B2E", "#D95F5F"];
+const COLORS = ["#93C54E", "#218598", "#B4D68C", "#6EC1C0", "#E0A030", "#D95F5F"];
 
 export function CategoryBreakdownChart({
   data,

@@ -383,8 +383,8 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
   );
 }
 
-const SIDEBAR_WIDTH_OPEN = 260;
-const SIDEBAR_WIDTH_COLLAPSED = 72;
+const SIDEBAR_WIDTH_OPEN = 220;
+const SIDEBAR_WIDTH_COLLAPSED = 60;
 
 export function useSidebarState() {
   const [open, setOpen] = useState(() => {

@@ -260,7 +260,7 @@ export default function ProjectsPage() {
         {/* ── Stats KPIs ────────────────────────────────────────────── */}
         {hasProjects && (
           <section
-            className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 w-full min-w-0 overflow-hidden"
+            className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 w-full min-w-0 overflow-hidden"
             aria-label="Portfolio summary"
           >
             <KPICard
@@ -349,7 +349,7 @@ export default function ProjectsPage() {
                   "appearance-none rounded-btn bg-muted/40 border border-border",
                   "pl-10 pr-10 py-2 h-10 text-sm text-foreground",
                   "focus:outline-none focus:border-jenga-primary/60",
-                  "focus:shadow-[0_0_0_2px_rgba(224,123,57,0.25)]",
+                  "focus:shadow-[0_0_0_2px_rgba(147,197,78,0.25)]",
                   "transition cursor-pointer",
                 )}
                 aria-label="Sort projects"

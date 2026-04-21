@@ -192,16 +192,16 @@ function DailyTimelineRow({
         </div>
 
         <div className="flex flex-col items-center shrink-0 w-3 pt-1">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#E07B39] shadow-[0_0_8px_rgba(0,188,212,0.8)] ring-4 ring-background z-10 shrink-0" />
+          <div className="w-2.5 h-2.5 rounded-full bg-[#93C54E] shadow-[0_0_8px_rgba(0,188,212,0.8)] ring-4 ring-background z-10 shrink-0" />
           {!isLast && (
-            <div className="w-0.5 flex-1 bg-gradient-to-b from-[#E07B39] to-[#E07B39]/20 min-h-[48px] mt-1 rounded-full" />
+            <div className="w-0.5 flex-1 bg-gradient-to-b from-[#93C54E] to-[#93C54E]/20 min-h-[48px] mt-1 rounded-full" />
           )}
         </div>
 
         <div className="flex-1 min-w-0 py-4 pr-1 sm:pr-3 group">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#E07B39]/10 text-[#E07B39] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2">
+              <div className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#93C54E]/10 text-[#93C54E] text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-2">
                 {typeLabel}
               </div>
               <p className="text-sm sm:text-base text-foreground leading-relaxed whitespace-pre-wrap">
@@ -210,7 +210,7 @@ function DailyTimelineRow({
               {entry.amount != null &&
                 entry.activity_type === 'expense' &&
                 Number(entry.amount) > 0 && (
-                  <p className="text-[#E07B39] font-mono tabular-nums font-bold text-base mt-1">
+                  <p className="text-[#93C54E] font-mono tabular-nums font-bold text-base mt-1">
                     {(typeof window !== 'undefined' &&
                       (window as { __dailyCurrency?: string }).__dailyCurrency) ||
                       'UGX'}{' '}
@@ -240,7 +240,7 @@ function DailyTimelineRow({
                 <button
                   type="button"
                   onClick={() => setGalleryOpen(true)}
-                  className="text-xs font-bold text-[#E07B39] hover:text-[#F08B49] flex items-center gap-1 whitespace-nowrap bg-[#E07B39]/10 hover:bg-[#E07B39]/20 px-2.5 py-1 rounded-md transition-colors"
+                  className="text-xs font-bold text-[#93C54E] hover:text-[#7ab03e] flex items-center gap-1 whitespace-nowrap bg-[#93C54E]/10 hover:bg-[#93C54E]/20 px-2.5 py-1 rounded-md transition-colors"
                 >
                   View all
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -250,7 +250,7 @@ function DailyTimelineRow({
                 <button
                   type="button"
                   onClick={() => setTextOpen(true)}
-                  className="text-xs font-bold text-[#E07B39] hover:text-[#F08B49] flex items-center gap-1 whitespace-nowrap bg-[#E07B39]/10 hover:bg-[#E07B39]/20 px-2.5 py-1 rounded-md transition-colors"
+                  className="text-xs font-bold text-[#93C54E] hover:text-[#7ab03e] flex items-center gap-1 whitespace-nowrap bg-[#93C54E]/10 hover:bg-[#93C54E]/20 px-2.5 py-1 rounded-md transition-colors"
                 >
                   View all
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -656,8 +656,8 @@ export default function DailyPage() {
     return (
       <div className="w-full min-h-[60vh] flex items-center justify-center">
         <div className="text-center max-w-md space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
-            <Calendar className="w-10 h-10 text-[#E07B39]" />
+          <div className="w-20 h-20 rounded-full bg-[#93C54E]/10 flex items-center justify-center mx-auto ring-1 ring-[#93C54E]/20">
+            <Calendar className="w-10 h-10 text-[#93C54E]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("daily.title")}</h1>
@@ -667,7 +667,7 @@ export default function DailyPage() {
           </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold"
+            className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-semibold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
@@ -705,7 +705,7 @@ export default function DailyPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="space-y-1.5 min-w-0">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#E07B39] to-blue-500 truncate">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#93C54E] to-blue-500 truncate">
               Daily Accountability
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
@@ -717,7 +717,7 @@ export default function DailyPage() {
               onClick={() => { refetchStats(); refetchDaily(); }}
               variant="outline"
               size="icon"
-              className="rounded-full w-10 h-10 bg-card/50 backdrop-blur-sm border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 hover:bg-[#E07B39]/10 transition-all shadow-sm"
+              className="rounded-full w-10 h-10 bg-card/50 backdrop-blur-sm border-border text-muted-foreground hover:text-[#93C54E] hover:border-[#93C54E]/50 hover:bg-[#93C54E]/10 transition-all shadow-sm"
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -726,9 +726,9 @@ export default function DailyPage() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300 min-w-0">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#93C54E]/30 hover:shadow-lg hover:shadow-[#93C54E]/5 transition-all duration-300 min-w-0">
             <div className="flex items-center gap-3 mb-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-muted text-muted-foreground group-hover:bg-[#E07B39]/10 group-hover:text-[#E07B39] transition-colors shrink-0">
+              <div className="p-2.5 rounded-xl bg-muted text-muted-foreground group-hover:bg-[#93C54E]/10 group-hover:text-[#93C54E] transition-colors shrink-0">
                 <Calendar className="w-5 h-5" />
               </div>
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.totaldays")}</span>
@@ -755,12 +755,12 @@ export default function DailyPage() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300 min-w-0">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#93C54E]/30 hover:shadow-lg hover:shadow-[#93C54E]/5 transition-all duration-300 min-w-0">
             <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
-              <Users className="w-32 h-32 text-[#E07B39]" />
+              <Users className="w-32 h-32 text-[#93C54E]" />
             </div>
             <div className="flex items-center gap-3 mb-3 relative z-10 min-w-0">
-              <div className="p-2.5 rounded-xl bg-[#E07B39]/10 text-[#E07B39] shrink-0">
+              <div className="p-2.5 rounded-xl bg-[#93C54E]/10 text-[#93C54E] shrink-0">
                 <Users className="w-5 h-5" />
               </div>
               <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.avgworkers")}</span>
@@ -796,7 +796,7 @@ export default function DailyPage() {
                 <button
                   type="button"
                   onClick={goToPreviousDay}
-                  className="p-2 rounded-xl bg-muted/50 hover:bg-[#E07B39]/10 text-muted-foreground hover:text-[#E07B39] transition-all shrink-0"
+                  className="p-2 rounded-xl bg-muted/50 hover:bg-[#93C54E]/10 text-muted-foreground hover:text-[#93C54E] transition-all shrink-0"
                   aria-label="Previous day"
                 >
                   <ChevronRight className="w-5 h-5 rotate-180" />
@@ -812,7 +812,7 @@ export default function DailyPage() {
                     'p-2 rounded-xl transition-all shrink-0',
                     isToday
                       ? 'bg-transparent text-muted-foreground/30 cursor-not-allowed'
-                      : 'bg-muted/50 hover:bg-[#E07B39]/10 text-muted-foreground hover:text-[#E07B39]',
+                      : 'bg-muted/50 hover:bg-[#93C54E]/10 text-muted-foreground hover:text-[#93C54E]',
                   )}
                   aria-label="Next day"
                 >
@@ -826,8 +826,8 @@ export default function DailyPage() {
                   size="sm"
                   onClick={() => setChatFilterOnly((v) => !v)}
                   className={cn(
-                    'rounded-lg border-[#E07B39] text-[#E07B39] bg-transparent hover:bg-[#E07B39]/10 hover:text-[#E07B39]',
-                    chatFilterOnly && 'bg-[#E07B39]/10',
+                    'rounded-lg border-[#93C54E] text-[#93C54E] bg-transparent hover:bg-[#93C54E]/10 hover:text-[#93C54E]',
+                    chatFilterOnly && 'bg-[#93C54E]/10',
                   )}
                 >
                   Chat reports · {formatChatReportsDateLabel()} ({chatReportCount})
@@ -837,7 +837,7 @@ export default function DailyPage() {
                   onClick={() =>
                     document.getElementById('daily-heatmap')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                   }
-                  className="text-[#E07B39] hover:text-[#F08B49] text-sm font-medium flex items-center gap-1 transition-colors xl:hidden"
+                  className="text-[#93C54E] hover:text-[#7ab03e] text-sm font-medium flex items-center gap-1 transition-colors xl:hidden"
                 >
                   View heatmap <ChevronRight className="w-4 h-4" />
                 </button>
@@ -852,14 +852,14 @@ export default function DailyPage() {
                 (dailyLog.photo_urls && dailyLog.photo_urls.length > 0)) && (
                 <div className="px-5 py-4 border-b border-border space-y-3 bg-gradient-to-r from-muted/30 to-transparent">
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#E07B39]/70" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#93C54E]/70" />
                     Day summary
                   </h3>
                   <div className="grid sm:grid-cols-2 gap-3 sm:gap-6">
                     <div className="space-y-2">
                       {dailyLog.worker_count != null && dailyLog.worker_count > 0 && (
                         <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
-                          <div className="p-1.5 rounded-lg bg-[#E07B39]/10 text-[#E07B39] shrink-0">
+                          <div className="p-1.5 rounded-lg bg-[#93C54E]/10 text-[#93C54E] shrink-0">
                             <Users className="w-3.5 h-3.5" />
                           </div>
                           <span>
@@ -927,8 +927,8 @@ export default function DailyPage() {
                     </>
                   ) : (
                     <>
-                      <div className="w-16 h-16 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto mb-4 ring-1 ring-[#E07B39]/20 shadow-sm">
-                        <Activity className="w-8 h-8 text-[#E07B39]" />
+                      <div className="w-16 h-16 rounded-full bg-[#93C54E]/10 flex items-center justify-center mx-auto mb-4 ring-1 ring-[#93C54E]/20 shadow-sm">
+                        <Activity className="w-8 h-8 text-[#93C54E]" />
                       </div>
                       <p className="text-muted-foreground font-medium mb-6">No activity logged for this day.</p>
                       <Button
@@ -950,7 +950,7 @@ export default function DailyPage() {
                           ]);
                           setShowDailyModal(true);
                         }}
-                        className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 rounded-xl px-6"
+                        className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 rounded-xl px-6"
                       >
                         <Plus className="w-4 h-4 mr-2" />
                         Log Activity
@@ -1004,7 +1004,7 @@ export default function DailyPage() {
                     />
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-card border border-border rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
                       <p className="font-bold text-foreground">{formatDate(h.date)}</p>
-                      <p className="text-[#E07B39]">{ec} entries</p>
+                      <p className="text-[#93C54E]">{ec} entries</p>
                     </div>
                   </div>
                 );
@@ -1029,7 +1029,7 @@ export default function DailyPage() {
             ]);
             setShowDailyModal(true);
           }}
-          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 flex items-center gap-2 px-4 sm:px-5 py-3 rounded-full bg-gradient-to-r from-[#E07B39] to-blue-500 hover:from-[#F08B49] hover:to-blue-600 text-white text-sm sm:text-base font-bold shadow-lg hover:shadow-xl hover:shadow-[#E07B39]/20 hover:-translate-y-1 transition-all duration-300 z-[60]"
+          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 flex items-center gap-2 px-4 sm:px-5 py-3 rounded-full bg-gradient-to-r from-[#93C54E] to-blue-500 hover:from-[#7ab03e] hover:to-blue-600 text-white text-sm sm:text-base font-bold shadow-lg hover:shadow-xl hover:shadow-[#93C54E]/20 hover:-translate-y-1 transition-all duration-300 z-[60]"
         >
           <Plus className="w-5 h-5" />
           Log Activity
@@ -1082,7 +1082,7 @@ export default function DailyPage() {
                       <select
                         value={entry.activityType}
                         onChange={(e) => updateEntry(entry.id, 'activityType', e.target.value as ActivityType)}
-                        className="w-full px-2 py-1.5 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#E07B39]"
+                        className="w-full px-2 py-1.5 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#93C54E]"
                       >
                         <option value="delivery">📦 Delivery</option>
                         <option value="progress">✅ Progress</option>
@@ -1099,7 +1099,7 @@ export default function DailyPage() {
                           type="time"
                           value={entry.time}
                           onChange={(e) => updateEntry(entry.id, 'time', e.target.value)}
-                          className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#E07B39]"
+                          className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#93C54E]"
                         />
                         {entryErrors[entry.id]?.time && (
                           <p className="text-red-500 text-[10px] mt-0.5">{entryErrors[entry.id]?.time}</p>
@@ -1113,7 +1113,7 @@ export default function DailyPage() {
                           placeholder="What happened?"
                           value={entry.description}
                           onChange={(e) => updateEntry(entry.id, 'description', e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#E07B39] placeholder:text-muted-foreground"
+                          className="w-full px-3 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#93C54E] placeholder:text-muted-foreground"
                         />
                         {entryErrors[entry.id]?.description && (
                           <p className="text-red-500 text-[10px] mt-0.5">{entryErrors[entry.id]?.description}</p>
@@ -1127,7 +1127,7 @@ export default function DailyPage() {
                             placeholder="# workers"
                             value={entry.workers}
                             onChange={(e) => updateEntry(entry.id, 'workers', e.target.value)}
-                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#E07B39] placeholder:text-muted-foreground"
+                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#93C54E] placeholder:text-muted-foreground"
                           />
                         </div>
                       )}
@@ -1139,7 +1139,7 @@ export default function DailyPage() {
                             placeholder={currentProject?.currency || "UGX"}
                             value={entry.amount}
                             onChange={(e) => updateEntry(entry.id, 'amount', e.target.value)}
-                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#E07B39] placeholder:text-muted-foreground"
+                            className="w-full px-2 py-2 rounded bg-card border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-[#93C54E] placeholder:text-muted-foreground"
                           />
                         </div>
                       )}
@@ -1152,7 +1152,7 @@ export default function DailyPage() {
                           type="button"
                           onClick={() => openPhotoPicker(entry.id)}
                           disabled={uploadingEntryId === entry.id}
-                          className="flex items-center gap-2 text-sm text-[#E07B39] hover:text-[#F08B49] bg-[#E07B39]/10 hover:bg-[#E07B39]/20 px-3 py-2 rounded-lg transition-colors w-full justify-center"
+                          className="flex items-center gap-2 text-sm text-[#93C54E] hover:text-[#7ab03e] bg-[#93C54E]/10 hover:bg-[#93C54E]/20 px-3 py-2 rounded-lg transition-colors w-full justify-center"
                         >
                           <Camera className="w-4 h-4" />
                           {uploadingEntryId === entry.id
@@ -1181,7 +1181,7 @@ export default function DailyPage() {
                 <button
                   type="button"
                   onClick={addEntry}
-                  className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#E07B39]/50 hover:bg-[#E07B39]/5 transition-all text-sm"
+                  className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#93C54E]/50 hover:bg-[#93C54E]/5 transition-all text-sm"
                 >
                   + Add another entry
                 </button>
@@ -1198,7 +1198,7 @@ export default function DailyPage() {
                 </Button>
                 <Button 
                   type="button" 
-                  className="w-full bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold h-11"
+                  className="w-full bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold h-11"
                   onClick={handleSaveLog}
                 >
                   Save Activity

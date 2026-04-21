@@ -3,37 +3,65 @@
 @tailwind utilities;
 
 /* ============================================================================
-   JengaTrack Design System — Industrial Precision meets African Warmth
-   Dark-mode first. Earthy accents (burnt orange, golden amber) paired with
-   the cold precision of a Figma/Linear-grade enterprise dashboard.
+   JengaTrack Design System — Brand Guidelines v1.0
+   Primary: Fresh Fern (#93C54E) · Ocean Pine (#218598)
+   Dark-mode first. Typography: League Spartan (display) + Nunito Sans (body)
+   + JetBrains Mono (numbers).
    ============================================================================ */
 
 :root {
-  /* ── JengaTrack raw tokens ─────────────────────────────────────────── */
-  --jt-background: #0D0F0E;
-  --jt-surface: #141714;
-  --jt-surface-raised: #1C1F1C;
-  --jt-border: #2A2D2A;
-  --jt-border-strong: #3A3E3A;
-  --jt-text-primary: #F0EDE6;
-  --jt-text-secondary: #8A9189;
-  --jt-text-tertiary: #5A605A;
+  /* ── Official Brand Colors ─────────────────────────────────────────── */
+  --fresh-fern:   #93C54E;
+  --ocean-pine:   #218598;
+  --ash-gray:     #E0E0E0;
+  --graphite:     #2F3332;
+  --moss-green:   #B4D68C;
+  --aqua-breeze:  #6EC1C0;
 
-  --jt-accent-primary: #E07B39;     /* burnt orange */
-  --jt-accent-secondary: #C9A84C;   /* golden amber */
-  --jt-accent-success: #4CAF7D;
+  /* ── JengaTrack raw tokens (wired to brand) ────────────────────────── */
+  --jt-background: #1a1f1a;
+  --jt-surface: #222722;
+  --jt-surface-raised: #2a302a;
+  --jt-border: #2F3332;
+  --jt-border-strong: #3a403a;
+  --jt-text-primary: #F0F5F0;
+  --jt-text-secondary: #8a9e8a;
+  --jt-text-tertiary: #5a6e5a;
+
+  --jt-accent-primary: #93C54E;       /* Fresh Fern */
+  --jt-accent-primary-hover: #7ab03e; /* Darker Fresh Fern for hover */
+  --jt-accent-secondary: #218598;     /* Ocean Pine */
+  --jt-accent-success: #93C54E;       /* Fresh Fern doubles as success */
   --jt-accent-warning: #E0A030;
   --jt-accent-danger: #D95F5F;
-  --jt-accent-info: #5B8FD9;
+  --jt-accent-info: #218598;          /* Ocean Pine doubles as info */
   --jt-accent-whatsapp: #25D366;
 
-  --jt-sidebar-bg: #0A0C0A;
-  --sidebar-width: 260px;
-  --sidebar-collapsed: 72px;
+  --jt-sidebar-bg: #141814;
+  --sidebar-width: 220px;
+  --sidebar-collapsed: 60px;
 
-  /* ── Shadcn tokens (LIGHT) wired for backwards compat ─────────────── */
+  /* ── Spec-aliased tokens (brand mapping) ───────────────────────────── */
+  --background-color:  #1a1f1a;
+  --surface:           #222722;
+  --surface-raised:    #2a302a;
+  --border-strong:     #3a403a;
+  --text-primary:      #F0F5F0;
+  --text-secondary:    #8a9e8a;
+  --text-tertiary:     #5a6e5a;
+
+  --accent-primary:          #93C54E;
+  --accent-secondary:        #218598;
+  --accent-gradient-start:   #93C54E;
+  --accent-gradient-end:     #218598;
+  --accent-success:          #93C54E;
+  --accent-warning:          #E0A030;
+  --accent-danger:           #D95F5F;
+  --accent-info:             #218598;
+
+  /* ── Shadcn tokens (LIGHT — not the default theme, kept for parity) ─ */
   --background: 0 0% 100%;
-  --foreground: 165 4% 19%;
+  --foreground: 180 5% 19%;          /* Graphite */
 
   --card: 0 0% 100%;
   --card-foreground: var(--foreground);
@@ -41,17 +69,17 @@
   --popover: 0 0% 100%;
   --popover-foreground: var(--foreground);
 
-  --primary: 22 72% 55%;       /* burnt orange */
+  --primary: 88 52% 54%;              /* #93C54E Fresh Fern */
   --primary-foreground: 0 0% 100%;
-  --primary-hover: 22 72% 48%;
+  --primary-hover: 88 52% 46%;
 
-  --secondary: 47 55% 54%;     /* golden amber */
+  --secondary: 189 64% 36%;           /* #218598 Ocean Pine */
   --secondary-foreground: 0 0% 100%;
 
   --muted: 0 0% 96%;
-  --muted-foreground: 165 4% 34%;
+  --muted-foreground: 120 8% 34%;
 
-  --accent: 22 72% 55%;
+  --accent: 88 52% 54%;
   --accent-foreground: 0 0% 100%;
 
   --destructive: 0 60% 62%;
@@ -61,11 +89,11 @@
   --input: 0 0% 90%;
   --ring: var(--primary);
 
-  --chart-1: 22 72% 55%;   /* burnt orange */
-  --chart-2: 47 55% 54%;   /* golden amber */
-  --chart-3: 152 38% 49%;  /* success green */
-  --chart-4: 216 60% 60%;  /* info blue */
-  --chart-5: 0 60% 62%;    /* danger */
+  --chart-1: 88 52% 54%;    /* Fresh Fern */
+  --chart-2: 189 64% 36%;   /* Ocean Pine */
+  --chart-3: 90 49% 69%;    /* Moss Green */
+  --chart-4: 180 42% 59%;   /* Aqua Breeze */
+  --chart-5: 37 76% 53%;    /* Warning amber (used sparingly) */
 
   --sidebar: 0 0% 96%;
   --sidebar-foreground: var(--foreground);
@@ -77,56 +105,58 @@
   --sidebar-ring: var(--ring);
 
   --radius: 0.75rem;
-  --font-sans: "DM Sans", "Nunito Sans", system-ui, -apple-system, BlinkMacSystemFont,
+  --font-sans: "Nunito Sans", system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, sans-serif;
-  --font-heading: "Syne", "League Spartan", system-ui, sans-serif;
+  --font-heading: "League Spartan", "Nunito Sans", system-ui, sans-serif;
+  --font-display: "League Spartan", system-ui, sans-serif;
+  --font-body: "Nunito Sans", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .dark {
-  --background: 120 7% 6%;     /* #0D0F0E */
-  --foreground: 40 18% 92%;    /* #F0EDE6 */
+  --background: 120 9% 11%;     /* #1a1f1a */
+  --foreground: 120 22% 95%;    /* #F0F5F0 */
 
-  --card: 120 7% 9%;           /* #141714 */
-  --card-foreground: 40 18% 92%;
+  --card: 120 8% 14%;           /* #222722 */
+  --card-foreground: 120 22% 95%;
 
-  --popover: 120 7% 12%;       /* #1C1F1C */
-  --popover-foreground: 40 18% 92%;
+  --popover: 120 7% 17%;        /* #2a302a */
+  --popover-foreground: 120 22% 95%;
 
-  --primary: 22 72% 55%;        /* #E07B39 */
-  --primary-foreground: 40 18% 96%;
-  --primary-hover: 22 72% 48%;
+  --primary: 88 52% 54%;        /* #93C54E Fresh Fern */
+  --primary-foreground: 180 10% 8%;
+  --primary-hover: 88 52% 46%;
 
-  --secondary: 47 55% 54%;      /* #C9A84C */
-  --secondary-foreground: 120 7% 6%;
+  --secondary: 189 64% 36%;     /* #218598 Ocean Pine */
+  --secondary-foreground: 120 22% 95%;
 
-  --muted: 120 7% 11%;
-  --muted-foreground: 120 4% 56%; /* #8A9189 */
+  --muted: 120 8% 16%;
+  --muted-foreground: 120 9% 58%;   /* #8a9e8a */
 
-  --accent: 22 72% 55%;
-  --accent-foreground: 40 18% 96%;
+  --accent: 88 52% 54%;
+  --accent-foreground: 180 10% 8%;
 
-  --destructive: 0 60% 62%;     /* #D95F5F */
-  --destructive-foreground: 40 18% 96%;
+  --destructive: 0 60% 62%;
+  --destructive-foreground: 120 22% 95%;
 
-  --border: 120 4% 17%;         /* #2A2D2A */
-  --input: 120 4% 17%;
-  --ring: 22 72% 55%;
+  --border: 180 5% 19%;         /* Graphite #2F3332 */
+  --input: 180 5% 19%;
+  --ring: 88 52% 54%;
 
-  --chart-1: 22 72% 55%;
-  --chart-2: 47 55% 54%;
-  --chart-3: 152 38% 49%;
-  --chart-4: 216 60% 60%;
-  --chart-5: 0 60% 62%;
+  --chart-1: 88 52% 54%;    /* Fresh Fern */
+  --chart-2: 189 64% 36%;   /* Ocean Pine */
+  --chart-3: 90 49% 69%;    /* Moss Green */
+  --chart-4: 180 42% 59%;   /* Aqua Breeze */
+  --chart-5: 37 76% 53%;    /* Warning amber */
 
-  --sidebar: 120 8% 4%;         /* #0A0C0A */
-  --sidebar-foreground: 40 18% 92%;
-  --sidebar-primary: 22 72% 55%;
-  --sidebar-primary-foreground: 40 18% 96%;
-  --sidebar-accent: 22 72% 55%;
-  --sidebar-accent-foreground: 40 18% 96%;
-  --sidebar-border: 120 4% 15%;
-  --sidebar-ring: 22 72% 55%;
+  --sidebar: 120 8% 9%;         /* #141814 */
+  --sidebar-foreground: 120 22% 95%;
+  --sidebar-primary: 88 52% 54%;
+  --sidebar-primary-foreground: 180 10% 8%;
+  --sidebar-accent: 88 52% 54%;
+  --sidebar-accent-foreground: 180 10% 8%;
+  --sidebar-border: 120 5% 17%;
+  --sidebar-ring: 88 52% 54%;
 }
 
 html {
@@ -147,7 +177,6 @@ html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    font-feature-settings: "cv11", "ss01", "ss03";
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -162,10 +191,10 @@ html {
     font-feature-settings: "tnum" 1, "calt" 0;
   }
 
-  /* Focus rings */
+  /* Focus rings — Fresh Fern */
   :focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px rgba(224, 123, 57, 0.55);
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px rgba(147, 197, 78, 0.55);
     border-radius: 6px;
   }
 
@@ -224,13 +253,13 @@ html {
   .jt-input {
     @apply w-full rounded-btn bg-muted/40 border border-border px-3 py-2.5 text-sm text-foreground
       placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/60
-      focus:shadow-[0_0_0_2px_rgba(224,123,57,0.25)] transition;
+      focus:shadow-[0_0_0_2px_rgba(147,197,78,0.25)] transition;
   }
 
   .jt-btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-btn px-4 h-10 text-sm font-semibold
       bg-primary text-primary-foreground hover:brightness-110 active:brightness-95
-      shadow-[0_8px_20px_-8px_rgba(224,123,57,0.55)] transition;
+      shadow-[0_8px_20px_-8px_rgba(147,197,78,0.55)] transition;
   }
   .jt-btn-ghost {
     @apply inline-flex items-center justify-center gap-2 rounded-btn px-3 h-9 text-sm font-medium
@@ -335,9 +364,9 @@ textarea {
   font-size: max(16px, 1rem);
 }
 
-/* Branded tap highlight for Android / mobile. */
+/* Branded tap highlight for Android / mobile — Fresh Fern. */
 * {
-  -webkit-tap-highlight-color: rgba(224, 123, 57, 0.15);
+  -webkit-tap-highlight-color: rgba(147, 197, 78, 0.15);
 }
 
 /* Momentum scrolling on iOS. */
