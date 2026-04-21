@@ -64,7 +64,6 @@ import {
   SkeletonChart,
   SkeletonRing,
 } from "@/components/ui/SkeletonCard";
-import { DebugPanel } from "@/components/ui/DebugPanel";
 import { SpendOverTimeChart } from "@/components/charts/SpendOverTimeChart";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -1614,13 +1613,6 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
       )}
 
-      <DebugPanel
-        expenses={expenses as never}
-        inventory={[]}
-        totalBudget={budgetHealth.total}
-        projectId={effectiveProjectId}
-        currency={currency}
-      />
     </>
   );
 }

@@ -40,6 +40,7 @@ import {
   formatDate as fmtDate,
   formatProjectionDate,
 } from '../shared/formatting.js';
+import { todayInAppTz, nowInAppTzHHmm } from './utils/timezone.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
@@ -577,7 +578,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
   const budgetNum = parseFloat(String(onboardingData.budget || 0));
   const startDate =
     onboardingData.start_date ||
-    new Date().toISOString().split('T')[0];
+    todayInAppTz();
 
   const { data: newProject, error } = await supabase
     .from('projects')
@@ -1396,7 +1397,7 @@ async function upsertDailyLog(
   projectId: string,
   data: { worker_count?: number; notes?: string; weather_condition?: string; photo_urls?: string[]; activity_entries?: Array<{ log_time: string; activity_type: string; description: string; amount?: number }> }
 ): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayInAppTz();
   const { data: existing } = await supabase
     .from('daily_logs')
     .select('id, notes, photo_urls, activity_entries')
@@ -1529,7 +1530,7 @@ async function handleGreeting(
       .from('daily_logs')
       .select('worker_count, notes')
       .eq('project_id', currentProject.id)
-      .eq('log_date', new Date().toISOString().split('T')[0])
+      .eq('log_date', todayInAppTz())
       .maybeSingle();
 
     if (recentExpenses?.length) {
@@ -2070,7 +2071,7 @@ async function handleProgressUpdate(
     );
 
   const activityEntry = {
-    log_time: new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00',
+    log_time: nowInAppTzHHmm(),
     activity_type: 'Milestone',
     description: rawMessage.trim(),
   };
@@ -2875,7 +2876,7 @@ async function toolResolveIssue(projectId: string, params: any): Promise<AgentTo
 async function toolLogWeatherDelay(projectId: string, params: any): Promise<AgentToolResult> {
   const { reason, date } = params;
   if (!reason) return { success: false, reply: 'Please describe the weather delay.' };
-  const logDate = date || new Date().toISOString().split('T')[0];
+  const logDate = date || todayInAppTz();
   const delayNote = `Weather delay: ${reason}`;
   const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', logDate).maybeSingle();
   if (existing) {
@@ -3006,7 +3007,7 @@ async function toolDeleteIssue(projectId: string, params: any): Promise<AgentToo
 
 async function toolLogExpense(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
   const { description, amount, items, date, vendor } = params;
-  const expenseDate = date || new Date().toISOString().split('T')[0];
+  const expenseDate = date || todayInAppTz();
 
   if (items && Array.isArray(items) && items.length > 0) {
     for (const item of items) {
@@ -3083,7 +3084,7 @@ async function toolLogLabor(userId: string, projectId: string, params: any): Pro
 
   if (wc > 0) await upsertDailyLog(projectId, { worker_count: wc });
   if (amt > 0) {
-    const expenseDate = date || new Date().toISOString().split('T')[0];
+    const expenseDate = date || todayInAppTz();
     await supabase.from('expenses').insert({
       user_id: userId, project_id: projectId,
       description: description || `Labour — ${wc > 0 ? wc + ' workers' : 'site crew'}`,
@@ -3167,7 +3168,7 @@ async function toolLogIssue(projectId: string, params: any): Promise<AgentToolRe
 async function toolLogProgress(projectId: string, params: any): Promise<AgentToolResult> {
   const { description, worker_count, date } = params;
   if (!description) return { success: false, reply: 'Please describe the progress update.' };
-  const logTime = new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00';
+  const logTime = nowInAppTzHHmm();
   const entry = { log_time: logTime, activity_type: 'Milestone', description };
   const updateData: any = { notes: description, activity_entries: [entry] };
   const wc = parseInt(String(worker_count || 0), 10);
@@ -3211,7 +3212,7 @@ async function toolUpdateDailyLog(projectId: string, params: any): Promise<Agent
   if (notes) updateData.notes = notes;
   if (milestones) updateData.milestones = milestones;
   if (Object.keys(updateData).length === 0) return { success: false, reply: 'Nothing to update. Specify worker count, notes, or milestones.' };
-  const logDate = date || new Date().toISOString().split('T')[0];
+  const logDate = date || todayInAppTz();
   const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', logDate).maybeSingle();
   if (existing) {
     if (notes && existing.notes) updateData.notes = `${existing.notes}\n${notes}`;
@@ -3784,7 +3785,7 @@ export async function sendDailyHeartbeat(): Promise<void> {
 
     if (!owner?.whatsapp_number) continue;
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayInAppTz();
 
     // Today's log
     const { data: todayLog } = await supabase
@@ -3852,6 +3853,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('✅ Webhook called:', { phoneNumber, message: message.substring(0, 80), hasMedia, MediaContentType0 });
 
+    // ── Twilio signature validation ──────────────────────────────────────────
+    // Twilio signs every webhook with HMAC-SHA1 over (url + sorted form params).
+    // Without this check, anyone who knows/guesses the webhook URL can inject
+    // fake messages and log expenses on behalf of real users.
+    //
+    // The check runs only when TWILIO_AUTH_TOKEN is configured and the
+    // WEBHOOK_PUBLIC_URL is known. Set SKIP_TWILIO_SIGNATURE=1 in dev/tunnel
+    // setups where the public URL is awkward to pin down.
+    const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+    const skipSig = process.env.SKIP_TWILIO_SIGNATURE === '1';
+    const signatureHeader = (req.headers['x-twilio-signature'] || req.headers['X-Twilio-Signature']) as string | undefined;
+    if (twilioAuthToken && !skipSig) {
+      const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
+      const host = (req.headers['x-forwarded-host'] || req.headers.host) as string | undefined;
+      const publicUrl = process.env.WEBHOOK_PUBLIC_URL
+        || (host ? `${proto}://${host}${req.url || ''}` : '');
+      if (!signatureHeader || !publicUrl) {
+        console.warn('[WhatsApp] Missing Twilio signature or public URL — rejecting.');
+        return res.status(403).json({ error: 'Forbidden: signature required' });
+      }
+      // twilio.validateRequest is synchronous and safe with already-parsed form bodies.
+      const ok = twilio.validateRequest(twilioAuthToken, signatureHeader, publicUrl, body);
+      if (!ok) {
+        console.warn('[WhatsApp] Twilio signature mismatch. url=', publicUrl, 'sid=', MessageSid);
+        return res.status(403).json({ error: 'Forbidden: invalid signature' });
+      }
+    } else if (!twilioAuthToken && process.env.NODE_ENV === 'production') {
+      console.warn('[WhatsApp] TWILIO_AUTH_TOKEN not set in production — webhook is unauthenticated.');
+    }
+
+    // ── MessageSid idempotency ───────────────────────────────────────────────
+    // Twilio retries webhooks (up to 11x over ~4h) on any non-2xx or timeout.
+    // Without idempotency, every retry re-runs the full handler and can insert
+    // duplicate expenses, duplicate daily-log entries, etc.
+    //
+    // Strategy: the `whatsapp_messages` table has a UNIQUE index on
+    // `message_sid` (enforced at the DB level via
+    // `whatsapp_messages_message_sid_key`). On entry, we first check for a
+    // matching row and 200-ack if found. We then log the inbound row after
+    // profile resolution; if a concurrent retry lands on the same instant,
+    // the unique constraint causes the insert to fail, and the SELECT on the
+    // next retry catches it.
+    if (MessageSid) {
+      const { data: seen } = await supabase
+        .from('whatsapp_messages')
+        .select('id')
+        .eq('message_sid', MessageSid)
+        .eq('direction', 'inbound')
+        .maybeSingle();
+      if (seen) {
+        console.log(`[WhatsApp] Duplicate MessageSid ${MessageSid} — acking without re-processing.`);
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+    }
+
     // ── STEP 1: User profile ──────────────────────────────────────────────────
     let profile = await getUserProfile(phoneNumber);
 
@@ -3860,6 +3917,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const userId = profile.id;
+
+    // Log the inbound message BEFORE any mutations. This is the second half
+    // of the MessageSid idempotency contract above: if this write succeeds,
+    // any concurrent retry will either hit the SELECT guard at the top or
+    // collide with the UNIQUE(message_sid) constraint and bail out. Best
+    // effort — we never fail the webhook on this log insert.
+    if (MessageSid) {
+      try {
+        await supabase.from('whatsapp_messages').insert({
+          user_id: userId,
+          message_sid: MessageSid,
+          phone_number: phoneNumber,
+          direction: 'inbound',
+          message_body: rawMessage.substring(0, 4000),
+          processed: false,
+        });
+      } catch (logErr) {
+        console.warn('[WhatsApp] Failed to log inbound message:', (logErr as any)?.message);
+      }
+    }
     const onboardingState = profile.onboarding_state as OnboardingState;
     const needsOnboarding = !profile.onboarding_completed_at;
     console.log('[webhook] userId:', userId, 'projectId:', profile.active_project_id ?? 'none');
@@ -3927,10 +4004,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await updateOnboardingState(userId, 'welcome_sent', {});
             await sendWelcomeMessage(From, profile.full_name);
           } else {
-            await updateOnboardingState(userId, 'completed');
+            // User declined to create the project at the confirmation step.
+            // Previously we set onboarding_state='completed' here, which also
+            // sets onboarding_completed_at. That left the profile in a broken
+            // state: "onboarded" but with zero projects — so every later
+            // message hit `needsSelection=false` + `project=null` and the
+            // agent had nowhere to write to.
+            //
+            // Fix: reset onboarding back to the welcome gate and leave
+            // onboarding_completed_at NULL. Next inbound message re-enters the
+            // onboarding flow cleanly, and if they really want to skip they
+            // can create a project from the dashboard.
+            await supabase.from('profiles').update({
+              onboarding_state: null,
+              onboarding_data: {},
+              onboarding_completed_at: null,
+              updated_at: new Date().toISOString(),
+            }).eq('id', userId);
             await sendMessage(From, await ai(
-              'Tell the user no problem — they can create a project from the dashboard anytime. Say they can still send you updates and you will log them.',
-              'No problem! Create a project from the dashboard anytime. You can still send me updates and I will log them.'
+              `Tell the user no problem. Say they can create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. Until then you cannot log updates because there is no project to attach them to.`,
+              `No problem! Create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. I can't log updates until a project exists.`
             ));
           }
           break;
@@ -4049,7 +4142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fall through to agent (STEP 9) below
       } else {
       const caption = rawMessage.trim();
-      const today = new Date().toISOString().split('T')[0];
+      const today = todayInAppTz();
 
       // Append caption to today's daily log notes
       const { data: todayLog } = await supabase
@@ -4135,21 +4228,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
-        // No number/name match — auto-select the first project so the user isn't stuck,
-        // then run the agent with their original message.
-        const defaultProject = options[0];
-        if (defaultProject) {
-          await supabase.from('profiles').update({
-            active_project_id: defaultProject.id,
-            active_project_set_at: new Date().toISOString(),
-            expense_state: null,
-            expense_pending_data: {},
-          }).eq('id', userId);
-          const agentReply = await runAgent(userId, defaultProject.id, rawMessage, profile, options || []);
-          await sendMessage(From, `📌 Active project set to *${defaultProject.name}*.\n\n${agentReply}`);
-        } else {
-          await sendProjectSelectionMenu(From, userId, options);
-        }
+        // No number/name match — do NOT silently pick the first project.
+        // Silently writing to project[0] has caused real users to log expenses
+        // against the wrong project. Instead, ask again with the menu so the
+        // user makes an explicit choice.
+        const menuLines = options
+          .map((p: any, i: number) => `${i + 1}. ${p.name}`)
+          .join('\n');
+        await sendMessage(
+          From,
+          `I didn't catch which project you meant. Reply with the number or the project name:\n\n${menuLines}\n\nOr type "list projects" to see details.`
+        );
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4299,7 +4388,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (inlineCaption) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = todayInAppTz();
             const { data: todayLog } = await supabase
               .from('daily_logs')
               .select('id, notes')
@@ -4438,7 +4527,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               amount: String(amt),
               quantity_logged: entry.quantity ? String(entry.quantity) : null,
               currency: 'UGX',
-              expense_date: new Date().toISOString().split('T')[0],
+              expense_date: todayInAppTz(),
               source: 'whatsapp',
             })
             .select()

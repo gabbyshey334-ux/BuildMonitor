@@ -2523,8 +2523,13 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 // TEST ENDPOINTS (available even when server app is loaded)
 // ============================================================================
 
-// Debug Auth Endpoint (JWT only — no session)
+// Debug Auth Endpoint (JWT only — no session).
+// SECURITY: Disabled in production to avoid leaking JWT_SECRET_SET / NODE_ENV
+// and the decoded userId of whoever can forge tokens.
 app.get('/api/debug/session', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   try {
     const token = extractToken(req);
     const decoded = token ? verifyToken(token) : null;
@@ -2546,8 +2551,12 @@ app.get('/api/debug/session', async (req, res) => {
   }
 });
 
-// WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
+// WhatsApp Debug Endpoint (always available - BEFORE server app mounts).
+// SECURITY: Disabled in production to avoid exposing webhook/inbound logs.
 app.get('/webhook/debug', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   try {
     const limit = parseInt(req.query.limit) || 50;
     
@@ -3935,26 +3944,37 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const projectResult = await dbConnection.execute(sql`
       SELECT id, name, budget
       FROM projects
-      WHERE id = ${activeProjectId} AND user_id = ${userId}
+      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
+
+    // SECURITY: If the project doesn't belong to this user, do NOT fall through
+    // to aggregate their expenses/tasks — that would leak cross-tenant data.
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found',
+      });
+    }
 
     // Get expenses
     const expensesResult = await dbConnection.execute(sql`
       SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
       FROM expenses
       WHERE project_id = ${activeProjectId}
+        AND deleted_at IS NULL
     `);
     const totalSpent = parseFloat(Array.isArray(expensesResult) ? expensesResult[0]?.total : (expensesResult.rows ? expensesResult.rows[0]?.total : expensesResult?.total) || '0');
 
-    // Get tasks
+    // Get tasks (non-deleted only)
     const tasksResult = await dbConnection.execute(sql`
       SELECT COUNT(*) as total,
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress')) as open,
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress') AND priority = 'high') as critical
       FROM tasks
       WHERE project_id = ${activeProjectId}
+        AND deleted_at IS NULL
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult[0] : (tasksResult.rows ? tasksResult.rows[0] : tasksResult);
     const totalTasks = parseInt(tasks?.total || '0');
@@ -4030,11 +4050,25 @@ app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
       });
     }
 
-    // Get tasks for milestones
+    // SECURITY: Check ownership before returning tasks for this project.
+    const progressOwnerCheck = await dbConnection.execute(sql`
+      SELECT 1 FROM projects
+      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
+      LIMIT 1
+    `);
+    const progressOwnerRow = Array.isArray(progressOwnerCheck)
+      ? progressOwnerCheck[0]
+      : (progressOwnerCheck.rows ? progressOwnerCheck.rows[0] : progressOwnerCheck);
+    if (!progressOwnerRow) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    // Get tasks for milestones (non-deleted only)
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, due_date as "dueDate", priority, status
       FROM tasks
       WHERE project_id = ${activeProjectId}
+        AND deleted_at IS NULL
       ORDER BY due_date ASC
       LIMIT 10
     `);
@@ -4128,13 +4162,24 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
     const projectResult = await dbConnection.execute(sql`
       SELECT budget
       FROM projects
-      WHERE id = ${activeProjectId} AND user_id = ${userId}
+      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
+
+    // SECURITY: Refuse to aggregate another user's expenses if they don't own
+    // this project. Previously a stray projectId would return `project=null`
+    // but still execute the SUM() below, leaking cross-tenant spend data.
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        error: 'Project not found',
+      });
+    }
+
     const totalBudget = parseFloat(project?.budget || '0');
 
-    // Get expenses by category
+    // Get expenses by category (non-deleted only)
     let expensesResult;
     try {
       expensesResult = await dbConnection.execute(sql`
@@ -4145,6 +4190,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
         FROM expenses e
         LEFT JOIN expense_categories ec ON e.category_id = ec.id
         WHERE e.project_id = ${activeProjectId}
+          AND e.deleted_at IS NULL
         GROUP BY ec.name, ec.color
         ORDER BY total DESC
       `);
@@ -4171,7 +4217,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
       variance: 20,
     }));
 
-    // Get cumulative costs over time
+    // Get cumulative costs over time (non-deleted only)
     let dailyExpensesResult;
     try {
       dailyExpensesResult = await dbConnection.execute(sql`
@@ -4180,6 +4226,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
           SUM(CAST(amount AS DECIMAL)) as daily_total
         FROM expenses
         WHERE project_id = ${activeProjectId}
+          AND deleted_at IS NULL
         GROUP BY DATE(expense_date)
         ORDER BY DATE(expense_date) ASC
       `);
@@ -4295,11 +4342,27 @@ app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
       });
     }
 
-    // Get tasks as issues
+    // SECURITY: Verify the caller owns this project before pulling tasks.
+    // Otherwise any authenticated user could read another user's issues by
+    // passing a guessed projectId.
+    const ownerCheckResult = await dbConnection.execute(sql`
+      SELECT 1 FROM projects
+      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
+      LIMIT 1
+    `);
+    const ownerRow = Array.isArray(ownerCheckResult)
+      ? ownerCheckResult[0]
+      : (ownerCheckResult.rows ? ownerCheckResult.rows[0] : ownerCheckResult);
+    if (!ownerRow) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    // Get tasks as issues (non-deleted only)
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, description, status, priority, created_at as "createdAt"
       FROM tasks
       WHERE project_id = ${activeProjectId}
+        AND deleted_at IS NULL
       ORDER BY created_at DESC
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult : (tasksResult.rows || []);
@@ -4415,14 +4478,27 @@ app.get('/api/dashboard/media', requireAuth, async (req, res) => {
       });
     }
 
-    // Get recent photos
-    // Note: images table may not have caption column, use filename as description
+    // SECURITY: Verify project ownership before returning images for it.
+    const mediaOwnerCheck = await dbConnection.execute(sql`
+      SELECT 1 FROM projects
+      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
+      LIMIT 1
+    `);
+    const mediaOwnerRow = Array.isArray(mediaOwnerCheck)
+      ? mediaOwnerCheck[0]
+      : (mediaOwnerCheck.rows ? mediaOwnerCheck.rows[0] : mediaOwnerCheck);
+    if (!mediaOwnerRow) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    // Get recent photos (non-deleted only)
     let photosResult;
     try {
       photosResult = await dbConnection.execute(sql`
         SELECT id, storage_path as "storagePath", filename, created_at as "createdAt"
         FROM images
         WHERE project_id = ${activeProjectId}
+          AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 10
       `);
@@ -4538,6 +4614,9 @@ app.get('/api/images', requireAuth, async (req, res) => {
 
 // Test Project Creation Setup
 app.get('/api/test/project-creation', async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   try {
     // Try to extract token if present (optional auth for test endpoint)
     const token = extractToken(req);
@@ -4664,6 +4743,9 @@ app.get('/api/test/project-creation', async (req, res) => {
 
 // Test Supabase and Database connection (admin/dev only — requires auth)
 app.get('/api/test/supabase', requireAuth, async (req, res) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+    return res.status(404).json({ success: false, error: 'Not found' });
+  }
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -4770,6 +4852,9 @@ app.get('/api/test/supabase', requireAuth, async (req, res) => {
 // ============================================================================
 
   app.get('/api/debug/db', async (req, res) => {
+    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
+      return res.status(404).json({ success: false, error: 'Not found' });
+    }
     res.json({
       status: 'ok',
       message: 'Debug endpoint (fallback mode)',

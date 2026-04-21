@@ -30,7 +30,6 @@ import SettingsPage from "@/pages/SettingsPage";
 import HelpPage from "@/pages/HelpPage";
 import { PageTransition } from "@/components/animations/PageTransition";
 import { CommandPalette } from "@/components/ui/CommandPalette";
-import { DebugPanel } from "@/components/DebugPanel";
 
 function Redirect({ to }: { to: string }) {
   const [, setLocation] = useLocation();
@@ -172,7 +171,6 @@ function AppContent() {
       <PageTransition>
         <Router />
       </PageTransition>
-      <DebugPanel />
     </>
   );
 }

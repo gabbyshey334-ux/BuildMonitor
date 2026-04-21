@@ -183,27 +183,32 @@ export const images = pgTable("images", {
 // ============================================================================
 // 7. WHATSAPP_MESSAGES (audit log)
 // ============================================================================
+// NOTE: Schema reflects the actual Supabase table, verified via MCP on
+// 2026-04-21. Prior versions of this file listed `whatsapp_message_id`,
+// `media_url`, `received_at`, `ai_used`, and `error_message` — none of
+// those columns exist in the deployed DB. Writing to them silently failed
+// (Supabase JS returns an error object rather than throwing), which broke
+// webhook idempotency for months.
 export const whatsappMessages = pgTable("whatsapp_messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => profiles.id, { onDelete: 'set null' }), // nullable
   projectId: uuid("project_id").references(() => projects.id, { onDelete: 'set null' }),
-  whatsappMessageId: varchar("whatsapp_message_id", { length: 255 }),
-  direction: varchar("direction", { length: 10 }).notNull(), // 'inbound', 'outbound'
+  messageSid: text("message_sid").unique(), // Twilio MessageSid — DB-enforced unique
+  phoneNumber: text("phone_number").notNull(),
+  direction: text("direction").notNull(), // 'inbound' | 'outbound'
   messageBody: text("message_body"),
-  mediaUrl: text("media_url"),
-  intent: varchar("intent", { length: 50 }),
-  processed: boolean("processed").default(false),
-  aiUsed: boolean("ai_used").default(false),
+  intent: text("intent"),
+  confidence: decimal("confidence"),
+  processed: boolean("processed").notNull().default(false),
+  error: text("error"),
   aiExtractedData: jsonb("ai_extracted_data"),
-  errorMessage: text("error_message"),
-  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow(),
-  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_whatsapp_messages_user_id").on(table.userId),
   index("idx_whatsapp_messages_project_id").on(table.projectId),
-  index("idx_whatsapp_messages_direction").on(table.direction),
+  index("idx_whatsapp_messages_phone_number").on(table.phoneNumber),
   index("idx_whatsapp_messages_processed").on(table.processed),
-  index("idx_whatsapp_messages_received_at").on(table.receivedAt),
+  index("idx_whatsapp_messages_created_at").on(table.createdAt),
 ]);
 
 // ============================================================================
