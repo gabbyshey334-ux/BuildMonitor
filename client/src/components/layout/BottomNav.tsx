@@ -27,16 +27,15 @@ export function BottomNav() {
   const { currentProject } = useProject();
   const { t } = useLanguage();
 
-  const hrefWithProject = (path: string) => {
-    return currentProject ? `${path}?project=${currentProject.id}` : path;
-  };
+  const hrefWithProject = (path: string) =>
+    currentProject ? `${path}?project=${currentProject.id}` : path;
 
   const itemClass = (isActive: boolean) =>
     cn(
-      "flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 py-1.5 transition-all duration-200 touch-manipulation xs:gap-1 xs:px-1 xs:py-2",
-      "active:scale-[0.97]",
+      "relative flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5 transition-all duration-200 touch-manipulation",
+      "active:scale-[0.96]",
       isActive
-        ? "text-[#22c55e]"
+        ? "text-jenga-primary"
         : "text-muted-foreground hover:text-foreground",
     );
 
@@ -45,9 +44,9 @@ export function BottomNav() {
       <nav
         className={cn(
           "fixed bottom-0 left-0 right-0 z-40 md:hidden",
-          "grid min-h-[3.75rem] grid-cols-5 items-stretch px-0.5 xs:px-2",
-          "border-t border-border bg-card/95 pb-safe shadow-[0_-6px_24px_rgba(0,0,0,0.06)] backdrop-blur-md supports-[backdrop-filter]:bg-card/85",
-          "dark:shadow-[0_-6px_28px_rgba(0,0,0,0.35)]",
+          "grid min-h-[3.75rem] grid-cols-5 items-stretch",
+          "border-t border-border/60 bg-jenga-surface/95 backdrop-blur-lg supports-[backdrop-filter]:bg-jenga-surface/80",
+          "pb-safe shadow-[0_-8px_32px_rgba(0,0,0,0.4)]",
         )}
         aria-label="Primary"
       >
@@ -66,21 +65,25 @@ export function BottomNav() {
               aria-label={label}
               className="flex h-full min-h-0 min-w-0"
             >
-              <div className={cn(itemClass(isActive), "relative h-full w-full")}>
+              <div className={itemClass(isActive)}>
                 {isActive && (
                   <span
-                    className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-[#22c55e] max-[359px]:hidden"
+                    className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-jenga-primary shadow-glow"
                     aria-hidden
                   />
                 )}
                 <tab.icon
-                  className="h-5 w-5 shrink-0 xs:h-6 xs:w-6"
+                  className={cn(
+                    "h-5 w-5 shrink-0 transition-transform",
+                    isActive && "scale-110",
+                  )}
+                  strokeWidth={isActive ? 2.2 : 1.8}
                   aria-hidden
                 />
                 <span
                   className={cn(
-                    "w-full truncate text-center text-[10px] font-medium leading-tight xs:text-xs",
-                    "max-[359px]:sr-only",
+                    "w-full truncate text-center text-[10px] font-medium leading-tight",
+                    isActive && "font-semibold",
                   )}
                 >
                   {label}
@@ -92,23 +95,18 @@ export function BottomNav() {
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className={cn(itemClass(moreOpen), "relative h-full w-full")}
+          className={itemClass(moreOpen)}
           aria-label={t("nav.more")}
           aria-expanded={moreOpen}
         >
           {moreOpen && (
             <span
-              className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-[#22c55e] max-[359px]:hidden"
+              className="absolute top-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-b-full bg-jenga-primary shadow-glow"
               aria-hidden
             />
           )}
-          <Menu className="h-5 w-5 shrink-0 xs:h-6 xs:w-6" aria-hidden />
-          <span
-            className={cn(
-              "w-full truncate text-center text-[10px] font-medium leading-tight xs:text-xs",
-              "max-[359px]:sr-only",
-            )}
-          >
+          <Menu className="h-5 w-5 shrink-0" aria-hidden />
+          <span className="w-full truncate text-center text-[10px] font-medium leading-tight">
             {t("nav.more")}
           </span>
         </button>

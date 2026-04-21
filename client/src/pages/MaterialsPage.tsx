@@ -42,8 +42,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatMaterialDisplayName, normalizeMaterialStorageName } from "@shared/materialNames";
 
+let __materialsCurrency = "UGX";
 function formatUGX(n: number) {
-  return `UGX ${Math.round(Number(n) || 0).toLocaleString()}`;
+  return `${__materialsCurrency} ${Math.round(Number(n) || 0).toLocaleString()}`;
 }
 
 function humanDate(dateStr: string | null | undefined) {
@@ -100,6 +101,10 @@ export default function MaterialsPage() {
   const hasProjects = projects.length > 0;
   const search = typeof window !== "undefined" ? window.location.search : "";
   const projectId = new URLSearchParams(search).get("project") ?? currentProject?.id ?? null;
+
+  React.useEffect(() => {
+    __materialsCurrency = currentProject?.currency || "UGX";
+  }, [currentProject?.currency]);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();

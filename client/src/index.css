@@ -2,50 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer utilities {
-  /* iOS / notched devices: respect home indicator */
-  .pb-safe {
-    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
-  }
-  /* Main content offset for fixed bottom nav (bar + safe area) */
-  .pb-mobile-nav-offset {
-    padding-bottom: calc(3.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)) + 0.25rem);
-  }
-  .h-mobile-nav-spacer {
-    height: calc(3.75rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
-  }
-}
-
-/* Theme variables: light = default (:root), dark = .dark on html */
-:root {
-  --bg-primary: #f8fafc;
-  --bg-secondary: #f1f5f9;
-  --bg-card: #ffffff;
-  --text-primary: #0f172a;
-  --text-muted: #64748b;
-  --border-color: #e2e8f0;
-  --accent: #06b6d4;
-}
-
-.dark {
-  --bg-primary: #0f1117;
-  --bg-secondary: #1a1d2e;
-  --bg-card: #1e2235;
-  --text-primary: #ffffff;
-  --text-muted: #94a3b8;
-  --border-color: #2d3748;
-  --accent: #06b6d4;
-}
-
-/* Legacy alias */
-:root, .dark {
-  --accent-primary: var(--accent);
-}
+/* ============================================================================
+   JengaTrack Design System — Industrial Precision meets African Warmth
+   Dark-mode first. Earthy accents (burnt orange, golden amber) paired with
+   the cold precision of a Figma/Linear-grade enterprise dashboard.
+   ============================================================================ */
 
 :root {
-  /* Light Mode (Default) */
+  /* ── JengaTrack raw tokens ─────────────────────────────────────────── */
+  --jt-background: #0D0F0E;
+  --jt-surface: #141714;
+  --jt-surface-raised: #1C1F1C;
+  --jt-border: #2A2D2A;
+  --jt-border-strong: #3A3E3A;
+  --jt-text-primary: #F0EDE6;
+  --jt-text-secondary: #8A9189;
+  --jt-text-tertiary: #5A605A;
+
+  --jt-accent-primary: #E07B39;     /* burnt orange */
+  --jt-accent-secondary: #C9A84C;   /* golden amber */
+  --jt-accent-success: #4CAF7D;
+  --jt-accent-warning: #E0A030;
+  --jt-accent-danger: #D95F5F;
+  --jt-accent-info: #5B8FD9;
+  --jt-accent-whatsapp: #25D366;
+
+  --jt-sidebar-bg: #0A0C0A;
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 72px;
+
+  /* ── Shadcn tokens (LIGHT) wired for backwards compat ─────────────── */
   --background: 0 0% 100%;
-  /* graphite */
   --foreground: 165 4% 19%;
 
   --card: 0 0% 100%;
@@ -54,35 +41,31 @@
   --popover: 0 0% 100%;
   --popover-foreground: var(--foreground);
 
-  /* ocean-pine */
-  --primary: 189 64% 36%;
+  --primary: 22 72% 55%;       /* burnt orange */
   --primary-foreground: 0 0% 100%;
-  --primary-hover: 189 64% 32%;
+  --primary-hover: 22 72% 48%;
 
-  /* ash-gray */
-  --secondary: 0 0% 88%;
-  --secondary-foreground: var(--foreground);
+  --secondary: 47 55% 54%;     /* golden amber */
+  --secondary-foreground: 0 0% 100%;
 
   --muted: 0 0% 96%;
   --muted-foreground: 165 4% 34%;
 
-  /* aqua-breeze */
-  --accent: 179 41% 59%;
-  --accent-foreground: 165 4% 12%;
+  --accent: 22 72% 55%;
+  --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 60% 62%;
+  --destructive-foreground: 0 0% 100%;
 
   --border: 0 0% 90%;
   --input: 0 0% 90%;
   --ring: var(--primary);
 
-  /* Chart palette (Brand) */
-  --chart-1: 85 50% 54%;  /* fresh-fern */
-  --chart-2: 189 64% 36%; /* ocean-pine */
-  --chart-3: 87 43% 70%;  /* moss-green */
-  --chart-4: 179 41% 59%; /* aqua-breeze */
-  --chart-5: 165 4% 19%;  /* graphite */
+  --chart-1: 22 72% 55%;   /* burnt orange */
+  --chart-2: 47 55% 54%;   /* golden amber */
+  --chart-3: 152 38% 49%;  /* success green */
+  --chart-4: 216 60% 60%;  /* info blue */
+  --chart-5: 0 60% 62%;    /* danger */
 
   --sidebar: 0 0% 96%;
   --sidebar-foreground: var(--foreground);
@@ -93,277 +76,250 @@
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
 
-  --radius: 0.5rem;
-  --font-heading: 'League Spartan';
-  --font-body: 'Nunito Sans';
-  --font-sans: var(--font-body), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  .max-w-7xl {
-    max-width: 100% !important;
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-  
-  .px-4 {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-  
-  .py-6 {
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
-  }
-  
-  /* Ensure full width usage */
-  body, html {
-    overflow-x: hidden;
-    width: 100%;
-  }
-  
-  main {
-    max-width: 100% !important;
-    width: 100% !important;
-  }
-  
-  /* Mobile-friendly cards */
-  .card {
-    margin-bottom: 1rem;
-  }
-  
-  /* Mobile-friendly navigation tabs */
-  .nav-tab {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.875rem;
-  }
-  
-  /* Mobile-friendly form elements */
-  .form-input,
-  .form-textarea,
-  .form-select {
-    font-size: 16px; /* Prevents zoom on iOS */
-    min-height: 44px; /* Touch target size */
-  }
-  
-  /* Mobile-friendly buttons */
-  .btn-brand,
-  .btn-secondary {
-    min-height: 44px;
-    padding: 0.75rem 1rem;
-    font-size: 1rem;
-  }
-  
-  /* Mobile dialog adjustments */
-  [data-radix-popper-content-wrapper] {
-    width: 100vw !important;
-    padding: 0.5rem !important;
-  }
-  
-  .dialog-content,
-  [data-radix-dialog-content] {
-    margin: 0 !important;
-    max-height: 90vh !important;
-    width: calc(100vw - 1rem) !important;
-    max-width: calc(100vw - 1rem) !important;
-    position: fixed !important;
-    left: 50% !important;
-    top: 50% !important;
-    transform: translate(-50%, -50%) !important;
-  }
-  
-  /* Touch-friendly spacing */
-  .grid-cols-2 {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
+  --radius: 0.75rem;
+  --font-sans: "DM Sans", "Nunito Sans", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Syne", "League Spartan", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .dark {
-  /* graphite/dark - match landing #0a0a0a feel */
-  --background: 0 0% 4%;
-  --foreground: 210 40% 98%;
+  --background: 120 7% 6%;     /* #0D0F0E */
+  --foreground: 40 18% 92%;    /* #F0EDE6 */
 
-  --card: 0 0% 7%;
-  --card-foreground: 210 40% 98%;
+  --card: 120 7% 9%;           /* #141714 */
+  --card-foreground: 40 18% 92%;
 
-  --popover: 0 0% 7%;
-  --popover-foreground: 210 40% 98%;
+  --popover: 120 7% 12%;       /* #1C1F1C */
+  --popover-foreground: 40 18% 92%;
 
-  /* ocean-pine brightened for dark */
-  --primary: 189 64% 46%;
-  --primary-foreground: 0 0% 100%;
-  --primary-hover: 189 64% 40%;
+  --primary: 22 72% 55%;        /* #E07B39 */
+  --primary-foreground: 40 18% 96%;
+  --primary-hover: 22 72% 48%;
 
-  --secondary: 165 4% 18%;
-  --secondary-foreground: 210 40% 98%;
+  --secondary: 47 55% 54%;      /* #C9A84C */
+  --secondary-foreground: 120 7% 6%;
 
-  --muted: 0 0% 14%;
-  --muted-foreground: 215 20% 65%;
+  --muted: 120 7% 11%;
+  --muted-foreground: 120 4% 56%; /* #8A9189 */
 
-  --accent: 179 41% 30%;
-  --accent-foreground: 0 0% 100%;
+  --accent: 22 72% 55%;
+  --accent-foreground: 40 18% 96%;
 
-  --destructive: 0 62.8% 30.6%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive: 0 60% 62%;     /* #D95F5F */
+  --destructive-foreground: 40 18% 96%;
 
-  --border: 165 4% 22%;
-  --input: 165 4% 22%;
-  --ring: var(--primary);
+  --border: 120 4% 17%;         /* #2A2D2A */
+  --input: 120 4% 17%;
+  --ring: 22 72% 55%;
 
-  --chart-1: 85 50% 54%;
-  --chart-2: 189 64% 46%;
-  --chart-3: 87 43% 70%;
-  --chart-4: 179 41% 59%;
-  --chart-5: 0 0% 90%;
+  --chart-1: 22 72% 55%;
+  --chart-2: 47 55% 54%;
+  --chart-3: 152 38% 49%;
+  --chart-4: 216 60% 60%;
+  --chart-5: 0 60% 62%;
 
-  --sidebar: 165 4% 16%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
+  --sidebar: 120 8% 4%;         /* #0A0C0A */
+  --sidebar-foreground: 40 18% 92%;
+  --sidebar-primary: 22 72% 55%;
+  --sidebar-primary-foreground: 40 18% 96%;
+  --sidebar-accent: 22 72% 55%;
+  --sidebar-accent-foreground: 40 18% 96%;
+  --sidebar-border: 120 4% 15%;
+  --sidebar-ring: 22 72% 55%;
 }
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 @layer base {
   * {
     @apply border-border;
   }
-  
+
   body {
-    @apply bg-background text-foreground font-body antialiased;
-    min-height: 100vh;
-  }
-
-  html.dark body {
-    color: #F1F5F9;
-  }
-
-  html.light body {
+    font-family: var(--font-sans);
+    background: hsl(var(--background));
     color: hsl(var(--foreground));
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01", "ss03";
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply font-heading;
+    font-family: var(--font-heading);
+    letter-spacing: -0.015em;
+  }
+
+  /* All numeric values should use the mono font — add .num to force */
+  .num, [data-numeric="true"], .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "calt" 0;
+  }
+
+  /* Focus rings */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px rgba(224, 123, 57, 0.55);
+    border-radius: 6px;
+  }
+
+  /* Subtle global scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.06);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); background-clip: content-box; }
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   Component utilities
+   ──────────────────────────────────────────────────────────────────── */
+@layer components {
+  .jt-card {
+    @apply bg-card border border-border rounded-card;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.2);
+  }
+  .jt-card-raised {
+    background: hsl(var(--popover));
+    @apply border border-border rounded-card;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.5);
+  }
+
+  .jt-section {
+    @apply space-y-6;
+  }
+
+  .jt-h1 {
+    font-family: var(--font-heading);
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+  .jt-h2 {
+    font-family: var(--font-heading);
+    @apply text-xl md:text-2xl font-semibold tracking-tight;
+  }
+  .jt-eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground;
+  }
+
+  .jt-kpi-value {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    @apply text-[28px] md:text-[32px] leading-none font-semibold tracking-tight;
+  }
+
+  .jt-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider;
+  }
+
+  .jt-input {
+    @apply w-full rounded-btn bg-muted/40 border border-border px-3 py-2.5 text-sm text-foreground
+      placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/60
+      focus:shadow-[0_0_0_2px_rgba(224,123,57,0.25)] transition;
+  }
+
+  .jt-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-btn px-4 h-10 text-sm font-semibold
+      bg-primary text-primary-foreground hover:brightness-110 active:brightness-95
+      shadow-[0_8px_20px_-8px_rgba(224,123,57,0.55)] transition;
+  }
+  .jt-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-btn px-3 h-9 text-sm font-medium
+      text-muted-foreground hover:text-foreground hover:bg-muted/50 transition;
+  }
+  .jt-btn-outline {
+    @apply inline-flex items-center justify-center gap-2 rounded-btn px-4 h-10 text-sm font-medium
+      border border-border bg-transparent text-foreground hover:border-primary/50
+      hover:bg-primary/5 transition;
+  }
+
+  .jt-link {
+    @apply text-primary hover:underline underline-offset-4 decoration-primary/40;
+  }
+
+  .jt-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      rgba(255,255,255,0.04) 35%,
+      hsl(var(--muted)) 70%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s infinite linear;
+  }
+
+  .jt-logo-watermark {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .jt-pulse-amber {
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  /* Dense, touch-friendly table row */
+  .jt-row {
+    min-height: 48px;
   }
 }
 
-@layer components {
-  .btn-brand {
-    background: hsl(var(--primary));
-    color: hsl(var(--primary-foreground));
-    font-weight: bold;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    transition: all 0.2s;
+/* ────────────────────────────────────────────────────────────────────
+   Mobile specific (respect safe areas + fix modal overflow)
+   ──────────────────────────────────────────────────────────────────── */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
   }
-  
-  .btn-brand:hover {
-    background: hsl(var(--primary-hover));
+  .pb-mobile-nav-offset {
+    padding-bottom: calc(4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
   }
-  
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: hsl(var(--foreground));
-    transition: all 0.2s;
+  .h-mobile-nav-spacer {
+    height: calc(4.5rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
   }
-  
-  .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.2);
+
+  .text-balance { text-wrap: balance; }
+
+  /* Currency/number output helper */
+  .num-display {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
   }
-  
-  .btn-ghost {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: hsl(var(--foreground));
-    transition: all 0.2s;
+}
+
+/* Recharts tooltip default look — matches our surfaces */
+.recharts-default-tooltip {
+  background-color: hsl(var(--popover)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  padding: 8px 12px !important;
+}
+.recharts-tooltip-item-name,
+.recharts-tooltip-item-value,
+.recharts-tooltip-label {
+  color: hsl(var(--foreground)) !important;
+}
+
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    width: 100%;
   }
-  
-  .btn-ghost:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
+  main {
+    max-width: 100% !important;
   }
-  
-  .card-glass {
-    background: rgba(var(--card), 0.5);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  }
-  
-  .nav-tab {
-    padding: 0.5rem 1rem;
-    border-radius: 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: all 0.2s;
-    border: 1px solid;
-  }
-  
-  .nav-tab-active {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: hsl(var(--foreground));
-  }
-  
-  .nav-tab-inactive {
-    background: transparent;
-    border-color: transparent;
-    color: hsl(var(--muted-foreground));
-  }
-  
-  .nav-tab-inactive:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: hsl(var(--foreground));
-  }
-  
-  .status-pill {
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    border: 1px solid;
-  }
-  
-  .status-high {
-    background: rgba(220, 38, 38, 0.2);
-    border-color: rgba(220, 38, 38, 0.4);
-    color: rgb(252, 165, 165);
-  }
-  
-  .status-medium {
-    background: rgba(217, 119, 6, 0.2);
-    border-color: rgba(217, 119, 6, 0.4);
-    color: rgb(253, 224, 71);
-  }
-  
-  .status-low {
-    background: rgba(22, 163, 74, 0.2);
-    border-color: rgba(22, 163, 74, 0.4);
-    color: rgb(134, 239, 172);
-  }
-  
-  .status-active {
-    background: rgba(22, 163, 74, 0.2);
-    border-color: rgba(22, 163, 74, 0.4);
-    color: rgb(134, 239, 172);
-  }
-  
-  .status-overdue {
-    background: rgba(220, 38, 38, 0.2);
-    border-color: rgba(220, 38, 38, 0.4);
-    color: rgb(252, 165, 165);
-  }
-  
-  .status-complete {
-    @apply bg-ocean-pine/20 border-ocean-pine/40 text-ocean-pine;
+  .form-input, .form-textarea, .form-select {
+    font-size: 16px;
+    min-height: 44px;
   }
 }

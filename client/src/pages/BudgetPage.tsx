@@ -46,8 +46,8 @@ import { cn } from "@/lib/utils";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
-  teal: "#00bcd4",
-  green: "#22c55e",
+  teal: "#E07B39",
+  green: "#4CAF7D",
   amber: "#f59e0b",
   red: "#ef4444",
   orange: "#f97316",
@@ -55,19 +55,24 @@ const COLORS = {
 };
 
 const PROJECT_COLORS = [
-  "#00bcd4", "#22c55e", "#3b82f6", "#f97316", "#ec4899",
+  "#E07B39", "#4CAF7D", "#3b82f6", "#f97316", "#ec4899",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+// Currency for local formatting — injected from ProjectContext by main component.
+let __currentCurrency = "UGX";
+export function __setBudgetCurrency(c: string) {
+  __currentCurrency = c || "UGX";
+}
 function formatUgx(value: number): string {
   const num = Number(value) || 0;
+  const ccy = __currentCurrency;
   if (num >= 1_000_000_000) {
-    const b = num / 1_000_000_000;
-    return `UGX ${b.toFixed(3)}B`;
+    return `${ccy} ${(num / 1_000_000_000).toFixed(3)}B`;
   }
-  if (num >= 1_000_000) return `UGX ${(num / 1_000_000).toFixed(2)}M`;
-  if (num >= 1_000) return `UGX ${(num / 1_000).toFixed(0)}K`;
-  return `UGX ${num.toLocaleString()}`;
+  if (num >= 1_000_000) return `${ccy} ${(num / 1_000_000).toFixed(2)}M`;
+  if (num >= 1_000) return `${ccy} ${(num / 1_000).toFixed(0)}K`;
+  return `${ccy} ${num.toLocaleString()}`;
 }
 
 function pct(numerator: number, denominator: number): number {
@@ -248,7 +253,7 @@ function BudgetComparisonSection({
     <div className="bg-card border border-border rounded-xl p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <PieChart className="w-5 h-5 text-[#00bcd4]" />
+          <PieChart className="w-5 h-5 text-[#E07B39]" />
           Budget Comparison
         </h3>
       </div>
@@ -258,7 +263,7 @@ function BudgetComparisonSection({
         <div>
           <div className="flex justify-between text-xs mb-2">
             <span className="text-muted-foreground">Project Progress</span>
-            <span className="text-[#00bcd4] font-medium">
+            <span className="text-[#E07B39] font-medium">
               {tasksPct !== null
                 ? `${progressPct}%`
                 : expenses.length > 0
@@ -268,7 +273,7 @@ function BudgetComparisonSection({
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#00bcd4] to-[#0097a7] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
+              className="h-full rounded-full bg-gradient-to-r from-[#E07B39] to-[#0097a7] shadow-[0_0_10px_rgba(0,188,212,0.3)] transition-all duration-1000 ease-out"
               style={{ width: `${Math.max(progressPct, progressPct > 0 ? 1 : 0)}%` }}
             />
           </div>
@@ -318,7 +323,7 @@ function BudgetComparisonSection({
       <div className={cn(
         "mt-6 py-3 px-4 rounded-lg text-xs font-medium flex items-center gap-2",
         gap > 5 ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : 
-        gap < -5 ? "bg-[#00bcd4]/10 text-[#00bcd4] border border-[#00bcd4]/20" : 
+        gap < -5 ? "bg-[#E07B39]/10 text-[#E07B39] border border-[#E07B39]/20" : 
         "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
       )}>
         {gap > 5 ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
@@ -395,7 +400,7 @@ function AlertsSection({
                   <span className={cn(
                     "text-[10px] uppercase font-bold tracking-wide",
                     a.subtitle === "Budget Overrun" || a.subtitle === "Price Spike" ? "text-red-400" :
-                    a.subtitle === "Budget on track" ? "text-emerald-400" : "text-[#00bcd4]"
+                    a.subtitle === "Budget on track" ? "text-emerald-400" : "text-[#E07B39]"
                   )}>
                     {a.subtitle}
                   </span>
@@ -457,7 +462,7 @@ function CostTrendChart({
     <div className="bg-card border border-border rounded-xl p-6">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-[#00bcd4]" />
+          <TrendingUp className="w-5 h-5 text-[#E07B39]" />
           Cost Trend
         </h3>
         <div className="flex bg-muted p-1 rounded-lg border border-border">
@@ -468,7 +473,7 @@ function CostTrendChart({
               className={cn(
                 "px-3 py-1 text-xs font-medium rounded-md transition-all",
                 period === p 
-                  ? "bg-[#00bcd4] text-black shadow-lg" 
+                  ? "bg-[#E07B39] text-black shadow-lg" 
                   : "text-muted-foreground hover:text-foreground hover:bg-background/50"
               )}
             >
@@ -514,17 +519,17 @@ function CostTrendChart({
             <Line
               type="monotone"
               dataKey="total"
-              stroke="#00bcd4"
+              stroke="#E07B39"
               strokeWidth={3}
-              dot={{ r: 4, fill: "currentColor", stroke: "#00bcd4", strokeWidth: 2 }}
-              activeDot={{ r: 6, fill: "#00bcd4", stroke: "#fff", strokeWidth: 2 }}
+              dot={{ r: 4, fill: "currentColor", stroke: "#E07B39", strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: "#E07B39", stroke: "#fff", strokeWidth: 2 }}
             />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       <div className="mt-4 flex items-center justify-between pt-4 border-t border-border">
-        <div className="flex items-center gap-3 pl-4 border-l-4 border-[#00bcd4]">
+        <div className="flex items-center gap-3 pl-4 border-l-4 border-[#E07B39]">
           <div>
             <span className="text-2xl font-bold text-foreground block leading-none">
               {formatUgx(lastWeekSpend)}
@@ -535,7 +540,7 @@ function CostTrendChart({
           </div>
         </div>
         <div className="text-right">
-             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#00bcd4] hover:bg-[#00bcd4]/10">
+             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-[#E07B39] hover:bg-[#E07B39]/10">
                View Full Report <ArrowLeft className="w-3 h-3 ml-1 rotate-180" />
              </Button>
         </div>
@@ -551,6 +556,11 @@ export default function BudgetPage() {
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];
   const hasProjects = projects.length > 0;
+
+  // Keep currency in sync with active project (dynamic, no hardcoded UGX).
+  React.useEffect(() => {
+    __setBudgetCurrency(currentProject?.currency || "UGX");
+  }, [currentProject?.currency]);
 
   const projectIdFromUrl =
     typeof window !== "undefined"
@@ -922,8 +932,8 @@ export default function BudgetPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
         <div className="max-w-md w-full space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
-            <DollarSign className="w-10 h-10 text-[#00bcd4]" />
+          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
+            <DollarSign className="w-10 h-10 text-[#E07B39]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("budget.title")}</h1>
@@ -931,7 +941,7 @@ export default function BudgetPage() {
               {hasProjects ? t("budget.noProjectSelect") : t("budget.noProjectCreate")}
             </p>
           </div>
-          <Button asChild className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold">
+          <Button asChild className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold">
             <Link href="/projects">
               {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
             </Link>
@@ -976,7 +986,7 @@ export default function BudgetPage() {
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
+            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -1047,7 +1057,7 @@ allData={costTrendDataRaw}
         {expenses.length > 0 && (
           <div className="bg-card border border-border rounded-xl p-6">
             <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-[#00bcd4]" />
+              <CreditCard className="w-5 h-5 text-[#E07B39]" />
               Expense history
             </h3>
             <div className="space-y-3 mb-4">
@@ -1059,7 +1069,7 @@ allData={costTrendDataRaw}
                     placeholder="Search expenses..."
                     value={expenseSearch}
                     onChange={(e) => setExpenseSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent placeholder:text-muted-foreground"
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39] focus:border-transparent placeholder:text-muted-foreground"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -1068,7 +1078,7 @@ allData={costTrendDataRaw}
                     type="date"
                     value={expenseDateFrom}
                     onChange={(e) => setExpenseDateFrom(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -1077,13 +1087,13 @@ allData={costTrendDataRaw}
                     type="date"
                     value={expenseDateTo}
                     onChange={(e) => setExpenseDateTo(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
                   />
                 </div>
                 <select
                   value={expenseSort}
                   onChange={(e) => setExpenseSort(e.target.value as "newest" | "oldest" | "highest" | "lowest")}
-                  className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                  className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
@@ -1123,7 +1133,7 @@ allData={costTrendDataRaw}
                           value={editExpenseDescription}
                           onChange={(e) => setEditExpenseDescription(e.target.value)}
                           placeholder="Description"
-                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
                         />
                         <input
                           type="number"
@@ -1132,12 +1142,12 @@ allData={costTrendDataRaw}
                           value={editExpenseAmount}
                           onChange={(e) => setEditExpenseAmount(e.target.value)}
                           placeholder="Amount"
-                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#00bcd4]"
+                          className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
                         />
                       </div>
                       <Button
                         size="sm"
-                        className="bg-[#00bcd4] hover:bg-[#00acc1] text-black shrink-0"
+                        className="bg-[#E07B39] hover:bg-[#F08B49] text-black shrink-0"
                         disabled={savingExpenseEdit}
                         onClick={() => handleSaveExpenseEdit(expense.id)}
                       >
@@ -1157,7 +1167,7 @@ allData={costTrendDataRaw}
                           })()}
                         </p>
                       </div>
-                      <span className="text-sm font-bold text-[#00bcd4] shrink-0">{formatUgx(parseFloat(String(expense.amount || 0)))}</span>
+                      <span className="text-sm font-bold text-[#E07B39] shrink-0">{formatUgx(parseFloat(String(expense.amount || 0)))}</span>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button

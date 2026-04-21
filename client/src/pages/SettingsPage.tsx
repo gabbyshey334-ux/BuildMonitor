@@ -295,8 +295,8 @@ export default function SettingsPage() {
     return (
       <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
-            <Settings className="w-10 h-10 text-[#00bcd4]" />
+          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
+            <Settings className="w-10 h-10 text-[#E07B39]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("settings.title")}</h1>
@@ -306,7 +306,7 @@ export default function SettingsPage() {
           </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold"
+            className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold"
           >
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
           </Button>
@@ -342,7 +342,7 @@ export default function SettingsPage() {
           <div className="flex flex-col md:flex-row gap-6 items-start">
             <div className="flex-1">
               <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mb-2">
-                <Smartphone className="w-5 h-5 text-[#22c55e]" />
+                <Smartphone className="w-5 h-5 text-[#4CAF7D]" />
                 Link WhatsApp
               </h3>
               <p className="text-muted-foreground text-sm mb-4">
@@ -353,17 +353,17 @@ export default function SettingsPage() {
                   value={linkPhone}
                   onChange={(e) => setLinkPhone(e.target.value)}
                   placeholder="+234..."
-                  className="bg-muted border-border text-foreground focus:ring-[#22c55e] focus:border-[#22c55e]"
+                  className="bg-muted border-border text-foreground focus:ring-[#4CAF7D] focus:border-[#4CAF7D]"
                 />
                 <Button 
                   onClick={handleLinkWhatsApp} 
                   disabled={linkingWhatsApp}
-                  className="bg-[#22c55e] hover:bg-[#16a34a] text-white"
+                  className="bg-[#4CAF7D] hover:bg-[#16a34a] text-white"
                 >
                   {linkingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Link"}
                 </Button>
               </div>
-              {linkSuccess && <p className="text-[#22c55e] text-sm mt-2">✅ Number linked successfully.</p>}
+              {linkSuccess && <p className="text-[#4CAF7D] text-sm mt-2">✅ Number linked successfully.</p>}
               {linkError && <p className="text-red-500 text-sm mt-2">{linkError}</p>}
             </div>
           </div>
@@ -375,7 +375,7 @@ export default function SettingsPage() {
           {/* 2. Project Settings Card */}
           <div className="bg-card border border-border rounded-xl p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
-              <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
+              <div className="p-2 rounded-lg bg-[#E07B39]/10 text-[#E07B39]">
                 <Settings className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold text-foreground">Project Settings</h2>
@@ -388,7 +388,7 @@ export default function SettingsPage() {
                   <Input
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                    className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -399,7 +399,7 @@ export default function SettingsPage() {
                       type="number"
                       value={form.budget}
                       onChange={(e) => setForm({ ...form, budget: e.target.value })}
-                      className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-12"
+                      className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39] pl-12"
                     />
                   </div>
                 </div>
@@ -411,7 +411,7 @@ export default function SettingsPage() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={3}
-                  className="w-full rounded-md bg-muted border border-border text-foreground focus:ring-2 focus:ring-[#00bcd4] focus:border-transparent p-3 text-sm placeholder:text-muted-foreground resize-none"
+                  className="w-full rounded-md bg-muted border border-border text-foreground focus:ring-2 focus:ring-[#E07B39] focus:border-transparent p-3 text-sm placeholder:text-muted-foreground resize-none"
                 />
               </div>
 
@@ -447,7 +447,7 @@ export default function SettingsPage() {
                 <Button 
                   type="submit" 
                   disabled={saving}
-                  className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold min-w-[120px]"
+                  className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                   Save Changes
@@ -459,7 +459,7 @@ export default function SettingsPage() {
           {/* 3. Profile Settings Card */}
           <div className="bg-card border border-border rounded-xl p-6 md:p-8">
             <div className="flex items-center gap-3 mb-6 pb-6 border-b border-border">
-              <div className="p-2 rounded-lg bg-[#00bcd4]/10 text-[#00bcd4]">
+              <div className="p-2 rounded-lg bg-[#E07B39]/10 text-[#E07B39]">
                 <User className="w-6 h-6" />
               </div>
               <h2 className="text-xl font-bold text-foreground">Profile Settings</h2>
@@ -472,7 +472,7 @@ export default function SettingsPage() {
                   <Input
                     value={form.full_name}
                     onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                    className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4]"
+                    className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39]"
                   />
                 </div>
                 <div className="space-y-2">
@@ -482,7 +482,7 @@ export default function SettingsPage() {
                     <Input
                       value={form.whatsapp_number}
                       onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                      className="bg-muted border-border text-foreground focus:ring-[#00bcd4] focus:border-[#00bcd4] pl-10"
+                      className="bg-muted border-border text-foreground focus:ring-[#E07B39] focus:border-[#E07B39] pl-10"
                     />
                   </div>
                 </div>
@@ -499,7 +499,7 @@ export default function SettingsPage() {
                 <Button 
                   type="submit" 
                   disabled={saving}
-                  className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold min-w-[120px]"
+                  className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
                   Save Profile
@@ -563,7 +563,7 @@ export default function SettingsPage() {
               </div>
               
               {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
-              {passwordSuccess && <p className="text-[#22c55e] text-sm">Password updated successfully.</p>}
+              {passwordSuccess && <p className="text-[#4CAF7D] text-sm">Password updated successfully.</p>}
               
               <Button 
                 type="submit"

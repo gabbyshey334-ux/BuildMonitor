@@ -1,7 +1,20 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Plus, FolderOpen, ChevronLeft, ChevronRight, Smartphone, LayoutGrid, DollarSign, Activity } from "lucide-react";
+import {
+  Plus,
+  FolderOpen,
+  ChevronLeft,
+  ChevronRight,
+  Smartphone,
+  LayoutGrid,
+  Wallet,
+  Activity,
+  Search,
+  ArrowUpDown,
+  AlertTriangle,
+} from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { NewProjectModal, type NewProjectFormData } from "@/components/projects/NewProjectModal";
@@ -13,30 +26,33 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Project } from "@/contexts/ProjectContext";
 import { cn } from "@/lib/utils";
+import { JengaTrackLogo } from "@/components/ui/Logo";
+import { KPICard } from "@/components/ui/KPICard";
+import { CurrencyValue } from "@/components/ui/CurrencyValue";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { safeNum } from "@/lib/analytics";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
-const PROJECTS_PER_PAGE = 9; // Increased slightly for grid
+const PROJECTS_PER_PAGE = 9;
 
 type SortOption = "date" | "name" | "progress" | "budget";
 
-function formatBudgetShort(n: number) {
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  return n.toLocaleString();
-}
-
 function ProjectsLoadingSkeleton() {
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-pulse">
+    <div className="max-w-[1600px] mx-auto space-y-8">
       <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-muted rounded" />
-        <div className="h-10 w-32 bg-muted rounded" />
+        <div className="h-10 w-64 jt-shimmer rounded" />
+        <div className="h-10 w-36 jt-shimmer rounded-btn" />
       </div>
-      <div className="h-32 bg-card border border-border rounded-xl" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="h-28 jt-card jt-shimmer" />
+        ))}
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="h-64 bg-card border border-border rounded-xl" />
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-64 jt-card jt-shimmer" />
         ))}
       </div>
     </div>
@@ -52,6 +68,7 @@ export default function ProjectsPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [query, setQuery] = useState("");
   const { toast } = useToast();
   const invalidateProjects = useInvalidateProjects();
 
@@ -70,23 +87,40 @@ export default function ProjectsPage() {
   const list = Array.isArray(fetched) ? fetched : projects;
   const hasProjects = list.length > 0;
 
-  // Stats calculation
-  const stats = useMemo(() => {
-    const totalProjects = list.length;
-    const totalBudget = list.reduce((sum, p) => sum + (p.totalBudget || 0), 0);
-    const activeProjects = list.filter(p => p.status === 'active' || !p.status).length;
-    return { totalProjects, totalBudget, activeProjects };
+  // Display currency: first project's currency (or fall back). Spec: no hardcoded currency.
+  const displayCurrency = useMemo(() => {
+    const first = list.find((p) => !!p.currency);
+    return first?.currency || "UGX";
   }, [list]);
 
+  const stats = useMemo(() => {
+    const totalProjects = list.length;
+    const totalBudget = list.reduce((sum, p) => sum + safeNum(p.totalBudget), 0);
+    const totalSpent = list.reduce((sum, p) => sum + safeNum(p.spentAmount), 0);
+    const activeProjects = list.filter((p) => p.status === "active" || !p.status).length;
+    const completedProjects = list.filter((p) => p.status === "completed").length;
+    return { totalProjects, totalBudget, totalSpent, activeProjects, completedProjects };
+  }, [list]);
+
+  const filtered = useMemo(() => {
+    if (!query.trim()) return list;
+    const q = query.toLowerCase();
+    return list.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(q) ||
+        p.location?.toLowerCase().includes(q),
+    );
+  }, [list, query]);
+
   const sortedList = useMemo(() => {
-    const arr = [...list];
+    const arr = [...filtered];
     switch (sortBy) {
       case "name":
         return arr.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
       case "progress":
         return arr.sort((a, b) => (b.progress ?? 0) - (a.progress ?? 0));
       case "budget":
-        return arr.sort((a, b) => (b.totalBudget ?? 0) - (a.totalBudget ?? 0));
+        return arr.sort((a, b) => safeNum(b.totalBudget) - safeNum(a.totalBudget));
       case "date":
       default:
         return arr.sort((a, b) => {
@@ -95,7 +129,7 @@ export default function ProjectsPage() {
           return tb - ta;
         });
     }
-  }, [list, sortBy]);
+  }, [filtered, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(sortedList.length / PROJECTS_PER_PAGE));
   const paginatedList = useMemo(() => {
@@ -117,7 +151,7 @@ export default function ProjectsPage() {
         budgetAmount: parseBudget(form.totalBudget) || undefined,
         status: "active",
         channelType: "direct",
-        location: form.location // Ensure location is passed if needed by backend, though description maps to it usually
+        location: form.location,
       });
       const data = await res.json();
       if (!data.success || !data.project) throw new Error(data.error || "Create failed");
@@ -125,10 +159,13 @@ export default function ProjectsPage() {
         id: data.project.id,
         name: data.project.name,
         location: data.project.description || undefined,
-        totalBudget: data.project.budgetAmount != null ? parseFloat(String(data.project.budgetAmount)) : undefined,
+        totalBudget:
+          data.project.budgetAmount != null
+            ? parseFloat(String(data.project.budgetAmount))
+            : undefined,
         spentAmount: 0,
         status: "active",
-        progress: 0, // Explicitly set progress for new projects
+        progress: 0,
       };
       setProjects([...list, newProject]);
       setCurrentProject(newProject);
@@ -150,190 +187,297 @@ export default function ProjectsPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
-        <div className="space-y-4">
-          <p className="text-red-500">
-            {error instanceof Error ? error.message : t("projects.loadError")}
-          </p>
-          <Button variant="outline" onClick={() => refetch()} className="border-border text-muted-foreground">
-            {t("projects.tryAgain")}
-          </Button>
-        </div>
+      <div className="max-w-[1600px] mx-auto">
+        <EmptyState
+          icon={AlertTriangle}
+          title="Couldn't load projects"
+          description={
+            error instanceof Error ? error.message : t("projects.loadError")
+          }
+          action={
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              className="border-border"
+            >
+              {t("projects.tryAgain")}
+            </Button>
+          }
+        />
       </div>
     );
   }
 
   return (
     <>
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* 1. Header Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">{t("projects.title")}</h1>
-            <p className="text-muted-foreground mt-1">{list.length} projects total</p>
+      <div className="max-w-[1600px] mx-auto space-y-8">
+        {/* ── Hero Header with prominent logo ───────────────────────── */}
+        <motion.header
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col md:flex-row md:items-end md:justify-between gap-5"
+        >
+          <div className="flex flex-col gap-4">
+            <JengaTrackLogo
+              size="lg"
+              variant="full"
+              showTagline
+              className="md:-mb-1"
+            />
+            <div>
+              <h1 className="jt-h1 text-foreground">
+                {t("projects.title") || "Your Projects"}
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                {list.length === 0
+                  ? "Start by creating your first project."
+                  : `${list.length} project${list.length === 1 ? "" : "s"} — ${stats.activeProjects} active${stats.completedProjects ? `, ${stats.completedProjects} completed` : ""}`}
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="relative group">
+          <Button
+            onClick={() => setModalOpen(true)}
+            className={cn(
+              "jt-btn-primary h-10 px-5 self-start md:self-auto shrink-0",
+            )}
+          >
+            <Plus className="h-4 w-4" />
+            {t("projects.new") || "New Project"}
+          </Button>
+        </motion.header>
+
+        {/* ── Stats KPIs ────────────────────────────────────────────── */}
+        {hasProjects && (
+          <section
+            className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+            aria-label="Portfolio summary"
+          >
+            <KPICard
+              index={0}
+              label="Total Projects"
+              value={stats.totalProjects}
+              sub={`${stats.activeProjects} active`}
+              icon={LayoutGrid}
+              accent="primary"
+            />
+            <KPICard
+              index={1}
+              label="Total Budget"
+              value={
+                <CurrencyValue
+                  value={stats.totalBudget}
+                  currency={displayCurrency}
+                  compact
+                  size="xl"
+                />
+              }
+              sub="Across all projects"
+              icon={Wallet}
+              accent="secondary"
+            />
+            <KPICard
+              index={2}
+              label="Total Spent"
+              value={
+                <CurrencyValue
+                  value={stats.totalSpent}
+                  currency={displayCurrency}
+                  compact
+                  size="xl"
+                />
+              }
+              sub={
+                stats.totalBudget > 0
+                  ? `${((stats.totalSpent / stats.totalBudget) * 100).toFixed(0)}% of budget`
+                  : "No budget set"
+              }
+              icon={Activity}
+              accent="info"
+            />
+            <KPICard
+              index={3}
+              label="Active Sites"
+              value={stats.activeProjects}
+              sub={
+                stats.completedProjects > 0
+                  ? `${stats.completedProjects} completed`
+                  : "All active"
+              }
+              icon={Activity}
+              accent={stats.activeProjects > 0 ? "success" : "info"}
+            />
+          </section>
+        )}
+
+        {/* ── Toolbar: search + sort ───────────────────────────────── */}
+        {hasProjects && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search projects by name or location…"
+                className="jt-input pl-10 h-10"
+                aria-label="Search projects"
+              />
+            </div>
+            <div className="relative">
+              <ArrowUpDown className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
               <select
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value as SortOption);
                   setPage(1);
                 }}
-                className="appearance-none bg-card border border-border text-foreground text-sm rounded-lg pl-4 pr-10 py-2.5 focus:outline-none focus:border-[#00bcd4] cursor-pointer hover:bg-muted/50 transition-colors"
+                className={cn(
+                  "appearance-none rounded-btn bg-muted/40 border border-border",
+                  "pl-10 pr-10 py-2 h-10 text-sm text-foreground",
+                  "focus:outline-none focus:border-jenga-primary/60",
+                  "focus:shadow-[0_0_0_2px_rgba(224,123,57,0.25)]",
+                  "transition cursor-pointer",
+                )}
+                aria-label="Sort projects"
               >
                 <option value="date">Sort: Date updated</option>
                 <option value="name">Sort: Name</option>
                 <option value="progress">Sort: Progress</option>
                 <option value="budget">Sort: Budget</option>
               </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-                <ChevronRight className="w-4 h-4 rotate-90" />
-              </div>
-            </div>
-
-            <Button
-              onClick={() => setModalOpen(true)}
-              className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold rounded-full px-5 py-2.5 shadow-[0_0_15px_rgba(0,188,212,0.2)] hover:shadow-[0_0_20px_rgba(0,188,212,0.4)] transition-all"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              {t("projects.new")}
-            </Button>
-          </div>
-        </div>
-
-        {/* 2. Stats Banner */}
-        {hasProjects && (
-          <div className="bg-card border border-border border-l-4 border-l-[#00bcd4] rounded-xl p-6 shadow-lg">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
-              <div className="flex items-center gap-4 px-4">
-                <div className="p-3 rounded-full bg-muted text-[#00bcd4]">
-                  <LayoutGrid className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Total Projects</p>
-                  <p className="text-2xl font-bold text-foreground">{stats.totalProjects}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
-                <div className="p-3 rounded-full bg-muted text-emerald-500">
-                  <DollarSign className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Total Budget</p>
-                  <p className="text-2xl font-bold text-foreground">UGX {formatBudgetShort(stats.totalBudget)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 px-4 pt-4 md:pt-0">
-                <div className="p-3 rounded-full bg-muted text-amber-500">
-                  <Activity className="w-6 h-6" />
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase tracking-wider font-medium">Active Projects</p>
-                  <p className="text-2xl font-bold text-foreground">{stats.activeProjects}</p>
-                </div>
-              </div>
+              <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
           </div>
         )}
 
-        {/* 3. Projects Grid or Empty State */}
+        {/* ── Grid / Empty State ───────────────────────────────────── */}
         {hasProjects ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {paginatedList.map((project) => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-8">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className="bg-card border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                
-                <span className="text-sm text-muted-foreground px-4">
-                  Page <span className="text-foreground font-medium">{page}</span> of {totalPages}
-                </span>
-
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className="bg-card border-border text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+          sortedList.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="No matches"
+              description={`No projects match "${query}". Try a different search.`}
+              compact
+            />
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {paginatedList.map((project, i) => (
+                  <ProjectCard key={project.id} project={project} index={i} />
+                ))}
               </div>
-            )}
-          </>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="bg-jenga-raised/60 border-border hover:border-jenga-primary/40 hover:bg-jenga-raised"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground font-mono">
+                    <span className="text-foreground font-semibold">{page}</span>
+                    {" / "}
+                    <span>{totalPages}</span>
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="bg-jenga-raised/60 border-border hover:border-jenga-primary/40 hover:bg-jenga-raised"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </>
+          )
         ) : (
-          /* 4. Empty State */
-          <div className="flex flex-col items-center justify-center py-24 text-center border border-dashed border-zinc-800 rounded-2xl bg-card/50">
-            <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mb-6 ring-1 ring-[#00bcd4]/20">
-              <FolderOpen className="w-10 h-10 text-[#00bcd4]" />
-            </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">
-              {t("projects.empty.title")}
-            </h2>
-            <p className="text-muted-foreground max-w-md mb-8 leading-relaxed">
-              {t("projects.emptySubtitleLong")}
-            </p>
-            <div className="flex gap-4">
+          <EmptyState
+            icon={FolderOpen}
+            title={t("projects.empty.title") || "No projects yet"}
+            description={
+              t("projects.emptySubtitleLong") ||
+              "Track expenses, materials, and progress across every site. Create your first project to get started."
+            }
+            action={
               <Button
                 onClick={() => setModalOpen(true)}
-                className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-bold h-11 px-6"
+                className="jt-btn-primary h-11 px-6"
               >
-                <Plus className="h-4 w-4 mr-2" />
-                {t("projects.createNew")}
+                <Plus className="h-4 w-4" />
+                {t("projects.createNew") || "Create Project"}
               </Button>
-              <Button
-                variant="outline"
-                className="border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 h-11 px-6"
-                asChild
+            }
+            secondaryAction={
+              <a
+                href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="jt-btn-outline h-11 px-6"
               >
-                <a href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`} target="_blank" rel="noreferrer">
-                  Link WhatsApp
-                </a>
-              </Button>
-            </div>
-          </div>
+                <Smartphone className="h-4 w-4 text-jenga-whatsapp" />
+                Link WhatsApp
+              </a>
+            }
+          />
         )}
 
-        {/* 6. Link WhatsApp Section */}
+        {/* ── WhatsApp footer ──────────────────────────────────────── */}
         {hasProjects && (
-          <div className="bg-card border border-border rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <motion.aside
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.15 }}
+            className={cn(
+              "jt-card p-5 md:p-6",
+              "flex flex-col md:flex-row items-start md:items-center justify-between gap-5",
+              "border-l-[3px] border-l-jenga-whatsapp/70",
+            )}
+          >
             <div className="flex items-start gap-4">
-              <div className="p-3 rounded-full bg-[#22c55e]/10 text-[#22c55e] shrink-0">
-                <Smartphone className="w-6 h-6" />
+              <div className="p-2.5 rounded-btn bg-jenga-whatsapp/10 text-jenga-whatsapp shrink-0">
+                <Smartphone className="w-5 h-5" />
               </div>
-              <div>
-                <h3 className="text-lg font-bold text-foreground mb-1">Import from WhatsApp</h3>
-                <p className="text-muted-foreground text-sm max-w-lg">
-                  {t("projects.orWhatsApp")} <span className="text-[#22c55e] font-mono">{WHATSAPP_JOIN}</span> with code <span className="text-foreground font-mono bg-muted px-1 rounded">{JOIN_CODE}</span> to get started instantly.
+              <div className="min-w-0">
+                <h3 className="font-display font-semibold text-foreground text-base mb-1">
+                  Log from WhatsApp
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-xl leading-relaxed">
+                  Send a message to{" "}
+                  <span className="text-jenga-whatsapp font-mono font-semibold">
+                    {WHATSAPP_JOIN}
+                  </span>{" "}
+                  with{" "}
+                  <span className="text-foreground font-mono bg-muted/60 px-1.5 py-0.5 rounded text-[12px]">
+                    {JOIN_CODE}
+                  </span>{" "}
+                  to log expenses, materials, and daily updates — all from the site.
                 </p>
               </div>
             </div>
-            <Button
-              variant="outline"
-              className="border-[#22c55e]/30 text-[#22c55e] hover:bg-[#22c55e]/10 shrink-0"
-              asChild
+            <a
+              href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex items-center gap-2 h-10 px-4 rounded-btn shrink-0 text-sm font-semibold",
+                "border border-jenga-whatsapp/30 text-jenga-whatsapp hover:bg-jenga-whatsapp/10 transition",
+              )}
             >
-              <a href={`https://wa.me/${WHATSAPP_JOIN.replace(/\s/g, "")}`} target="_blank" rel="noopener noreferrer">
-                Chat on WhatsApp
-              </a>
-            </Button>
-          </div>
+              <Smartphone className="h-4 w-4" />
+              Chat on WhatsApp
+            </a>
+          </motion.aside>
         )}
       </div>
 

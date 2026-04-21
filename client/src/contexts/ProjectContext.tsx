@@ -12,6 +12,8 @@ export interface Project {
   lastActivityAt?: string;
   status?: "active" | "completed";
   whatsappNumber?: string;
+  currency?: string;
+  startedAt?: string;
 }
 
 interface ProjectContextType {

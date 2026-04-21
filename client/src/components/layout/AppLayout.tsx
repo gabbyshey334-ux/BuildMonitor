@@ -30,25 +30,30 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsJson]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      <TopBar onMenuClick={toggle} showHamburger />
+    <div className="min-h-screen overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
       <Sidebar open={open} onToggle={toggle} />
 
-      <main
+      <div
         className={cn(
-          "min-h-screen transition-[margin-left] duration-300 ease-out",
-          "pt-14",
-          "pb-mobile-nav-offset md:pb-0",
-          open ? "md:ml-[240px]" : "md:ml-16"
+          "min-h-screen flex flex-col transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          open ? "md:ml-sidebar-open" : "md:ml-sidebar-closed",
         )}
       >
-        <div className="p-3 md:p-6 max-w-[100vw] overflow-x-hidden">
-          {children}
-        </div>
-      </main>
+        <TopBar onMenuClick={toggle} showHamburger />
 
-      <BottomNav />
+        <main
+          className={cn(
+            "flex-1 pb-mobile-nav-offset md:pb-0",
+            "max-w-[100vw] overflow-x-hidden",
+          )}
+        >
+          <div className="px-4 py-5 md:px-8 md:py-8 max-w-[1600px] mx-auto">
+            {children}
+          </div>
+        </main>
 
+        <BottomNav />
+      </div>
     </div>
   );
 }

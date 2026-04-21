@@ -25,8 +25,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+let __trendsCurrency = "UGX";
 function formatUgx(n: number) {
-  return `UGX ${Math.round(n).toLocaleString()}`;
+  return `${__trendsCurrency} ${Math.round(n).toLocaleString()}`;
 }
 
 function formatDate(s: string) {
@@ -75,6 +76,10 @@ export default function TrendsPage() {
   const search = typeof window !== "undefined" ? window.location.search : "";
   const projectId = new URLSearchParams(search).get("project") ?? currentProject?.id ?? null;
 
+  React.useEffect(() => {
+    __trendsCurrency = currentProject?.currency || "UGX";
+  }, [currentProject?.currency]);
+
   const { data, isLoading, isError, error, refetch } = useProjectTrends(projectId);
 
   if (isLoading) return <TrendsSkeleton />;
@@ -83,8 +88,8 @@ export default function TrendsPage() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="text-center max-w-md space-y-6">
-          <div className="w-20 h-20 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mx-auto ring-1 ring-[#00bcd4]/20">
-            <Activity className="w-10 h-10 text-[#00bcd4]" />
+          <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
+            <Activity className="w-10 h-10 text-[#E07B39]" />
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold text-foreground">{t("trends.title")}</h1>
@@ -94,7 +99,7 @@ export default function TrendsPage() {
           </div>
           <Button
             onClick={() => setLocation("/projects")}
-            className="bg-[#00bcd4] hover:bg-[#00acc1] text-black font-semibold"
+            className="bg-[#E07B39] hover:bg-[#F08B49] text-black font-semibold"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             {hasProjects ? t("projects.backToProjects") : t("projects.createFirst")}
@@ -154,14 +159,14 @@ export default function TrendsPage() {
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#00bcd4] hover:border-[#00bcd4]/50 transition-all"
+            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
 
         {/* 2. Prediction Banner */}
-        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-[#00bcd4] to-amber-500">
+        <div className="relative p-[1px] rounded-xl bg-gradient-to-r from-[#E07B39] to-amber-500">
           <div className="bg-card rounded-[11px] p-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-8 opacity-5">
               {hasBudgetWarning ? (
@@ -173,7 +178,7 @@ export default function TrendsPage() {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
               <div>
-                <div className="flex items-center gap-2 mb-2 text-[#00bcd4]">
+                <div className="flex items-center gap-2 mb-2 text-[#E07B39]">
                   <Activity className="w-5 h-5" />
                   <span className="text-sm font-bold uppercase tracking-wider">Weekly Burn Rate</span>
                 </div>
@@ -214,7 +219,7 @@ export default function TrendsPage() {
         <div className="bg-card border border-border rounded-xl p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-[#00bcd4]" />
+              <DollarSign className="w-5 h-5 text-[#E07B39]" />
               Spending History
             </h3>
             {spending.trend === 'increasing' && <span className="text-xs text-red-400 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Increasing</span>}
@@ -244,7 +249,7 @@ export default function TrendsPage() {
                   <Tooltip content={<CustomTooltip formatter={formatUgx} />} cursor={{ fill: '#ffffff05' }} />
                   <Bar 
                     dataKey="amount" 
-                    fill="#00bcd4" 
+                    fill="#E07B39" 
                     radius={[4, 4, 0, 0]}
                     maxBarSize={60}
                   />
@@ -312,7 +317,7 @@ export default function TrendsPage() {
           {/* Top Materials */}
           <div className="bg-card border border-border rounded-xl p-6 flex flex-col">
             <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mb-6">
-              <Package className="w-5 h-5 text-[#00bcd4]" />
+              <Package className="w-5 h-5 text-[#E07B39]" />
               Top Materials
             </h3>
             <div className="flex-1">
@@ -333,7 +338,7 @@ export default function TrendsPage() {
                         </div>
                         <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                           <div 
-                            className="h-full bg-[#00bcd4] rounded-full opacity-80 group-hover:opacity-100 transition-all duration-500" 
+                            className="h-full bg-[#E07B39] rounded-full opacity-80 group-hover:opacity-100 transition-all duration-500" 
                             style={{ width: `${pct}%` }} 
                           />
                         </div>

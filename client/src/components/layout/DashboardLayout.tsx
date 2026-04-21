@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import Header from './Header';
 
@@ -7,17 +7,12 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  const [open, setOpen] = useState(true);
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <Sidebar />
-      
-      {/* Main Content Area */}
-      <div className="lg:pl-64">
-        {/* Top Header */}
+    <div className="min-h-screen bg-jenga-bg">
+      <Sidebar open={open} onToggle={() => setOpen((v) => !v)} />
+      <div className={open ? 'md:pl-sidebar-open' : 'md:pl-sidebar-closed'}>
         <Header />
-        
-        {/* Page Content */}
         <main className="p-6">
           {children}
         </main>
