@@ -129,11 +129,6 @@
   --sidebar-ring: 22 72% 55%;
 }
 
-html {
-  scroll-behavior: smooth;
-  -webkit-text-size-adjust: 100%;
-}
-
 @layer base {
   * {
     @apply border-border;
@@ -143,7 +138,6 @@ html {
     font-family: var(--font-sans);
     background: hsl(var(--background));
     color: hsl(var(--foreground));
-    min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -315,17 +309,30 @@ html {
    Applies at every breakpoint to ensure no horizontal overflow,
    iOS/Android safety, and accessible tap targets.
    ──────────────────────────────────────────────────────────────────── */
-html,
-body,
-#root {
-  overflow-x: hidden;
+/* ── Zero-scroll dashboard shell ───────────────────────────────────────
+   html / body / #root are clamped to the viewport. The AppLayout owns all
+   internal scrolling (inside <main> regions). No page-level scroll, ever.
+   ──────────────────────────────────────────────────────────────────── */
+html {
+  height: 100%;
+  overflow: hidden;
   max-width: 100vw;
-  width: 100%;
+  -webkit-text-size-adjust: 100%;
 }
 
-html {
-  -webkit-text-size-adjust: 100%;
-  scroll-behavior: smooth;
+body {
+  height: 100%;
+  overflow: hidden;
+  max-width: 100vw;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Prevent iOS Safari zoom-in on input focus (font-size must be ≥ 16px). */
