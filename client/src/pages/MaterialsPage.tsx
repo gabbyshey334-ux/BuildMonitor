@@ -283,7 +283,7 @@ export default function MaterialsPage() {
     return (
       <div className="min-h-[50vh] bg-background p-6 pb-24 md:pb-6 animate-pulse space-y-6">
         <div className="h-10 bg-muted rounded w-1/3 max-w-xs" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-24 bg-card border border-border rounded-xl" />
           ))}
@@ -340,7 +340,7 @@ export default function MaterialsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
               Total materials

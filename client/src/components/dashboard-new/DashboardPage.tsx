@@ -605,14 +605,14 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     return (
       <div className="space-y-8">
         <div className="h-14 rounded-card bg-muted/30 jt-shimmer" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
             <SkeletonKPI key={i} />
           ))}
         </div>
-        <div className="grid gap-6 lg:grid-cols-3">
-          <SkeletonRing className="lg:col-span-1" />
-          <SkeletonChart className="lg:col-span-2" />
+        <div className="grid gap-6 xl:grid-cols-3">
+          <SkeletonRing className="xl:col-span-1" />
+          <SkeletonChart className="xl:col-span-2" />
         </div>
       </div>
     );
@@ -705,7 +705,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       />
 
       {/* KPI Row */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 min-w-0">
+      <section className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-8 min-w-0">
         <KPICard
           index={0}
           label="Progress"
@@ -826,9 +826,9 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       </section>
 
       {/* Middle row: ring + spend chart */}
-      <section className="grid gap-6 lg:grid-cols-3 mb-8">
+      <section className="grid gap-6 xl:grid-cols-3 mb-8">
         {/* Budget Health Ring */}
-        <div className="jt-card lg:col-span-1">
+        <div className="jt-card xl:col-span-1">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="jt-h2">Budget Health</h2>
@@ -905,7 +905,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         </div>
 
         {/* Spend over time */}
-        <div className="jt-card lg:col-span-2">
+        <div className="jt-card xl:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="jt-h2">Spend Over Time</h2>

@@ -260,7 +260,7 @@ export default function ProjectsPage() {
         {/* ── Stats KPIs ────────────────────────────────────────────── */}
         {hasProjects && (
           <section
-            className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 w-full min-w-0 overflow-hidden"
+            className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 w-full min-w-0 overflow-hidden"
             aria-label="Portfolio summary"
           >
             <KPICard

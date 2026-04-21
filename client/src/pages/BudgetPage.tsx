@@ -157,13 +157,13 @@ function BudgetSkeleton() {
         <div className="h-8 w-40 sm:w-48 bg-muted rounded" />
         <div className="h-11 w-11 bg-muted rounded-full" />
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="h-24 bg-card border border-border rounded-xl" />
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-        <div className="lg:col-span-2 h-72 md:h-80 bg-card border border-border rounded-xl" />
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
+        <div className="xl:col-span-2 h-72 md:h-80 bg-card border border-border rounded-xl" />
         <div className="h-72 md:h-80 bg-card border border-border rounded-xl" />
       </div>
       <div className="h-72 md:h-80 bg-card border border-border rounded-xl" />
@@ -834,7 +834,7 @@ export default function BudgetPage() {
       result.push({
         icon: AlertTriangle,
         iconColor: COLORS.amber,
-        title: `${percentSpent}% of budget used. ${formatUgx(balance)} remaining.`,
+        title: `${Math.round(percentSpent)}% of budget used. ${formatUgx(balance)} remaining.`,
         subtitle: "High Budget Usage",
         dotColor: COLORS.amber,
       });
@@ -978,7 +978,7 @@ export default function BudgetPage() {
         </div>
 
         {/* TOP ROW — 5 stat cards (2-col on mobile, progressive enhancement) */}
-        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4">
           <StatCard
             label="Total Budget"
             value={formatUgx(budget)}
@@ -1000,7 +1000,7 @@ export default function BudgetPage() {
           />
           <StatCard
             label="Budget Used"
-            value={`${percentSpent}%`}
+            value={`${Math.round(percentSpent)}%`}
             dotColor={budgetUsedDotColor}
             sub={percentSpent > 100 ? "Limit exceeded" : "of total budget"}
           />
@@ -1013,8 +1013,8 @@ export default function BudgetPage() {
         </div>
 
         {/* MIDDLE ROW */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div className="xl:col-span-2">
             <BudgetComparisonSection
               categoryTotals={categoryTotals}
               totalSpent={totalSpent}

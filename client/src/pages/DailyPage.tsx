@@ -375,7 +375,7 @@ function DailySkeleton() {
     <div className="w-full animate-pulse">
       <div className="w-full space-y-6 md:space-y-8">
         <div className="h-10 bg-muted rounded w-1/3" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-28 bg-card border border-border rounded-xl" />
           ))}
@@ -725,7 +725,7 @@ export default function DailyPage() {
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300 min-w-0">
             <div className="flex items-center gap-3 mb-3 min-w-0">
               <div className="p-2.5 rounded-xl bg-muted text-muted-foreground group-hover:bg-[#E07B39]/10 group-hover:text-[#E07B39] transition-colors shrink-0">
