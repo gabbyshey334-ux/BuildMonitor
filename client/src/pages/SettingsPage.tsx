@@ -9,6 +9,7 @@ import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { getToken } from "@/lib/authToken";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,7 @@ interface SettingsData {
 }
 
 export default function SettingsPage() {
+  usePageTitle("Settings");
   const { currentProject } = useProject();
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -293,7 +295,7 @@ export default function SettingsPage() {
 
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
+      <div className="w-full min-h-[60vh] text-foreground flex items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
             <Settings className="w-10 h-10 text-[#E07B39]" />
@@ -317,7 +319,7 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-6 space-y-6 animate-pulse">
+      <div className="w-full space-y-6 animate-pulse">
         <div className="h-8 w-48 bg-muted rounded" />
         <div className="grid gap-6">
           <div className="h-96 bg-card border border-border rounded-xl" />
@@ -328,13 +330,13 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden text-foreground font-sans">
+      <div className="w-full max-w-4xl mx-auto space-y-6 md:space-y-8">
         
         {/* 1. Header */}
         <div>
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">Settings</h1>
-          <p className="text-muted-foreground mt-1">Manage your project configuration and profile details.</p>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Settings</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage your project configuration and profile details.</p>
         </div>
 
         {/* WhatsApp Link Utility (Preserved but styled) */}

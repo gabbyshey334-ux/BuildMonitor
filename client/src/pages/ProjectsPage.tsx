@@ -31,6 +31,7 @@ import { KPICard } from "@/components/ui/KPICard";
 import { CurrencyValue } from "@/components/ui/CurrencyValue";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { safeNum } from "@/lib/analytics";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const WHATSAPP_JOIN = "+1 415 523 8886";
 const JOIN_CODE = "join thick-tea";
@@ -60,6 +61,7 @@ function ProjectsLoadingSkeleton() {
 }
 
 export default function ProjectsPage() {
+  usePageTitle("Projects");
   const { data: fetched = [], isLoading, isError, error, refetch } = useProjects();
   const { projects, setProjects, setCurrentProject } = useProject();
   const { t } = useLanguage();
@@ -210,23 +212,30 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <div className="max-w-[1600px] mx-auto space-y-8">
+      <div className="w-full max-w-[1600px] mx-auto space-y-6 md:space-y-8 min-w-0">
         {/* ── Hero Header with prominent logo ───────────────────────── */}
         <motion.header
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="flex flex-col md:flex-row md:items-end md:justify-between gap-5"
+          className="flex flex-col items-center text-center gap-5 md:flex-row md:items-end md:justify-between md:text-left"
         >
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col items-center md:items-start gap-4 min-w-0 w-full md:w-auto">
+            {/* Logo: lg on mobile, xl on desktop, both full variant */}
             <JengaTrackLogo
-              size="lg"
               variant="full"
+              size="lg"
               showTagline
-              className="md:-mb-1"
+              className="md:hidden"
             />
-            <div>
-              <h1 className="jt-h1 text-foreground">
+            <JengaTrackLogo
+              variant="full"
+              size="xl"
+              showTagline
+              className="hidden md:inline-flex md:-mb-1"
+            />
+            <div className="min-w-0 w-full">
+              <h1 className="jt-h1 text-foreground truncate">
                 {t("projects.title") || "Your Projects"}
               </h1>
               <p className="text-sm text-muted-foreground mt-1.5">
@@ -240,7 +249,7 @@ export default function ProjectsPage() {
           <Button
             onClick={() => setModalOpen(true)}
             className={cn(
-              "jt-btn-primary h-10 px-5 self-start md:self-auto shrink-0",
+              "jt-btn-primary w-full md:w-auto min-h-[44px] h-11 md:h-10 px-5 md:self-auto shrink-0",
             )}
           >
             <Plus className="h-4 w-4" />

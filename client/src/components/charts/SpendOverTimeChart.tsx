@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatCompactNumber } from "@/lib/analytics";
+import { useChartHeight, useIsMobile } from "@/hooks/useChartHeight";
 
 export interface SpendPoint {
   date: string;
@@ -32,11 +33,15 @@ export interface SpendOverTimeChartProps {
 export function SpendOverTimeChart({
   data,
   currency = "UGX",
-  height = 280,
+  height,
   showCumulative = true,
   budget,
   className,
 }: SpendOverTimeChartProps) {
+  const responsiveHeight = useChartHeight({ base: 200, md: 260, lg: 320 });
+  const isMobile = useIsMobile();
+  const chartHeight = height ?? responsiveHeight;
+
   if (!data || data.length === 0) {
     return (
       <div
@@ -44,7 +49,7 @@ export function SpendOverTimeChart({
           "flex items-center justify-center text-sm text-muted-foreground",
           className,
         )}
-        style={{ height }}
+        style={{ height: chartHeight }}
       >
         No spending data yet
       </div>
@@ -52,7 +57,10 @@ export function SpendOverTimeChart({
   }
 
   return (
-    <div className={className} style={{ width: "100%", height }}>
+    <div
+      className={cn("w-full min-w-0 overflow-hidden", className)}
+      style={{ width: "100%", height: chartHeight }}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
           <defs>
@@ -76,7 +84,9 @@ export function SpendOverTimeChart({
             tickLine={false}
             axisLine={false}
             stroke="hsl(var(--muted-foreground))"
-            fontSize={10}
+            fontSize={isMobile ? 10 : 11}
+            interval={isMobile ? "preserveStartEnd" : 0}
+            minTickGap={isMobile ? 24 : 12}
             tickFormatter={(v: string) => {
               const d = new Date(v);
               if (Number.isNaN(d.getTime())) return v;
@@ -87,9 +97,9 @@ export function SpendOverTimeChart({
             tickLine={false}
             axisLine={false}
             stroke="hsl(var(--muted-foreground))"
-            fontSize={10}
+            fontSize={isMobile ? 10 : 11}
             tickFormatter={(n: number) => formatCompactNumber(n, 1)}
-            width={40}
+            width={isMobile ? 32 : 44}
           />
           <Tooltip
             contentStyle={{

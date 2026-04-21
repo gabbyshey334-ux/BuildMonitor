@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { uploadPhotoDirectly } from "@/lib/uploadPhoto";
@@ -371,8 +372,8 @@ function TimelineSkeleton() {
 
 function DailySkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 animate-pulse">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="w-full animate-pulse">
+      <div className="w-full space-y-6 md:space-y-8">
         <div className="h-10 bg-muted rounded w-1/3" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map((i) => (
@@ -392,6 +393,7 @@ function DailySkeleton() {
 }
 
 export default function DailyPage() {
+  usePageTitle("Daily Log");
   const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { currentProject } = useProject();
@@ -652,7 +654,7 @@ export default function DailyPage() {
 
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
         <div className="text-center max-w-md space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
             <Calendar className="w-10 h-10 text-[#E07B39]" />
@@ -677,7 +679,7 @@ export default function DailyPage() {
 
   if (isStatsError && !statsData) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
             <Activity className="w-8 h-8 text-red-500" />
@@ -697,13 +699,13 @@ export default function DailyPage() {
   const heatmap = statsData?.heatmap || [];
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 font-sans pb-24">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden text-foreground font-sans">
+      <div className="w-full space-y-6 md:space-y-8">
         
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-4">
-          <div className="space-y-1.5">
-            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#E07B39] to-blue-500">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="space-y-1.5 min-w-0">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#E07B39] to-blue-500 truncate">
               Daily Accountability
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base max-w-xl">

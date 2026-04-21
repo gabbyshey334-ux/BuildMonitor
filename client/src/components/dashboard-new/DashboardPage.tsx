@@ -66,6 +66,7 @@ import {
 import { DebugPanel } from "@/components/ui/DebugPanel";
 import { SpendOverTimeChart } from "@/components/charts/SpendOverTimeChart";
 import { CategoryBreakdownChart } from "@/components/charts/CategoryBreakdownChart";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 const PHOTO_TAGS = [
   "Foundation",
@@ -98,6 +99,7 @@ interface DashboardPageProps {
 }
 
 export default function DashboardPage({ projectId: projectIdProp }: DashboardPageProps) {
+  usePageTitle("Dashboard");
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
   const projects = Array.isArray(projectsData) ? projectsData : [];

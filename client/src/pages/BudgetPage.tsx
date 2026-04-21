@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getToken } from "@/lib/authToken";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 const COLORS = {
@@ -145,21 +146,21 @@ function categorise(description: string): string {
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function BudgetSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
+    <div className="w-full space-y-6 md:space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
-        <div className="h-8 w-48 bg-muted rounded" />
-        <div className="h-10 w-10 bg-muted rounded" />
+        <div className="h-8 w-40 sm:w-48 bg-muted rounded" />
+        <div className="h-11 w-11 bg-muted rounded-full" />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {[1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="h-24 bg-card border border-border rounded-xl" />
         ))}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 h-80 bg-card border border-border rounded-xl" />
-        <div className="h-80 bg-card border border-border rounded-xl" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="lg:col-span-2 h-72 md:h-80 bg-card border border-border rounded-xl" />
+        <div className="h-72 md:h-80 bg-card border border-border rounded-xl" />
       </div>
-      <div className="h-80 bg-card border border-border rounded-xl" />
+      <div className="h-72 md:h-80 bg-card border border-border rounded-xl" />
     </div>
   );
 }
@@ -483,24 +484,26 @@ function CostTrendChart({
         </div>
       </div>
 
-      <div className="h-[300px] w-full text-card">
+      <div className="h-[220px] sm:h-[260px] md:h-[300px] w-full min-w-0 overflow-hidden text-card">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={filteredData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+          <ComposedChart data={filteredData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
             <XAxis
               dataKey="week"
               axisLine={false}
               tickLine={false}
-              tick={{ fill: "#52525b", fontSize: 11 }}
+              tick={{ fill: "#52525b", fontSize: 10 }}
+              interval="preserveStartEnd"
+              minTickGap={20}
               dy={10}
             />
             <YAxis
               axisLine={false}
               tickLine={false}
               domain={[0, "auto"]}
-              tick={{ fill: "#52525b", fontSize: 11 }}
+              tick={{ fill: "#52525b", fontSize: 10 }}
               tickFormatter={yAxisTickFormatter}
-              width={60}
+              width={44}
             />
             <Tooltip
               contentStyle={{
@@ -551,6 +554,7 @@ function CostTrendChart({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function BudgetPage() {
+  usePageTitle("Budget");
   const { t } = useLanguage();
   const { currentProject } = useProject();
   const { data: projectsData } = useProjects();
@@ -930,7 +934,7 @@ export default function BudgetPage() {
   // ── Guards ───────────────────────────────────────────────────────────────────
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
+      <div className="w-full min-h-[60vh] flex items-center justify-center text-center">
         <div className="max-w-md w-full space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
             <DollarSign className="w-10 h-10 text-[#E07B39]" />
@@ -955,7 +959,7 @@ export default function BudgetPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">
+      <div className="w-full min-h-[60vh] flex items-center justify-center text-center">
         <div className="space-y-4">
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
             <AlertTriangle className="w-8 h-8 text-red-500" />
@@ -973,27 +977,28 @@ export default function BudgetPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden text-foreground font-sans">
+      <div className="w-full space-y-6 md:space-y-8 min-w-0">
         
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-             <h1 className="text-3xl font-bold text-foreground tracking-tight">Budgets & Costs</h1>
-             <p className="text-muted-foreground mt-1">Track expenditure, analyze costs, and manage budget health.</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+             <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight truncate">Budgets & Costs</h1>
+             <p className="text-sm sm:text-base text-muted-foreground mt-1">Track expenditure, analyze costs, and manage budget health.</p>
           </div>
           <Button
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
+            aria-label="Refresh"
+            className="rounded-full w-11 h-11 shrink-0 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* TOP ROW — 5 stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* TOP ROW — 5 stat cards (2-col on mobile, progressive enhancement) */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
           <StatCard
             label="Total Budget"
             value={formatUgx(budget)}
@@ -1055,45 +1060,45 @@ allData={costTrendDataRaw}
 
         {/* Expense list — edit/delete per row */}
         {expenses.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-6">
-            <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
+          <div className="bg-card border border-border rounded-xl p-4 sm:p-6 min-w-0">
+            <h3 className="text-base sm:text-lg font-bold text-foreground mb-4 flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-[#E07B39]" />
               Expense history
             </h3>
             <div className="space-y-3 mb-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative flex-1 min-w-[180px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap md:items-center gap-2 sm:gap-3 min-w-0">
+                <div className="relative sm:col-span-2 md:flex-1 md:min-w-[180px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   <input
                     type="text"
                     placeholder="Search expenses..."
                     value={expenseSearch}
                     onChange={(e) => setExpenseSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39] focus:border-transparent placeholder:text-muted-foreground"
+                    className="w-full pl-9 pr-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39] focus:border-transparent placeholder:text-muted-foreground"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-muted-foreground text-sm whitespace-nowrap">From</label>
+                <div className="flex items-center gap-2 min-w-0">
+                  <label className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap shrink-0">From</label>
                   <input
                     type="date"
                     value={expenseDateFrom}
                     onChange={(e) => setExpenseDateFrom(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
+                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-muted-foreground text-sm whitespace-nowrap">To</label>
+                <div className="flex items-center gap-2 min-w-0">
+                  <label className="text-muted-foreground text-xs sm:text-sm whitespace-nowrap shrink-0">To</label>
                   <input
                     type="date"
                     value={expenseDateTo}
                     onChange={(e) => setExpenseDateTo(e.target.value)}
-                    className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
+                    className="flex-1 min-w-0 px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
                   />
                 </div>
                 <select
                   value={expenseSort}
                   onChange={(e) => setExpenseSort(e.target.value as "newest" | "oldest" | "highest" | "lowest")}
-                  className="px-3 py-2 rounded-lg bg-muted border border-border text-foreground text-sm focus:ring-2 focus:ring-[#E07B39]"
+                  className="sm:col-span-2 md:col-span-1 w-full md:w-auto px-3 min-h-[44px] rounded-lg bg-muted border border-border text-foreground text-base md:text-sm focus:ring-2 focus:ring-[#E07B39]"
                 >
                   <option value="newest">Newest first</option>
                   <option value="oldest">Oldest first</option>
@@ -1111,7 +1116,7 @@ allData={costTrendDataRaw}
                       setExpenseDateTo("");
                       setExpenseSort("newest");
                     }}
-                    className="text-muted-foreground hover:text-foreground shrink-0"
+                    className="sm:col-span-2 md:col-span-1 text-muted-foreground hover:text-foreground shrink-0 min-h-[44px]"
                   >
                     <X className="w-4 h-4 mr-1" />
                     Clear filters

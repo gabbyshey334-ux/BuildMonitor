@@ -80,30 +80,30 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
       role="banner"
     >
       {/* Left */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+        {/* Desktop sidebar toggle (≥ lg) */}
         {showHamburger && (
           <button
             type="button"
             onClick={onMenuClick}
-            className="md:hidden flex h-10 w-10 items-center justify-center rounded-btn text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors touch-manipulation"
-            aria-label="Toggle menu"
+            className="hidden lg:flex h-10 w-10 items-center justify-center rounded-btn text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors touch-manipulation -ml-1.5"
+            aria-label="Toggle sidebar"
           >
             <Menu className="h-5 w-5" />
           </button>
         )}
 
-        {/* Mobile brand */}
-        <Link
-          href="/projects"
-          className="md:hidden flex items-center min-w-0"
-          aria-label="JengaTrack home"
-        >
-          <JengaTrackLogo size="xs" variant="full" />
-        </Link>
+        {/* Mobile / tablet brand (< lg): real logo, linked to dashboard */}
+        <JengaTrackLogo
+          variant="full"
+          size="sm"
+          linkTo="/dashboard"
+          className="lg:hidden min-w-0"
+        />
 
-        {/* Desktop page title */}
-        <div className="hidden md:flex flex-col min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {/* Desktop page title (≥ lg — sidebar has the logo) */}
+        <div className="hidden lg:flex flex-col min-w-0">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">
             {currentProject?.name || "No project selected"}
           </div>
           <h1 className="font-display font-semibold text-lg text-foreground truncate leading-tight">
@@ -113,13 +113,14 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
       </div>
 
       {/* Right: project switcher, notifications, theme, profile */}
-      <div className="flex items-center gap-1.5 md:gap-2">
-        {/* Project switcher */}
+      <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
+        {/* Project switcher — indicator + chevron only on xs, full on sm+ */}
         <DropdownMenu open={projectOpen} onOpenChange={setProjectOpen}>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="flex items-center gap-2 h-9 px-3 rounded-btn border border-border/60 bg-jenga-raised/60 hover:bg-jenga-raised hover:border-border transition-colors text-sm text-foreground max-w-[180px] md:max-w-[240px]"
+              aria-label={currentProject?.name ?? "Select project"}
+              className="flex items-center gap-1.5 sm:gap-2 h-10 px-2 sm:px-3 rounded-btn border border-border/60 bg-jenga-raised/60 hover:bg-jenga-raised hover:border-border transition-colors text-sm text-foreground max-w-[140px] sm:max-w-[180px] md:max-w-[240px]"
             >
               <span
                 className={cn(
@@ -128,7 +129,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
                 )}
                 aria-hidden
               />
-              <span className="truncate font-medium">
+              <span className="hidden xs:inline truncate font-medium">
                 {currentProject?.name ?? t("projects.select")}
               </span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -211,12 +212,12 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
           <LanguageSwitcher variant="compact" />
         </div>
 
-        {/* Theme */}
+        {/* Theme — hidden below sm to save space on 320px */}
         <button
           type="button"
           onClick={toggleTheme}
           aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          className="flex h-9 w-9 items-center justify-center rounded-btn border border-border/60 bg-jenga-raised/60 hover:bg-jenga-raised text-muted-foreground hover:text-foreground transition-colors"
+          className="hidden sm:flex h-10 w-10 items-center justify-center rounded-btn border border-border/60 bg-jenga-raised/60 hover:bg-jenga-raised text-muted-foreground hover:text-foreground transition-colors"
         >
           {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
@@ -226,7 +227,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="ml-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-1 ring-border/60 hover:ring-jenga-primary transition-colors"
+              className="ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ring-1 ring-border/60 hover:ring-jenga-primary transition-colors"
               aria-label="Account"
             >
               <Avatar className="h-8 w-8">

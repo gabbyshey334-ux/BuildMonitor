@@ -24,6 +24,7 @@ import {
   DollarSign, Users, Package, Activity 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/usePageTitle";
 
 let __trendsCurrency = "UGX";
 function formatUgx(n: number) {
@@ -42,7 +43,7 @@ function formatDate(s: string) {
 
 function TrendsSkeleton() {
   return (
-    <div className="min-h-screen bg-background p-6 space-y-8 animate-pulse">
+    <div className="w-full space-y-6 md:space-y-8 animate-pulse">
       <div className="flex justify-between items-center">
         <div className="h-8 w-48 bg-muted rounded" />
         <div className="h-10 w-10 bg-muted rounded" />
@@ -67,6 +68,7 @@ function EmptyState({ message, icon: Icon }: { message: string; icon?: any }) {
 }
 
 export default function TrendsPage() {
+  usePageTitle("Trends");
   const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { currentProject } = useProject();
@@ -86,7 +88,7 @@ export default function TrendsPage() {
 
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
         <div className="text-center max-w-md space-y-6">
           <div className="w-20 h-20 rounded-full bg-[#E07B39]/10 flex items-center justify-center mx-auto ring-1 ring-[#E07B39]/20">
             <Activity className="w-10 h-10 text-[#E07B39]" />
@@ -111,7 +113,7 @@ export default function TrendsPage() {
 
   if (isError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+      <div className="w-full min-h-[60vh] flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto">
             <AlertTriangle className="w-8 h-8 text-red-500" />
@@ -146,8 +148,8 @@ export default function TrendsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden text-foreground font-sans">
+      <div className="w-full space-y-6 md:space-y-8">
         
         {/* 1. Header Row */}
         <div className="flex items-center justify-between">
@@ -225,26 +227,29 @@ export default function TrendsPage() {
             {spending.trend === 'increasing' && <span className="text-xs text-red-400 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> Increasing</span>}
             {spending.trend === 'decreasing' && <span className="text-xs text-emerald-400 flex items-center gap-1"><TrendingDown className="w-3 h-3" /> Decreasing</span>}
           </div>
-          <div className="h-[300px] w-full">
+          <div className="h-[220px] sm:h-[260px] md:h-[300px] w-full min-w-0 overflow-hidden">
             {spending.byMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={spending.byMonth}>
+                <BarChart data={spending.byMonth} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
                   <XAxis 
                     dataKey="month" 
                     stroke="#52525b" 
-                    fontSize={12}
+                    fontSize={10}
                     tickLine={false}
                     axisLine={false}
-                    dy={10}
+                    interval="preserveStartEnd"
+                    minTickGap={20}
+                    dy={8}
                   />
                   <YAxis 
                     stroke="#52525b" 
-                    fontSize={12}
+                    fontSize={10}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
-                    dx={-10}
+                    tickFormatter={(value) => value >= 1_000_000 ? `${(value / 1_000_000).toFixed(1)}M` : value >= 1000 ? `${(value/1000).toFixed(0)}K` : String(value)}
+                    width={44}
+                    dx={-4}
                   />
                   <Tooltip content={<CustomTooltip formatter={formatUgx} />} cursor={{ fill: '#ffffff05' }} />
                   <Bar 
@@ -275,26 +280,28 @@ export default function TrendsPage() {
                 <span>Peak: <span className="text-foreground font-medium">{workers.peak}</span></span>
               </div>
             </div>
-            <div className="h-[250px] w-full">
+            <div className="h-[200px] sm:h-[230px] md:h-[250px] w-full min-w-0 overflow-hidden">
               {workers.byDay.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={workers.byDay}>
+                  <LineChart data={workers.byDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e2230" vertical={false} />
                     <XAxis 
                       dataKey="date" 
                       stroke="#52525b" 
-                      fontSize={12}
+                      fontSize={10}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(d) => formatDate(d).split(',')[0]} // Short date
-                      dy={10}
+                      interval="preserveStartEnd"
+                      minTickGap={20}
+                      tickFormatter={(d) => formatDate(d).split(',')[0]}
+                      dy={8}
                     />
                     <YAxis 
                       stroke="#52525b" 
-                      fontSize={12}
+                      fontSize={10}
                       tickLine={false}
                       axisLine={false}
-                      dx={-10}
+                      width={32}
                       allowDecimals={false}
                     />
                     <Tooltip content={<CustomTooltip />} />

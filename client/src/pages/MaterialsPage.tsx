@@ -38,6 +38,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePageTitle } from "@/hooks/usePageTitle";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { formatMaterialDisplayName, normalizeMaterialStorageName } from "@shared/materialNames";
@@ -93,6 +94,7 @@ function stockBarPercent(qty: number, threshold: number) {
 }
 
 export default function MaterialsPage() {
+  usePageTitle("Materials");
   const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const { currentProject } = useProject();
@@ -257,7 +259,7 @@ export default function MaterialsPage() {
 
   if (!projectId) {
     return (
-      <div className="min-h-screen bg-background text-foreground p-6 pb-24 flex flex-col items-center justify-center md:pb-6">
+      <div className="w-full min-h-[60vh] bg-background text-foreground flex flex-col items-center justify-center">
         <div className="max-w-md w-full text-center space-y-6">
           <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto ring-1 ring-border">
             <Package className="w-10 h-10 text-muted-foreground" />
@@ -309,7 +311,7 @@ export default function MaterialsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground p-4 md:p-6 pb-24 md:pb-6 font-sans">
+    <div className="w-full min-w-0 max-w-full overflow-x-hidden text-foreground font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>

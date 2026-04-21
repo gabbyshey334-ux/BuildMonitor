@@ -11,8 +11,20 @@ export default {
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
   theme: {
     extend: {
+      // Mobile-first breakpoint set.
+      //   xs → small budget Android (site managers' primary device)
+      //   sm → iPhone SE / 375px class
+      //   md → tablet portrait (768px)
+      //   lg → tablet landscape / small desktop (1024px)
+      //   xl → desktop (1280px)
+      //   2xl → large desktop
       screens: {
-        xs: "380px",
+        xs: "320px",
+        sm: "375px",
+        md: "768px",
+        lg: "1024px",
+        xl: "1280px",
+        "2xl": "1536px",
       },
       borderRadius: {
         lg: "var(--radius)",

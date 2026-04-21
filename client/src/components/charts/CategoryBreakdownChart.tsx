@@ -5,6 +5,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/analytics";
 import type { CategoryTotal } from "@/lib/analytics";
+import { useChartHeight } from "@/hooks/useChartHeight";
 
 export interface CategoryBreakdownChartProps {
   data: CategoryTotal[];
@@ -18,9 +19,12 @@ const COLORS = ["#E07B39", "#C9A84C", "#5B8FD9", "#4CAF7D", "#9B4B2E", "#D95F5F"
 export function CategoryBreakdownChart({
   data,
   currency = "UGX",
-  height = 220,
+  height,
   className,
 }: CategoryBreakdownChartProps) {
+  const responsiveHeight = useChartHeight({ base: 200, md: 240, lg: 280 });
+  const chartHeight = height ?? responsiveHeight;
+
   if (!data || data.length === 0) {
     return (
       <div
@@ -28,7 +32,7 @@ export function CategoryBreakdownChart({
           "flex items-center justify-center text-sm text-muted-foreground",
           className,
         )}
-        style={{ height }}
+        style={{ height: chartHeight }}
       >
         No categorized spending yet
       </div>
@@ -38,8 +42,11 @@ export function CategoryBreakdownChart({
   const top = data.slice(0, 6);
 
   return (
-    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4 items-center", className)}>
-      <div style={{ width: "100%", height }}>
+    <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-4 md:items-center", className)}>
+      <div
+        className="w-full min-w-0 overflow-hidden"
+        style={{ width: "100%", height: chartHeight }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -73,20 +80,23 @@ export function CategoryBreakdownChart({
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="space-y-2 text-sm">
+      <ul className="space-y-1.5 text-sm min-w-0">
         {top.map((row, i) => (
-          <li key={row.name} className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-2 min-w-0">
+          <li
+            key={row.name}
+            className="flex items-center justify-between gap-3 py-1.5"
+          >
+            <span className="flex items-center gap-2.5 min-w-0 flex-1">
               <span
-                className="h-2 w-2 rounded-full shrink-0"
+                className="h-2.5 w-2.5 rounded-full shrink-0"
                 style={{ background: COLORS[i % COLORS.length] }}
                 aria-hidden
               />
-              <span className="truncate">{row.name}</span>
+              <span className="truncate text-foreground">{row.name}</span>
             </span>
-            <span className="font-mono tabular-nums text-xs text-muted-foreground shrink-0">
+            <span className="font-mono tabular-nums text-xs text-muted-foreground shrink-0 text-right">
               {formatCurrency(row.amount, currency, { compact: true })}
-              <span className="ml-1 text-[10px] opacity-70">({row.percent}%)</span>
+              <span className="ml-1.5 text-[10px] opacity-70">({row.percent}%)</span>
             </span>
           </li>
         ))}

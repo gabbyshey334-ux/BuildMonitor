@@ -12,6 +12,19 @@ interface AppLayoutProps {
   children: React.ReactNode;
 }
 
+/**
+ * Main authenticated app layout.
+ *
+ * Responsive structure:
+ *   - < 1024px: TopBar + <main> (full width) + BottomNav
+ *   - ≥ 1024px: Sidebar + TopBar + <main> (offset by sidebar width)
+ *
+ * The sidebar margin is applied ONLY at `lg:` and up, so mobile content
+ * never has dead space on the left.
+ *
+ * The bottom padding (pb-24) clears the mobile BottomNav; on lg+ it
+ * becomes pb-0.
+ */
 export function AppLayout({ children }: AppLayoutProps) {
   const { open, toggle } = useSidebarState();
   const { data: projectsData } = useProjects();
@@ -30,24 +43,27 @@ export function AppLayout({ children }: AppLayoutProps) {
   }, [projectsJson]);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
       <Sidebar open={open} onToggle={toggle} />
 
       <div
         className={cn(
-          "min-h-screen flex flex-col transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          open ? "md:ml-sidebar-open" : "md:ml-sidebar-closed",
+          "min-h-screen flex flex-col w-full max-w-full",
+          "transition-[margin-left] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+          // Sidebar offset ONLY from lg up — mobile has zero left margin.
+          open ? "lg:ml-sidebar-open" : "lg:ml-sidebar-closed",
         )}
       >
         <TopBar onMenuClick={toggle} showHamburger />
 
         <main
           className={cn(
-            "flex-1 pb-mobile-nav-offset md:pb-0",
-            "max-w-[100vw] overflow-x-hidden",
+            "flex-1 w-full max-w-full overflow-x-hidden",
+            // Clear mobile bottom nav (64px + safe area) on < lg.
+            "pb-24 lg:pb-0",
           )}
         >
-          <div className="px-4 py-5 md:px-8 md:py-8 max-w-[1600px] mx-auto">
+          <div className="mx-auto w-full max-w-[1600px] px-3 xs:px-3 sm:px-4 md:px-6 lg:px-8 pt-4 sm:pt-5 md:pt-6 pb-4 md:pb-8">
             {children}
           </div>
         </main>
