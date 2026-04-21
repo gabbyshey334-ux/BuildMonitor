@@ -152,16 +152,16 @@ export default function TrendsPage() {
       <div className="w-full space-y-6 md:space-y-8">
         
         {/* 1. Header Row */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">Trends & Insights</h1>
-            <p className="text-muted-foreground mt-1">Analytics and predictive metrics for your project.</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight truncate">Trends & Insights</h1>
+            <p className="text-sm sm:text-base text-muted-foreground mt-1">Analytics and predictive metrics for your project.</p>
           </div>
           <Button
             onClick={() => refetch()}
             variant="outline"
             size="icon"
-            className="rounded-full w-10 h-10 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
+            className="rounded-full w-10 h-10 shrink-0 bg-card border-border text-muted-foreground hover:text-[#E07B39] hover:border-[#E07B39]/50 transition-all"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
@@ -178,22 +178,22 @@ export default function TrendsPage() {
               )}
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
-              <div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 relative z-10">
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-2 text-[#E07B39]">
-                  <Activity className="w-5 h-5" />
-                  <span className="text-sm font-bold uppercase tracking-wider">Weekly Burn Rate</span>
+                  <Activity className="w-5 h-5 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold uppercase tracking-wider truncate">Weekly Burn Rate</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{formatUgx(predictions.weeklyBurnRate)}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-foreground truncate">{formatUgx(predictions.weeklyBurnRate)}</p>
                 <p className="text-muted-foreground text-xs mt-1">Average spent per week</p>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center gap-2 mb-2 text-amber-500">
-                  <Calendar className="w-5 h-5" />
-                  <span className="text-sm font-bold uppercase tracking-wider">Runout Date</span>
+                  <Calendar className="w-5 h-5 shrink-0" />
+                  <span className="text-xs sm:text-sm font-bold uppercase tracking-wider truncate">Runout Date</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">
+                <p className="text-2xl sm:text-3xl font-bold text-foreground truncate">
                   {predictions.budgetRunout ? formatDate(predictions.budgetRunout) : "—"}
                 </p>
                 <p className="text-muted-foreground text-xs mt-1">Estimated based on current rate</p>
@@ -337,9 +337,9 @@ export default function TrendsPage() {
                     
                     return (
                       <div key={m.name} className="group">
-                        <div className="flex justify-between text-sm mb-1">
-                          <span className="text-foreground font-medium group-hover:text-foreground transition-colors">{m.name}</span>
-                          <span className="text-muted-foreground">
+                        <div className="flex justify-between items-baseline gap-2 text-sm mb-1 min-w-0">
+                          <span className="text-foreground font-medium group-hover:text-foreground transition-colors truncate min-w-0">{m.name}</span>
+                          <span className="text-muted-foreground whitespace-nowrap shrink-0">
                             <span className="text-foreground font-bold">{m.quantity.toLocaleString()}</span> {m.unit}
                           </span>
                         </div>

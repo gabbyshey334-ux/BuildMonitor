@@ -233,11 +233,13 @@ export function ProjectCard({ project, index = 0 }: ProjectCardProps) {
             )}
           </div>
 
-          {/* Budget amounts row — uses compact formatting so even 30B fits. */}
+          {/* Budget amounts row — uses compact formatting so even 30B fits.
+              On very narrow widths the spent/budget pair can wrap to the next
+              line rather than clip behind overflow-hidden. */}
           <div className="pt-3 border-t border-border/60 relative z-10">
-            <div className="flex items-baseline justify-between gap-2 text-xs min-w-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 text-xs min-w-0">
               <span className="text-muted-foreground shrink-0">Spent</span>
-              <div className="flex items-baseline gap-1.5 min-w-0 font-mono tabular-nums whitespace-nowrap overflow-hidden">
+              <div className="flex items-baseline gap-1.5 min-w-0 font-mono tabular-nums flex-wrap justify-end">
                 <CurrencyValue
                   value={health.spent}
                   currency={currency}

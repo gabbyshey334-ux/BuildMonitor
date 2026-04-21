@@ -198,15 +198,15 @@ function StatCard({
       )}
       <div className="relative z-10">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-        <div className="mt-2">
-          <div className="flex items-center gap-2">
+        <div className="mt-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             {dotColor && (
               <span
                 className="w-2 h-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor]"
                 style={{ backgroundColor: dotColor, color: dotColor }}
               />
             )}
-            <p className={cn("text-xl font-bold leading-tight", valueClassName ?? "text-foreground")}>
+            <p className={cn("text-base sm:text-lg md:text-xl font-bold leading-tight min-w-0 truncate", valueClassName ?? "text-foreground")}>
               {value}
             </p>
           </div>
@@ -466,13 +466,13 @@ function CostTrendChart({
   }
 
   return (
-    <div className="bg-card border border-border rounded-xl p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-[#E07B39]" />
-          Cost Trend
+    <div className="bg-card border border-border rounded-xl p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 sm:mb-6">
+        <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2 min-w-0">
+          <TrendingUp className="w-5 h-5 text-[#E07B39] shrink-0" />
+          <span className="truncate">Cost Trend</span>
         </h3>
-        <div className="flex bg-muted p-1 rounded-lg border border-border">
+        <div className="flex bg-muted p-1 rounded-lg border border-border shrink-0">
           {(["1w", "1m", "3m", "all"] as const).map((p) => (
             <button
               key={p}

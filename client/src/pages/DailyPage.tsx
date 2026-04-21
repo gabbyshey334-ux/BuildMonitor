@@ -726,63 +726,63 @@ export default function DailyPage() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2.5 rounded-xl bg-muted text-muted-foreground group-hover:bg-[#E07B39]/10 group-hover:text-[#E07B39] transition-colors">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300 min-w-0">
+            <div className="flex items-center gap-3 mb-3 min-w-0">
+              <div className="p-2.5 rounded-xl bg-muted text-muted-foreground group-hover:bg-[#E07B39]/10 group-hover:text-[#E07B39] transition-colors shrink-0">
                 <Calendar className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("daily.totaldays")}</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.totaldays")}</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-black text-foreground tracking-tight">{stats?.totalActiveDays || 0}</span>
+              <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.totalActiveDays || 0}</span>
               <span className="text-sm font-medium text-muted-foreground">days recorded</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-6 relative overflow-hidden group hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-300">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/5 transition-all duration-300 min-w-0">
              <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
               <Flame className="w-32 h-32 text-amber-500" />
             </div>
-            <div className="flex items-center gap-3 mb-3 relative z-10">
-              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500">
+            <div className="flex items-center gap-3 mb-3 relative z-10 min-w-0">
+              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 shrink-0">
                 <Flame className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("daily.streak")}</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.streak")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
-              <span className="text-4xl font-black text-foreground tracking-tight">{stats?.currentStreak || 0}</span>
+              <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.currentStreak || 0}</span>
               <span className="text-sm font-medium text-muted-foreground">days in a row</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-[#E07B39]/30 hover:shadow-lg hover:shadow-[#E07B39]/5 transition-all duration-300 min-w-0">
             <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
               <Users className="w-32 h-32 text-[#E07B39]" />
             </div>
-            <div className="flex items-center gap-3 mb-3 relative z-10">
-              <div className="p-2.5 rounded-xl bg-[#E07B39]/10 text-[#E07B39]">
+            <div className="flex items-center gap-3 mb-3 relative z-10 min-w-0">
+              <div className="p-2.5 rounded-xl bg-[#E07B39]/10 text-[#E07B39] shrink-0">
                 <Users className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("daily.avgworkers")}</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.avgworkers")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
-              <span className="text-4xl font-black text-foreground tracking-tight">{stats?.avgWorkerCount || 0}</span>
+              <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.avgWorkerCount || 0}</span>
               <span className="text-sm font-medium text-muted-foreground">per day</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-6 relative overflow-hidden group hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/5 transition-all duration-300">
+          <div className="bg-gradient-to-br from-card to-card/50 border border-border rounded-2xl p-4 sm:p-6 relative overflow-hidden group hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/5 transition-all duration-300 min-w-0">
             <div className="absolute -top-4 -right-4 p-4 opacity-5 group-hover:opacity-10 group-hover:scale-110 transition-all duration-500">
               <Camera className="w-32 h-32 text-purple-500" />
             </div>
-            <div className="flex items-center gap-3 mb-3 relative z-10">
-              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
+            <div className="flex items-center gap-3 mb-3 relative z-10 min-w-0">
+              <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500 shrink-0">
                 <Camera className="w-5 h-5" />
               </div>
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{t("daily.photos")}</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider truncate">{t("daily.photos")}</span>
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
-              <span className="text-4xl font-black text-foreground tracking-tight">{stats?.totalPhotos || 0}</span>
+              <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.totalPhotos || 0}</span>
               <span className="text-sm font-medium text-muted-foreground">captured</span>
             </div>
           </div>
@@ -1029,7 +1029,7 @@ export default function DailyPage() {
             ]);
             setShowDailyModal(true);
           }}
-          className="fixed bottom-20 md:bottom-6 right-6 flex items-center gap-2 px-5 py-3 rounded-full bg-gradient-to-r from-[#E07B39] to-blue-500 hover:from-[#F08B49] hover:to-blue-600 text-white font-bold shadow-lg hover:shadow-xl hover:shadow-[#E07B39]/20 hover:-translate-y-1 transition-all duration-300 z-40"
+          className="fixed bottom-24 md:bottom-6 right-4 md:right-6 flex items-center gap-2 px-4 sm:px-5 py-3 rounded-full bg-gradient-to-r from-[#E07B39] to-blue-500 hover:from-[#F08B49] hover:to-blue-600 text-white text-sm sm:text-base font-bold shadow-lg hover:shadow-xl hover:shadow-[#E07B39]/20 hover:-translate-y-1 transition-all duration-300 z-[60]"
         >
           <Plus className="w-5 h-5" />
           Log Activity
