@@ -3867,14 +3867,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (twilioAuthToken && !skipSig) {
       const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
       const host = (req.headers['x-forwarded-host'] || req.headers.host) as string | undefined;
+
+      // Vercel's catch-all rewrite (/api/:path* -> /api/index) injects the
+      // captured segment as a `path` query param on req.url. Twilio signed the
+      // URL configured in its console (which has no such param), so we must
+      // strip rewrite-injected params before re-computing the signature.
+      let reqUrl = req.url || '';
+      if (host) {
+        try {
+          const u = new URL(reqUrl, `${proto}://${host}`);
+          u.searchParams.delete('path');
+          reqUrl = u.pathname + (u.search || '');
+        } catch {
+          // fall back to raw req.url if URL parse fails
+        }
+      }
+
       const publicUrl = process.env.WEBHOOK_PUBLIC_URL
-        || (host ? `${proto}://${host}${req.url || ''}` : '');
+        || (host ? `${proto}://${host}${reqUrl}` : '');
       if (!signatureHeader || !publicUrl) {
         console.warn('[WhatsApp] Missing Twilio signature or public URL — rejecting.');
         return res.status(403).json({ error: 'Forbidden: signature required' });
       }
       // twilio.validateRequest is synchronous and safe with already-parsed form bodies.
-      const ok = twilio.validateRequest(twilioAuthToken, signatureHeader, publicUrl, body);
+      let ok = twilio.validateRequest(twilioAuthToken, signatureHeader, publicUrl, body);
+
+      // Fallback: if validation failed and we derived publicUrl from req.url,
+      // retry once with the raw req.url (covers the edge case where Twilio was
+      // actually configured with a `?path=...` query string).
+      if (!ok && !process.env.WEBHOOK_PUBLIC_URL && host && req.url && reqUrl !== req.url) {
+        const rawUrl = `${proto}://${host}${req.url}`;
+        ok = twilio.validateRequest(twilioAuthToken, signatureHeader, rawUrl, body);
+      }
+
       if (!ok) {
         console.warn('[WhatsApp] Twilio signature mismatch. url=', publicUrl, 'sid=', MessageSid);
         return res.status(403).json({ error: 'Forbidden: invalid signature' });
