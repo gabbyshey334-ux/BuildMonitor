@@ -646,34 +646,35 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
   return newProject.id;
 }
 
-async function sendPostCreationMessage(to: string, projectId: string) {
+async function sendPostCreationMessage(to: string, projectId: string, userId: string) {
   const msg = await ai(
     `Tell the user their construction project has been created and their dashboard is live at this URL: ${DASHBOARD_URL}/dashboard?project=${projectId}. Then briefly explain they can now log expenses, materials, workers and progress just by chatting. Give 3-4 short examples naturally. End by saying they can send a receipt photo or voice note too.`,
     `Project created! Dashboard: ${DASHBOARD_URL}/dashboard?project=${projectId}\n\nJust chat updates to me anytime:\n• "Bought cement for 400,000"\n• "6 workers on site"\n• "Foundation 80% done"\n• Send receipt photos or voice notes`
   );
-  await sendMessage(to, msg);
+  await sendMessage(to, msg, userId, projectId);
 }
 
 /** Route message to onboarding flow (e.g. when "1" was meant to confirm project, not expense). */
 async function handleOnboardingMessage(from: string, profile: any, message: string): Promise<void> {
+  const userId = profile.id as string;
   const state = profile.onboarding_state as OnboardingState;
   if (state === 'confirmation' && (message.includes('1') || /yes|create|confirm/i.test(message))) {
     try {
-      const projectId = await createProjectFromOnboarding(profile.id);
-      await sendPostCreationMessage(from, projectId);
+      const projectId = await createProjectFromOnboarding(userId);
+      await sendPostCreationMessage(from, projectId, userId);
     } catch (err: any) {
       console.error('[Onboarding] Project creation failed (handleOnboardingMessage):', err);
       await sendMessage(from, await ai(
         `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
         `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-      ), profile.id);
+      ), userId);
     }
     return;
   }
   await sendMessage(from, await ai(
     'Tell the user to confirm their project first by replying 1, or type "start over" to begin again.',
     'Please confirm your project first (reply 1), or type "start over" to begin again.'
-  ), profile.id);
+  ), userId);
 }
 
 // ─── OCR: Receipt Photo ───────────────────────────────────────────────────────
@@ -1477,7 +1478,7 @@ async function upsertDailyLog(
 
 // ─── Intent Handlers ──────────────────────────────────────────────────────────
 
-async function handleBudgetQuery(from: string, projectId: string, lang?: string): Promise<void> {
+async function handleBudgetQuery(from: string, projectId: string, userId: string, lang?: string): Promise<void> {
   // Pull the project with its currency so we never reply with "UGX" to a KES/USD project.
   const { data: project } = await supabase
     .from('projects').select('budget, name, currency').eq('id', projectId).single();
@@ -1532,7 +1533,7 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
     300,
     lang
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 async function handleGreeting(
@@ -1643,7 +1644,7 @@ If user wants to log something, confirm naturally and tell them you're saving it
   await sendMessage(from, reply, profile?.id, currentProject?.id);
 }
 
-async function handleBudgetUpdate(from: string, projectId: string, extracted: Record<string, unknown>): Promise<void> {
+async function handleBudgetUpdate(from: string, projectId: string, userId: string, extracted: Record<string, unknown>): Promise<void> {
   const { data: project } = await supabase
     .from('projects').select('budget, name').eq('id', projectId).single();
 
@@ -1655,7 +1656,7 @@ async function handleBudgetUpdate(from: string, projectId: string, extracted: Re
     await sendMessage(from, await ai(
       'Ask the user what the new budget should be. Give examples: "Set budget to 200M" or "Add 10M to budget".',
       'What should the new budget be? Try: "Set budget to 200M" or "Add 10M to budget"'
-    ));
+    ), userId, projectId);
     return;
   }
 
@@ -1671,7 +1672,7 @@ async function handleBudgetUpdate(from: string, projectId: string, extracted: Re
     `Tell the user their budget was updated. Previous: ${fmt(currentBudget)} UGX. ${action === 'add' ? 'Added' : 'New budget'}: ${fmt(amount)} UGX. New total: ${fmt(newBudget)} UGX. Tell them to refresh their dashboard.`,
     `Budget updated! Previous: ${fmt(currentBudget)} UGX. New total: ${fmt(newBudget)} UGX. Refresh your dashboard to see the update.`
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 async function handleExpenseLog(
@@ -2032,6 +2033,7 @@ async function handleMaterialLog(
 async function handleLaborLog(
   from: string,
   projectId: string,
+  userId: string,
   extracted: Record<string, unknown>,
   rawMessage: string,
   lang?: string
@@ -2051,7 +2053,7 @@ async function handleLaborLog(
       'How many workers were on site today? e.g. "6 workers on site"',
       200,
       lang
-    ));
+    ), userId, projectId);
     return;
   }
 
@@ -2084,7 +2086,7 @@ async function handleLaborLog(
     200,
     lang
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 async function handleProgressUpdate(
@@ -2167,8 +2169,8 @@ async function handleProgressUpdate(
   }
 }
 
-async function handleProjectQuery(from: string, projectId: string, projectName: string): Promise<void> {
-  await sendMessage(from, `You are currently working on: ${projectName}`);
+async function handleProjectQuery(from: string, projectId: string, userId: string, projectName: string): Promise<void> {
+  await sendMessage(from, `You are currently working on: ${projectName}`, userId, projectId);
 }
 
 async function handleIssueReport(
@@ -2218,6 +2220,7 @@ async function handleIssueReport(
 async function handleWeatherDelay(
   from: string,
   projectId: string,
+  userId: string,
   extracted: Record<string, unknown>,
   rawMessage: string
 ): Promise<void> {
@@ -2227,10 +2230,10 @@ async function handleWeatherDelay(
     `Tell the user their weather delay has been noted: "${reason}". Tell them it has been added to their project timeline. Express brief empathy about the delay.`,
     `Delay noted: "${reason}". Added to your project timeline.`
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
-async function handleMaterialQuery(from: string, projectId: string, message: string): Promise<void> {
+async function handleMaterialQuery(from: string, projectId: string, userId: string, message: string): Promise<void> {
   // Try to extract a specific material name (e.g. "how many bricks do I have" -> "bricks")
   const materialKeyword = message
     .replace(/how (?:much|many)|do (?:i|we) have|in (?:my )?inventory|current stock|stock (?:left|of)|remaining/i, '')
@@ -2256,7 +2259,7 @@ async function handleMaterialQuery(from: string, projectId: string, message: str
         ? new Date(m.last_purchased_at).toLocaleDateString(undefined, { dateStyle: 'medium' })
         : 'not recorded';
       const reply = `You have ${qty} ${unit} of ${m.name}. Last purchased: ${lastPurchased}.`;
-      await sendMessage(from, reply);
+      await sendMessage(from, reply, userId, projectId);
       return;
     }
   }
@@ -2273,7 +2276,7 @@ async function handleMaterialQuery(from: string, projectId: string, message: str
       'Tell the user there are no materials in inventory yet. Give an example: "Received 50 bags cement from Hima".',
       'No materials in inventory yet. Log received stock like: "Received 50 bags cement from Hima"'
     );
-    await sendMessage(from, msg);
+    await sendMessage(from, msg, userId, projectId);
     return;
   }
 
@@ -2285,12 +2288,12 @@ async function handleMaterialQuery(from: string, projectId: string, message: str
     `Show the user their current inventory:\n${lines}\nThen tell them they can send "Used X bags cement" to update stock. Be brief.`,
     `Current inventory:\n\n${lines}\n\nSend "Used X bags cement" to update stock.`
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 // ─── SMART_QUERY: free-form questions over historical data ─────────────────────
 
-async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
+async function handleSmartQuery(from: string, projectId: string, userId: string, question: string): Promise<void> {
   // BUG 7: Workers on a specific date — query daily_logs directly
   const workerDateMatch = question.match(/worker|staff|people|men|mason|came|on site/i);
   const dateMatch = question.match(/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)|(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})|(\d{4})-(\d{2})-(\d{2})/i);
@@ -2325,11 +2328,11 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
         const reply = wc !== 'not recorded'
           ? `On ${dateFormatted}: ${wc} workers on site.${log.notes ? ` Notes: ${log.notes}` : ''}`
           : `On ${dateFormatted}: No worker count recorded.${log.notes ? ` Notes: ${log.notes}` : ''}`;
-        await sendMessage(from, reply);
+        await sendMessage(from, reply, userId, projectId);
         return;
       }
       const dateFormatted = new Date(logDate + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
-      await sendMessage(from, `I don't have a log for ${dateFormatted}. Check your Daily Accountability page at ${DASHBOARD_URL}/daily`);
+      await sendMessage(from, `I don't have a log for ${dateFormatted}. Check your Daily Accountability page at ${DASHBOARD_URL}/daily`, userId, projectId);
       return;
     }
   }
@@ -2429,7 +2432,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     const periodTotal = (periodExpenses || []).reduce((s, e: any) => s + parseFloat(String(e.amount || 0)), 0);
 
     if (!periodExpenses || periodExpenses.length === 0) {
-      await sendMessage(from, `No expenses recorded for ${periodLabel}.`);
+      await sendMessage(from, `No expenses recorded for ${periodLabel}.`, userId, projectId);
       return;
     }
 
@@ -2502,7 +2505,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
 
     const reply = replyParts.join('\n');
 
-    await sendMessage(from, reply);
+    await sendMessage(from, reply, userId, projectId);
     return;
   }
 
@@ -2612,12 +2615,12 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
   }
 
   if (answer) {
-    await sendMessage(from, answer);
+    await sendMessage(from, answer, userId, projectId);
   } else {
     await sendMessage(from, await ai(
       'Tell the user you could not generate an answer right now. Suggest they try asking something like: How much did I spend on cement last month? Compare spending this month vs last month. Be brief.',
       'Could not generate an answer right now. Try: "How much did I spend on cement last month?" or "Compare spending this month vs last month"'
-    ));
+    ), userId, projectId);
   }
 }
 
@@ -4092,7 +4095,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (message.includes('1') || /yes|create|confirm/i.test(message)) {
             try {
               const projectId = await createProjectFromOnboarding(userId);
-              await sendPostCreationMessage(From, projectId);
+              await sendPostCreationMessage(From, projectId, userId);
             } catch (err: any) {
               console.error('[Onboarding] Project creation failed:', err);
               await sendMessage(From, await ai(
@@ -4570,7 +4573,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isConfirmingProject) {
       try {
         const projectId = await createProjectFromOnboarding(userId);
-        await sendPostCreationMessage(From, projectId);
+        await sendPostCreationMessage(From, projectId, userId);
       } catch (err: any) {
         console.error('[Onboarding] Project creation failed (from re-check):', err);
         await sendMessage(From, await ai(
@@ -5082,10 +5085,10 @@ async function routeIntent(
 
   switch (intent) {
     case 'BUDGET_QUERY':
-      await handleBudgetQuery(from, project.id, lang);
+      await handleBudgetQuery(from, project.id, userId, lang);
       break;
     case 'BUDGET_UPDATE':
-      await handleBudgetUpdate(from, project.id, extracted);
+      await handleBudgetUpdate(from, project.id, userId, extracted);
       break;
     case 'EXPENSE_LOG':
       await handleExpenseLog(from, userId, project.id, extracted, rawMessage, lang);
@@ -5097,19 +5100,19 @@ async function routeIntent(
       await handleAddPurchasesToInventory(from, userId, project.id, lang);
       break;
     case 'LABOR_LOG':
-      await handleLaborLog(from, project.id, extracted, rawMessage, lang);
+      await handleLaborLog(from, project.id, userId, extracted, rawMessage, lang);
       break;
     case 'PROGRESS_UPDATE':
       await handleProgressUpdate(from, userId, project.id, extracted, rawMessage, lang);
       break;
     case 'WEATHER_DELAY':
-      await handleWeatherDelay(from, project.id, extracted, rawMessage);
+      await handleWeatherDelay(from, project.id, userId, extracted, rawMessage);
       break;
     case 'MATERIAL_QUERY':
-      await handleMaterialQuery(from, project.id, rawMessage);
+      await handleMaterialQuery(from, project.id, userId, rawMessage);
       break;
     case 'SMART_QUERY':
-      await handleSmartQuery(from, project.id, rawMessage);
+      await handleSmartQuery(from, project.id, userId, rawMessage);
       break;
     case 'SWITCH_PROJECT': {
       const mentionedName = extracted.project_name as string | null;
@@ -5139,7 +5142,7 @@ async function routeIntent(
       await handleListProjects(from, userId);
       break;
     case 'PROJECT_QUERY':
-      await handleProjectQuery(from, project?.id ?? '', project?.name ?? 'Unknown');
+      await handleProjectQuery(from, project?.id ?? '', userId, project?.name ?? 'Unknown');
       break;
     case 'ISSUE_REPORT':
       await handleIssueReport(from, userId, project.id, extracted, rawMessage, lang);
