@@ -4,7 +4,42 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
-import { Eye, EyeOff } from "lucide-react";
+import { User, Mail, Lock, Phone, Eye, EyeOff, Loader2 } from "lucide-react";
+
+// Inline SVG grid — graph-paper texture at 4% opacity
+function GridPattern({ id }: { id: string }) {
+  return (
+    <svg
+      width="100%"
+      height="100%"
+      xmlns="http://www.w3.org/2000/svg"
+      className="absolute inset-0"
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern id={id} width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="white" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${id})`} />
+    </svg>
+  );
+}
+
+// 0-4 segment strength score mapped from password heuristics
+function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
+  if (!pw) return { score: 0, label: "", color: "" };
+  let raw = 0;
+  if (pw.length >= 8) raw++;
+  if (pw.length >= 12) raw++;
+  if (/[A-Z]/.test(pw)) raw++;
+  if (/[0-9]/.test(pw)) raw++;
+  if (/[^A-Za-z0-9]/.test(pw)) raw++;
+  if (raw <= 1) return { score: 1, label: "Weak", color: "#DC2626" };
+  if (raw <= 2) return { score: 2, label: "Fair", color: "#F59E0B" };
+  if (raw <= 3) return { score: 3, label: "Good", color: "#EAB308" };
+  return { score: 4, label: "Strong", color: "#1E7A3E" };
+}
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -13,9 +48,13 @@ export default function Signup() {
     password: "",
     whatsappNumber: "",
   });
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const { register, isLoading } = useAuth();
+
+  const strength = getPasswordStrength(formData.password);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -58,6 +97,10 @@ export default function Signup() {
       next.password = "Password must be at least 8 characters";
     }
 
+    if (formData.password && formData.password !== confirmPassword) {
+      next.confirmPassword = "Passwords do not match";
+    }
+
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -69,63 +112,52 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      {/* LEFT COLUMN - Image Side */}
-      <div className="relative w-full md:w-[45%] h-[260px] md:h-screen md:fixed md:top-0 md:left-0 overflow-hidden">
-        <img 
-          src="https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=1200&auto=format&fit=crop&q=80&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNvbnN0cnVjdGlvbiUyMHNpdGV8ZW58MHx8MHx8fDA%3D" 
-          alt="Construction site" 
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#218598]/40 via-[#2F3332]/60 to-[#2F3332]/90 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-black/20" />
-        
-        {/* Bottom Content */}
-        <div className="absolute bottom-10 left-10 right-10 text-white z-10">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-xl overflow-hidden shrink-0">
-              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-8 h-8 object-contain drop-shadow-md" />
-            </div>
-            <span className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">JengaTrack</span>
-          </div>
-          
-          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-3">
-            Build smarter.<br />Track everything.
-          </h1>
-          <p className="text-white/80 text-base md:text-lg mb-8 font-light max-w-md">
-            The ultimate WhatsApp-powered construction management platform for modern builders.
-          </p>
+    <div className="min-h-screen bg-[#0F1A14] relative overflow-x-hidden">
 
-          <div className="flex flex-wrap gap-3">
-            {["500+ projects tracked", "Real-time updates", "Works on WhatsApp"].map((tag, i) => (
-              <span key={i} className="px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-sm font-medium border border-white/20 shadow-sm">
-                {tag}
-              </span>
-            ))}
+      {/* ── Desktop: full-page SVG grid background ── */}
+      <div className="hidden md:block absolute inset-0 opacity-[0.04] pointer-events-none overflow-hidden">
+        <GridPattern id="grid-signup-d" />
+      </div>
+
+      {/* ── Mobile only: Zone A — Brand Panel (fixed, top 38vh) ── */}
+      <div className="md:hidden fixed top-0 inset-x-0 h-[38vh] bg-[#0F1A14] z-[1] flex flex-col items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none">
+          <GridPattern id="grid-signup-m" />
+        </div>
+        <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+          <div className="w-14 h-14 rounded-xl border border-[#1E7A3E]/50 shadow-[0_0_20px_rgba(30,122,62,0.25)] flex items-center justify-center overflow-hidden bg-white/5">
+            <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain" />
           </div>
+          <span className="text-2xl font-bold text-white tracking-tight">JengaTrack</span>
+          <p className="text-sm text-[#F59E0B]">Start tracking in under 2 minutes.</p>
         </div>
       </div>
 
-      {/* RIGHT COLUMN - Form Side */}
-      <div className="w-full md:w-[55%] md:ml-[45%] min-h-screen bg-background relative flex flex-col justify-center items-center py-12 px-6 md:px-10 overflow-hidden">
-        {/* Decorative background blobs */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#218598]/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[#93C54E]/5 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3 pointer-events-none" />
+      {/* ── Zone B — Form card ── */}
+      <div className="relative z-10 mt-[calc(38vh-20px)] md:mt-0 md:flex md:items-center md:justify-center md:min-h-screen md:px-6">
+        <div className="bg-white w-full rounded-t-3xl shadow-[0_-4px_24px_rgba(0,0,0,0.08)] md:rounded-2xl md:shadow-2xl md:max-w-md px-6 pt-8 pb-10 md:p-10 min-h-[calc(65vh+20px)] md:min-h-0">
 
-        <div className="w-full max-w-[420px] relative z-10">
-          <div className="bg-card/50 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl">
-            {/* Header */}
-            <div className="space-y-3 mb-8 text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#93C54E]/20 to-[#218598]/20 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 mx-auto mb-4 border border-[#218598]/20 shadow-inner">
-                <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain drop-shadow-sm" />
-              </div>
-              <h2 className="text-3xl font-bold text-foreground tracking-tight">Create account</h2>
-              <p className="text-muted-foreground">Start tracking your build today</p>
+          {/* Desktop-only logo header */}
+          <div className="hidden md:flex flex-col items-center mb-8 gap-2">
+            <div className="w-14 h-14 rounded-xl border border-[#1E7A3E]/40 shadow-sm flex items-center justify-center overflow-hidden">
+              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain" />
             </div>
+            <span className="text-2xl font-bold tracking-tight text-[#0F1A14]">JengaTrack</span>
+          </div>
 
-            <form onSubmit={handleSignup} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-foreground font-semibold ml-1">Full Name</Label>
+          {/* Form heading */}
+          <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Create your account</h2>
+          <p className="text-sm text-gray-500 mt-1">Free to start. No credit card.</p>
+
+          <form onSubmit={handleSignup} className="mt-6 space-y-4">
+
+            {/* Full Name */}
+            <div className="space-y-1.5">
+              <Label htmlFor="fullName" className="text-sm font-medium text-gray-700">
+                Full Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 <Input
                   id="fullName"
                   type="text"
@@ -134,28 +166,44 @@ export default function Signup() {
                   placeholder="John Doe"
                   required
                   maxLength={100}
-                  className="bg-background/50 border-border/60 rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
+                  className={`h-[52px] pl-10 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${errors.fullName ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
                 />
-                {errors.fullName && <p className="text-red-500 text-xs mt-1 ml-1">{errors.fullName}</p>}
               </div>
+              {errors.fullName && (
+                <p className="text-xs text-[#DC2626] mt-1">{errors.fullName}</p>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="whatsappNumber" className="text-foreground font-semibold ml-1">WhatsApp Number</Label>
+            {/* WhatsApp Number */}
+            <div className="space-y-1.5">
+              <Label htmlFor="whatsappNumber" className="text-sm font-medium text-gray-700">
+                WhatsApp Number
+              </Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 <Input
                   id="whatsappNumber"
                   type="tel"
                   value={formData.whatsappNumber}
                   onChange={handleInputChange}
-                  placeholder="+256..."
+                  placeholder="+256 700 000 000"
                   required
                   maxLength={15}
-                  className="bg-background/50 border-border/60 rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
+                  className={`h-[52px] pl-10 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${errors.whatsappNumber ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
                 />
-                {errors.whatsappNumber && <p className="text-red-500 text-xs mt-1 ml-1">{errors.whatsappNumber}</p>}
               </div>
+              {errors.whatsappNumber && (
+                <p className="text-xs text-[#DC2626] mt-1">{errors.whatsappNumber}</p>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-foreground font-semibold ml-1">Email Address</Label>
+            {/* Email */}
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                 <Input
                   id="email"
                   type="email"
@@ -164,62 +212,135 @@ export default function Signup() {
                   placeholder="name@example.com"
                   required
                   maxLength={254}
-                  className="bg-background/50 border-border/60 rounded-xl h-12 px-4 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
+                  className={`h-[52px] pl-10 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${errors.email ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
                 />
-                {errors.email && <p className="text-red-500 text-xs mt-1 ml-1">{errors.email}</p>}
               </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-foreground font-semibold ml-1">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    placeholder="••••••••"
-                    required
-                    autoComplete="new-password"
-                    className="bg-background/50 border-border/60 rounded-xl h-12 pl-4 pr-12 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
-                  >
-                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                  </button>
-                </div>
-                {errors.password && <p className="text-red-500 text-xs mt-1 ml-1">{errors.password}</p>}
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-6"
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Creating account...</span>
-                  </div>
-                ) : (
-                  "Create Account"
-                )}
-              </Button>
-            </form>
-
-            <div className="mt-8 text-center">
-              <p className="text-muted-foreground">
-                Already have an account?{" "}
-                <Link href="/login">
-                  <span className="text-[#218598] hover:text-[#1a6a7a] font-bold cursor-pointer transition-colors">
-                    Sign in here
-                  </span>
-                </Link>
-              </p>
+              {errors.email && (
+                <p className="text-xs text-[#DC2626] mt-1">{errors.email}</p>
+              )}
             </div>
-          </div>
+
+            {/* Password + strength indicator */}
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="new-password"
+                  className={`h-[52px] pl-10 pr-12 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${errors.password ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1 min-h-[44px] flex items-center"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.password && (
+                <p className="text-xs text-[#DC2626] mt-1">{errors.password}</p>
+              )}
+
+              {/* 4-segment strength bar */}
+              {formData.password.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4].map((seg) => (
+                      <div
+                        key={seg}
+                        className="flex-1 h-1.5 rounded-full transition-all duration-300"
+                        style={{
+                          backgroundColor:
+                            seg <= strength.score ? strength.color : "#E5E7EB",
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <p className="text-xs font-medium" style={{ color: strength.color }}>
+                    {strength.label}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Confirm Password */}
+            <div className="space-y-1.5">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+                Confirm Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                <Input
+                  id="confirmPassword"
+                  type={showConfirm ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                  }}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="new-password"
+                  className={`h-[52px] pl-10 pr-12 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${errors.confirmPassword ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1 min-h-[44px] flex items-center"
+                >
+                  {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              {errors.confirmPassword && (
+                <p className="text-xs text-[#DC2626] mt-1">{errors.confirmPassword}</p>
+              )}
+            </div>
+
+            {/* CTA */}
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full h-[52px] bg-[#1E7A3E] hover:bg-green-800 active:bg-green-900 text-white font-semibold text-base rounded-xl transition-colors mt-6 disabled:opacity-70"
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Creating account…
+                </span>
+              ) : (
+                "Create Account"
+              )}
+            </Button>
+          </form>
+
+          {/* Terms */}
+          <p className="text-xs text-gray-500 text-center mt-3 leading-relaxed">
+            By signing up you agree to our{" "}
+            <span className="text-[#1E7A3E] cursor-pointer hover:underline underline-offset-2">Terms</span>
+            {" "}and{" "}
+            <span className="text-[#1E7A3E] cursor-pointer hover:underline underline-offset-2">Privacy Policy</span>
+          </p>
+
+          {/* Bottom link */}
+          <p className="text-sm text-gray-500 text-center mt-4">
+            Already have an account?{" "}
+            <Link href="/login">
+              <span className="text-[#1E7A3E] font-medium cursor-pointer hover:underline underline-offset-2">
+                Sign in
+              </span>
+            </Link>
+          </p>
+
         </div>
       </div>
     </div>

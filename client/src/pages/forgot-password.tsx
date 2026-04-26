@@ -3,8 +3,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+// Inline SVG grid — graph-paper texture at 4% opacity
+function GridPattern({ id }: { id: string }) {
+  return (
+    <svg
+      width="100%"
+      height="100%"
+      xmlns="http://www.w3.org/2000/svg"
+      className="absolute inset-0"
+      aria-hidden="true"
+    >
+      <defs>
+        <pattern id={id} width="20" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 20 0 L 0 0 0 20" fill="none" stroke="white" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${id})`} />
+    </svg>
+  );
+}
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -12,6 +32,25 @@ export default function ForgotPassword() {
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  // Extracted API call so it can be reused by the resend action
+  const sendResetLink = async (emailAddress: string) => {
+    const redirectTo =
+      typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
+    const res = await fetch("/api/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: emailAddress, redirectTo }),
+    });
+
+    const contentType = res.headers.get("content-type");
+    const isJson = contentType && contentType.includes("application/json");
+    const data = isJson ? await res.json() : { message: "Something went wrong. Please try again." };
+
+    if (!res.ok) {
+      throw new Error(data.message || data.error || "Failed to send reset link");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,26 +69,8 @@ export default function ForgotPassword() {
     }
 
     setIsLoading(true);
-
     try {
-      const redirectTo =
-        typeof window !== "undefined" ? `${window.location.origin}/reset-password` : undefined;
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: trimmedEmail, redirectTo }),
-      });
-
-      const contentType = res.headers.get("content-type");
-      const isJson = contentType && contentType.includes("application/json");
-      const data = isJson ? await res.json() : { message: "Something went wrong. Please try again." };
-
-      if (!res.ok) {
-        const message = data.message || data.error || "Failed to send reset link";
-        setError(message);
-        return;
-      }
-
+      await sendResetLink(trimmedEmail);
       setSuccess(true);
       toast({
         title: "Link Sent",
@@ -62,124 +83,156 @@ export default function ForgotPassword() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
-      {/* LEFT COLUMN - Image Side */}
-      <div className="relative w-full md:w-[45%] h-[260px] md:h-screen md:fixed md:top-0 md:left-0 overflow-hidden">
-        <img 
-          src="https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=1200&auto=format&fit=crop&q=80&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8MTJ8fGNvbnN0cnVjdGlvbiUyMHNpdGV8ZW58MHx8MHx8fDA%3D" 
-          alt="Construction site" 
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#218598]/40 via-[#2F3332]/60 to-[#2F3332]/90 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-black/20" />
-        
-        {/* Bottom Content */}
-        <div className="absolute bottom-10 left-10 right-10 text-white z-10">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-xl overflow-hidden shrink-0">
-              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-8 h-8 object-contain drop-shadow-md" />
-            </div>
-            <span className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">JengaTrack</span>
-          </div>
-          
-          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-3">
-            Build smarter.<br />Track everything.
-          </h1>
-          <p className="text-white/80 text-base md:text-lg mb-8 font-light max-w-md">
-            The ultimate WhatsApp-powered construction management platform for modern builders.
-          </p>
+  const handleResend = async () => {
+    setIsLoading(true);
+    try {
+      await sendResetLink(email.trim());
+      toast({
+        title: "Link Resent",
+        description: "A new reset link has been sent to your email.",
+      });
+    } catch (err: any) {
+      setError(err?.message || "Something went wrong. Please try again.");
+      setSuccess(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-          <div className="flex flex-wrap gap-3">
-            {["500+ projects tracked", "Real-time updates", "Works on WhatsApp"].map((tag, i) => (
-              <span key={i} className="px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md text-sm font-medium border border-white/20 shadow-sm">
-                {tag}
-              </span>
-            ))}
+  return (
+    <div className="min-h-screen bg-[#0F1A14] relative overflow-x-hidden">
+
+      {/* ── Desktop: full-page SVG grid background ── */}
+      <div className="hidden md:block absolute inset-0 opacity-[0.04] pointer-events-none overflow-hidden">
+        <GridPattern id="grid-forgot-d" />
+      </div>
+
+      {/* ── Mobile only: Zone A — Brand Panel (fixed, top 38vh) ── */}
+      <div className="md:hidden fixed top-0 inset-x-0 h-[38vh] bg-[#0F1A14] z-[1] flex flex-col items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 opacity-[0.04] pointer-events-none">
+          <GridPattern id="grid-forgot-m" />
+        </div>
+        <div className="relative z-10 flex flex-col items-center gap-3 px-6 text-center">
+          <div className="w-14 h-14 rounded-xl border border-[#1E7A3E]/50 shadow-[0_0_20px_rgba(30,122,62,0.25)] flex items-center justify-center overflow-hidden bg-white/5">
+            <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain" />
           </div>
+          <span className="text-2xl font-bold text-white tracking-tight">JengaTrack</span>
+          <p className="text-sm text-[#F59E0B]">We'll get you back in.</p>
         </div>
       </div>
 
-      {/* RIGHT COLUMN - Form Side */}
-      <div className="w-full md:w-[55%] md:ml-[45%] min-h-screen bg-background relative flex flex-col justify-center items-center py-12 px-6 md:px-10 overflow-hidden">
-        {/* Decorative background blobs */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#218598]/5 rounded-full blur-[100px] -translate-y-1/2 translate-x-1/3 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-[#93C54E]/5 rounded-full blur-[100px] translate-y-1/3 -translate-x-1/3 pointer-events-none" />
+      {/* ── Zone B — Form card ── */}
+      <div className="relative z-10 mt-[calc(38vh-20px)] md:mt-0 md:flex md:items-center md:justify-center md:min-h-screen md:px-6">
+        <div className="bg-white w-full rounded-t-3xl shadow-[0_-4px_24px_rgba(0,0,0,0.08)] md:rounded-2xl md:shadow-2xl md:max-w-md px-6 pt-8 pb-10 md:p-10 min-h-[calc(65vh+20px)] md:min-h-0">
 
-        <div className="w-full max-w-[420px] relative z-10">
-          
-          {success ? (
-            // Success State
-            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl text-center space-y-6">
-               <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#93C54E]/20 to-[#218598]/20 flex items-center justify-center mx-auto border border-[#218598]/20 shadow-inner">
-                <CheckCircle2 className="w-10 h-10 text-[#218598]" />
-              </div>
-              <h2 className="text-3xl font-bold text-foreground tracking-tight">Check your email</h2>
-              <p className="text-muted-foreground text-lg">
-                We've sent a password reset link to <br /><span className="text-foreground font-semibold">{email}</span>.
-              </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                Please click the link in the email to reset your password.
-              </p>
-              <Button asChild className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-6">
-                <Link href="/login">Back to Sign In</Link>
-              </Button>
+          {/* Desktop-only logo header */}
+          <div className="hidden md:flex flex-col items-center mb-8 gap-2">
+            <div className="w-14 h-14 rounded-xl border border-[#1E7A3E]/40 shadow-sm flex items-center justify-center overflow-hidden">
+              <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain" />
             </div>
-          ) : (
-            // Form State
-            <div className="bg-card/50 backdrop-blur-xl border border-border rounded-3xl p-8 shadow-2xl">
-              {/* Header */}
-              <div className="space-y-3 mb-8 text-center">
-                <div className="w-16 h-16 bg-gradient-to-br from-[#93C54E]/20 to-[#218598]/20 rounded-2xl flex items-center justify-center overflow-hidden shrink-0 mx-auto mb-4 border border-[#218598]/20 shadow-inner">
-                  <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain drop-shadow-sm" />
-                </div>
-                <h2 className="text-3xl font-bold text-foreground tracking-tight">Reset password</h2>
-                <p className="text-muted-foreground">Enter your email to receive a reset link</p>
+            <span className="text-2xl font-bold tracking-tight text-[#0F1A14]">JengaTrack</span>
+          </div>
+
+          {success ? (
+            /* ── Success panel ── */
+            <div className="flex flex-col items-center text-center gap-5">
+              <div className="w-16 h-16 rounded-full bg-[#1E7A3E]/10 border border-[#1E7A3E]/20 flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-[#1E7A3E]" />
               </div>
 
-              <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-foreground font-semibold ml-1">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setError("");
-                    }}
-                    placeholder="name@example.com"
-                    required
-                    className="bg-background/50 border-border/60 rounded-xl h-14 px-4 text-foreground focus:ring-2 focus:ring-[#218598]/50 focus:border-[#218598] transition-all shadow-sm w-full"
-                  />
-                  {error && <p className="text-red-500 text-sm mt-1 ml-1">{error}</p>}
+              <div className="space-y-1.5">
+                <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Check your inbox</h2>
+                <p className="text-sm text-gray-500 leading-relaxed">
+                  We sent a reset link to{" "}
+                  <span className="font-medium text-[#0F1A14]">{email}</span>.{" "}
+                  It expires in 15 minutes.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={isLoading}
+                className="text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors disabled:opacity-60 flex items-center gap-1"
+              >
+                {isLoading ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Resending…</>
+                ) : (
+                  "Didn't receive it? Resend"
+                )}
+              </button>
+
+              <Link href="/login">
+                <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors cursor-pointer mt-1">
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to login
+                </span>
+              </Link>
+            </div>
+
+          ) : (
+            /* ── Form panel ── */
+            <>
+              {/* Back link */}
+              <Link href="/login">
+                <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors cursor-pointer mb-6">
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to login
+                </span>
+              </Link>
+
+              {/* Heading */}
+              <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Reset your password</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Enter your email and we'll send a reset link
+              </p>
+
+              <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+
+                {/* Email */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                    Email
+                  </Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setError("");
+                      }}
+                      placeholder="name@example.com"
+                      required
+                      className={`h-[52px] pl-10 bg-[#F8FAF9] rounded-xl focus-visible:ring-2 focus-visible:ring-[#1E7A3E]/30 focus-visible:border-[#1E7A3E] text-[#0F1A14] placeholder:text-gray-400 ${error ? "border-[#DC2626]" : "border-[#E5E7EB]"}`}
+                    />
+                  </div>
+                  {error && (
+                    <p className="text-xs text-[#DC2626] mt-1">{error}</p>
+                  )}
                 </div>
 
+                {/* CTA */}
                 <Button
                   type="submit"
-                  className="w-full h-14 bg-gradient-to-r from-[#93C54E] to-[#218598] hover:from-[#85b546] hover:to-[#1d7586] text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 text-lg mt-6"
                   disabled={isLoading}
+                  className="w-full h-[52px] bg-[#1E7A3E] hover:bg-green-800 active:bg-green-900 text-white font-semibold text-base rounded-xl transition-colors mt-6 disabled:opacity-70"
                 >
                   {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Sending...</span>
-                    </div>
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Sending…
+                    </span>
                   ) : (
                     "Send Reset Link"
                   )}
                 </Button>
               </form>
-
-              <div className="mt-8 text-center">
-                <Link href="/login">
-                  <span className="text-muted-foreground hover:text-foreground text-sm font-medium cursor-pointer transition-colors inline-flex items-center gap-2">
-                    <ArrowLeft className="w-4 h-4" /> Back to sign in
-                  </span>
-                </Link>
-              </div>
-            </div>
+            </>
           )}
+
         </div>
       </div>
     </div>
