@@ -119,15 +119,25 @@ export default function ResetPassword() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F1A14] relative overflow-x-hidden">
+    <div className="min-h-screen relative overflow-x-hidden">
 
-      {/* ── Desktop: full-page SVG grid background ── */}
-      <div className="hidden md:block absolute inset-0 opacity-[0.04] pointer-events-none overflow-hidden">
+      {/* ── Full-page background image ── */}
+      <img
+        src="https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=1200&auto=format&fit=crop&q=80"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover z-0"
+      />
+
+      {/* ── Desktop: dark overlay + SVG grid on top of image ── */}
+      <div className="hidden md:block absolute inset-0 bg-[#0F1A14]/80 z-[1]" />
+      <div className="hidden md:block absolute inset-0 opacity-[0.04] pointer-events-none overflow-hidden z-[1]">
         <GridPattern id="grid-reset-d" />
       </div>
 
       {/* ── Mobile only: Zone A — Brand Panel (fixed, top 38vh) ── */}
-      <div className="md:hidden fixed top-0 inset-x-0 h-[38vh] bg-[#0F1A14] z-[1] flex flex-col items-center justify-center overflow-hidden">
+      <div className="md:hidden fixed top-0 inset-x-0 h-[38vh] z-[2] flex flex-col items-center justify-center overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0F1A14]/50 via-[#0F1A14]/70 to-[#0F1A14]/90" />
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none">
           <GridPattern id="grid-reset-m" />
         </div>
@@ -141,7 +151,7 @@ export default function ResetPassword() {
       </div>
 
       {/* ── Zone B — Form card ── */}
-      <div className="relative z-10 mt-[calc(38vh-20px)] md:mt-0 md:flex md:items-center md:justify-center md:min-h-screen md:px-6">
+      <div className="relative z-[3] mt-[calc(38vh-20px)] md:mt-0 md:flex md:items-center md:justify-center md:min-h-screen md:px-6">
         <div className="bg-white w-full rounded-t-3xl shadow-[0_-4px_24px_rgba(0,0,0,0.08)] md:rounded-2xl md:shadow-2xl md:max-w-md px-6 pt-8 pb-10 md:p-10 min-h-[calc(65vh+20px)] md:min-h-0">
 
           {/* Desktop-only logo header */}
