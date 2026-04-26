@@ -256,6 +256,20 @@ async function sendOptions(to: string, message: string, options: string[]): Prom
   await sendMessage(to, text);
 }
 
+/** Log an outbound bot reply to whatsapp_messages for conversation memory. Best-effort — never throws. */
+async function logOutbound(userId: string, messageBody: string): Promise<void> {
+  try {
+    await supabase.from('whatsapp_messages').insert({
+      user_id: userId,
+      direction: 'outbound',
+      message_body: messageBody.substring(0, 4000),
+      processed: true,
+    });
+  } catch (err) {
+    console.warn('[LogOutbound] Failed:', (err as any)?.message);
+  }
+}
+
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
 
 /** Parse amount from text: handles 150K, 1.5M, 2B, and plain numbers. K=×1000, M=×1e6, B=×1e9. */
@@ -1135,10 +1149,23 @@ function parseMultiItemMessage(message: string): Array<{ item: string; quantity:
 
 async function classifyIntent(message: string, phoneNumber: string): Promise<IntentResult> {
   const translatedMessage = await translateToEnglish(message);
-  const preClassified = preClassifyIntent(translatedMessage);
-  if (preClassified) {
-    console.log('[Intent] Regex match:', preClassified.intent);
-    return preClassified;
+
+  // Only use regex pre-classification for short, unambiguous messages.
+  // Long or multi-part messages (>12 words, contains ?, contains ' and ') are routed
+  // straight to the AI classifier to avoid misclassification and wrong handler dispatch.
+  const isComplex =
+    translatedMessage.trim().split(/\s+/).length > 12 ||
+    translatedMessage.includes('?') ||
+    translatedMessage.toLowerCase().includes(' and ');
+
+  if (!isComplex) {
+    const preClassified = preClassifyIntent(translatedMessage);
+    if (preClassified) {
+      console.log('[Intent] Regex match:', preClassified.intent);
+      return preClassified;
+    }
+  } else {
+    console.log('[Intent] Complex message — skipping regex, going straight to AI classifier');
   }
 
   if (!checkRateLimit(phoneNumber)) {
@@ -3263,6 +3290,25 @@ async function runAgent(
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
   ]);
 
+  // ── Fetch conversation history for memory (last 12 messages, exclude current) ──
+  const { data: convHistory } = await supabase
+    .from('whatsapp_messages')
+    .select('direction, message_body, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(12);
+
+  // Reverse to chronological order, drop the last row (= the inbound message we're
+  // currently processing, already logged before runAgent is called).
+  const formattedHistory = (convHistory || [])
+    .reverse()
+    .slice(0, -1)
+    .map((m: any) => ({
+      role: m.direction === 'inbound' ? 'user' : 'model',
+      parts: [{ text: (m.message_body || '').trim() }],
+    }))
+    .filter((m: any) => m.parts[0].text.length > 0);
+
   const project = projectRes.data;
   const allExpenses = (expensesFullRes.data || []).map((e: any) => ({
     description: e.description,
@@ -3466,7 +3512,7 @@ async function runAgent(
       topVendors: vendors.slice(0, 5),
       totalExpenseRecords: allExpenses.length,
     },
-    expenses: (expensesRecentRes.data || []).map((e: any) => ({
+    recentExpenses: (expensesRecentRes.data || []).slice(0, 20).map((e: any) => ({
       description: e.description,
       amountUgx: Math.round(parseFloat(String(e.amount || 0))),
       date: e.expense_date,
@@ -3493,7 +3539,9 @@ async function runAgent(
   });
 
   // ── System prompt ─────────────────────────────────────────────────────────
-  const systemPrompt = `You are JengaTrack, a professional AI construction project assistant for ${userName}'s project in Uganda. You have COMPLETE access to the live project database shown below. You can read any data, perform calculations, answer any question, and take actions that update the database.
+  const systemPrompt = `CRITICAL: Never compute totals or sums yourself from recentExpenses. All financial totals are pre-computed in analytics.spendingPeriods and analytics.spendingByCategory — use those values directly.
+
+You are JengaTrack, a professional AI construction project assistant for ${userName}'s project in Uganda. You have COMPLETE access to the live project database shown below. You can read any data, perform calculations, answer any question, and take actions that update the database.
 
 TODAY: ${todayFormatted}
 USER: ${userName}
@@ -3598,8 +3646,13 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
   if (gemini && process.env.GEMINI_API_KEY) {
     for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
       try {
-        const model = gemini.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent([{ text: systemPrompt }, { text: userPrompt }]);
+        const model = gemini.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+        });
+        // Pass conversation history so the model has memory of prior turns
+        const chat = model.startChat({ history: formattedHistory });
+        const result = await chat.sendMessage(userPrompt);
         rawResponse = result.response.text()?.trim() || null;
         if (rawResponse) {
           console.log(`[Agent] Gemini (${modelName}):`, rawResponse.substring(0, 120));
@@ -3613,10 +3666,16 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 
   if (!rawResponse && process.env.OPENAI_API_KEY) {
     try {
+      // Map Gemini-style history (role: 'model') to OpenAI format (role: 'assistant')
+      const historyMessages = formattedHistory.map((m: any) => ({
+        role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: m.parts[0].text,
+      }));
       const completion = await openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
+          ...historyMessages,
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,
@@ -4356,7 +4415,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             actionReply = await runAgent(userId, project.id, transcribed, profile, projects || []);
           }
           const summary = transcribed.length > 60 ? transcribed.substring(0, 57) + '...' : transcribed;
-          await sendMessage(From, `Transcribed ✅ "${summary}"\n\n${actionReply}`);
+          const voiceReply = `Transcribed ✅ "${summary}"\n\n${actionReply}`;
+          await sendMessage(From, voiceReply);
+          await logOutbound(userId, voiceReply);
         } else {
           await sendMessage(From, await ai(
             'Tell the user you could not transcribe their voice note clearly. Ask them to try again with clearer audio or type their update instead.',
@@ -4802,6 +4863,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
     await sendMessage(From, agentReply);
+    // Log outbound reply so runAgent() has memory of what the bot said last time
+    await logOutbound(userId, agentReply);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);

@@ -1,8 +1,17 @@
 /**
- * WhatsApp Webhook Handler
- * 
- * Handles incoming messages from Twilio WhatsApp API
- * Parses user intent and routes to appropriate handlers
+ * @deprecated LEGACY — DO NOT ROUTE PRODUCTION WEBHOOK TRAFFIC HERE.
+ *
+ * This Express route was an early implementation of the WhatsApp webhook and
+ * is no longer active in production. All production webhook traffic is handled
+ * exclusively by api/_whatsapp-webhook.ts (compiled → api/whatsapp-webhook.js)
+ * and deployed as a Vercel serverless function.
+ *
+ * This file is kept for reference only and must NOT be mounted on the /webhook
+ * route in any production environment. Relevant schema differences vs the active
+ * handler: uses budgetAmount instead of budget, references legacy users table,
+ * and is missing the full AI agent / memory / confirmation loop.
+ *
+ * TODO: Remove this file once the Express server is fully decommissioned.
  */
 
 import { Router, Request, Response } from 'express';
