@@ -236,7 +236,7 @@ interface IntentResult {
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
-async function sendMessage(to: string, message: string): Promise<void> {
+async function sendMessage(to: string, message: string, userId?: string, projectId?: string): Promise<void> {
   try {
     const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
     await twilioClient.messages.create({
@@ -244,26 +244,31 @@ async function sendMessage(to: string, message: string): Promise<void> {
       to: toNumber,
       body: message,
     });
+    // Auto-log every outbound message for conversation memory
+    if (userId) {
+      await logOutbound(userId, message, projectId);
+    }
   } catch (error: any) {
     console.error('[Twilio Send Error]', error);
     throw error;
   }
 }
 
-async function sendOptions(to: string, message: string, options: string[]): Promise<void> {
+async function sendOptions(to: string, message: string, options: string[], userId?: string, projectId?: string): Promise<void> {
   let text = message + '\n\n';
   options.forEach((opt, idx) => { text += `${idx + 1}. ${opt}\n`; });
-  await sendMessage(to, text);
+  await sendMessage(to, text, userId, projectId);
 }
 
 /** Log an outbound bot reply to whatsapp_messages for conversation memory. Best-effort — never throws. */
-async function logOutbound(userId: string, messageBody: string): Promise<void> {
+async function logOutbound(userId: string, messageBody: string, projectId?: string): Promise<void> {
   try {
     await supabase.from('whatsapp_messages').insert({
       user_id: userId,
       direction: 'outbound',
       message_body: messageBody.substring(0, 4000),
       processed: true,
+      project_id: projectId ?? null,
     });
   } catch (err) {
     console.warn('[LogOutbound] Failed:', (err as any)?.message);
@@ -481,7 +486,7 @@ async function sendProjectSelectionMenu(
     `Ask the user which project they are working on today. List these projects:\n${projectList}\nTell them to reply with the number.`,
     `You have ${projects.length} active projects:\n\n${projectList}\n\nWhich one are you updating today? Reply with the number.`
   );
-  await sendMessage(to, msg);
+  await sendMessage(to, msg, userId);
 }
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
@@ -661,14 +666,14 @@ async function handleOnboardingMessage(from: string, profile: any, message: stri
       await sendMessage(from, await ai(
         `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
         `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-      ));
+      ), profile.id);
     }
     return;
   }
   await sendMessage(from, await ai(
     'Tell the user to confirm their project first by replying 1, or type "start over" to begin again.',
     'Please confirm your project first (reply 1), or type "start over" to begin again.'
-  ));
+  ), profile.id);
 }
 
 // ─── OCR: Receipt Photo ───────────────────────────────────────────────────────
@@ -682,7 +687,7 @@ async function processReceiptPhoto(
   await sendMessage(from, await ai(
     'Tell the user you received their receipt and are scanning it. One short line.',
     'Receipt received! Scanning it now...'
-  ));
+  ), userId, projectId);
 
   const receiptPrompt = `This is a construction receipt. Extract all details and return ONLY valid JSON:
 {
@@ -796,7 +801,7 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
       vendor,
       project_id: projectId,
     });
-    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
+    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel'], userId, projectId);
       return true;
     } catch {
       return false;
@@ -868,13 +873,13 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     await sendMessage(from, await ai(
       'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
       'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
-    ));
+    ), userId, projectId);
   } catch (err: any) {
     console.error('[OCR Error]', err);
     await sendMessage(from, await ai(
       'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
       'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
-    ));
+    ), userId, projectId);
   }
 }
 
@@ -1635,7 +1640,7 @@ If user wants to log something, confirm naturally and tell them you're saving it
       : `Hey! What would you like to update today?`;
   }
 
-  await sendMessage(from, reply);
+  await sendMessage(from, reply, profile?.id, currentProject?.id);
 }
 
 async function handleBudgetUpdate(from: string, projectId: string, extracted: Record<string, unknown>): Promise<void> {
@@ -1697,7 +1702,7 @@ async function handleExpenseLog(
         amount: total,
         description: items.map((x) => `${x.quantity} ${x.unit} of ${x.item}`).join(' and '),
       });
-      await sendMessage(from, `✅ Confirm expense:\n${lines}\n\nTotal: UGX ${fmt(total)}\n\n1. Yes — Log it\n2. Edit\n3. Cancel`);
+      await sendMessage(from, `✅ Confirm expense:\n${lines}\n\nTotal: UGX ${fmt(total)}\n\n1. Yes — Log it\n2. Edit\n3. Cancel`, userId, projectId);
       return;
     }
   }
@@ -1740,7 +1745,8 @@ async function handleExpenseLog(
       });
       await sendMessage(
         from,
-        `I saw a small number (${amount}) — did you mean that as the total cost in UGX, or was it a quantity? Please reply with the full amount. e.g. 500,000 UGX.`
+        `I saw a small number (${amount}) — did you mean that as the total cost in UGX, or was it a quantity? Please reply with the full amount. e.g. 500,000 UGX.`,
+        userId, projectId
       );
       return;
     }
@@ -1755,7 +1761,7 @@ async function handleExpenseLog(
       200,
       lang
     );
-    await sendMessage(from, msg);
+    await sendMessage(from, msg, userId, projectId);
     return;
   }
 
@@ -1765,7 +1771,7 @@ async function handleExpenseLog(
       'I need the amount. Try: "Bought cement for 200,000 UGX" or "Paid plumber 150k"',
       200,
       lang
-    ));
+    ), userId, projectId);
     return;
   }
 
@@ -1794,7 +1800,7 @@ async function handleExpenseLog(
     lang
   );
   const confirmMsg = anomalyAlert ? `${anomalyAlert}\n\n${msg}` : msg;
-  await sendMessage(from, confirmMsg);
+  await sendMessage(from, confirmMsg, userId, projectId);
 }
 
 async function handleMaterialLog(
@@ -1867,7 +1873,7 @@ async function handleMaterialLog(
     (MATERIAL_KEYWORDS.some(k => singleWord === k || singleWord.includes(k)) || ['bricks', 'cement', 'sand', 'gravel', 'timber', 'wood', 'steel', 'iron', 'tiles', 'paint', 'pipes', 'wire', 'blocks', 'poles', 'nails', 'aggregate', 'ballast'].some(k => singleWord === k));
   if (isSingleMaterialName && (!qty || qty <= 0) && !extracted.quantity) {
     const materialLabel = item && item !== 'material' ? item : singleWord;
-    await sendMessage(from, `How many ${materialLabel} were used? e.g. "4 bricks" or "today we used 4 bricks"`);
+    await sendMessage(from, `How many ${materialLabel} were used? e.g. "4 bricks" or "today we used 4 bricks"`, userId, projectId);
     return;
   }
 
@@ -1876,11 +1882,11 @@ async function handleMaterialLog(
   // Garbage data prevention
   const nameNormCheck = normalizeMaterialName(item);
   if (nameNormCheck.length < 2) {
-    await sendMessage(from, 'Please provide a valid material name (at least 2 characters).');
+    await sendMessage(from, 'Please provide a valid material name (at least 2 characters).', userId, projectId);
     return;
   }
   if (GARBAGE_MATERIAL_NAMES.includes(nameNormCheck)) {
-    await sendMessage(from, 'Please specify the actual material name (e.g. cement, bricks, sand).');
+    await sendMessage(from, 'Please specify the actual material name (e.g. cement, bricks, sand).', userId, projectId);
     return;
   }
 
@@ -1918,7 +1924,7 @@ async function handleMaterialLog(
       .maybeSingle();
 
     if (!existing) {
-      await sendMessage(from, `No material matching "${materialName}" in inventory. Add it first by logging a purchase.`);
+      await sendMessage(from, `No material matching "${materialName}" in inventory. Add it first by logging a purchase.`, userId, projectId);
       return;
     }
 
@@ -1952,7 +1958,7 @@ async function handleMaterialLog(
     if (newQty <= lowThreshold) {
       reply += ` ⚠️ Low stock (threshold: ${lowThreshold}). Consider restocking.`;
     }
-    await sendMessage(from, reply);
+    await sendMessage(from, reply, userId, projectId);
     return;
   }
 
@@ -2017,7 +2023,7 @@ async function handleMaterialLog(
       source: 'whatsapp',
     });
     const reply = `✅ Logged! Added ${qty} ${unit} of ${materialName} to your Materials & Supplies. Current stock: ${newTotal} ${unit}.`;
-    await sendMessage(from, reply);
+    await sendMessage(from, reply, userId, projectId);
   }
 
   if (vendor) await upsertVendor(projectId, vendor, 0);
@@ -2130,7 +2136,7 @@ async function handleProgressUpdate(
       200,
       lang
     );
-    await sendMessage(from, msg);
+    await sendMessage(from, msg, _userId, projectId);
   } else {
     const note = String(extracted.note || rawMessage).trim();
     await upsertDailyLog(projectId, { notes: note, activity_entries: [activityEntry] });
@@ -2157,7 +2163,7 @@ async function handleProgressUpdate(
       200,
       lang
     );
-    await sendMessage(from, msg);
+    await sendMessage(from, msg, _userId, projectId);
   }
 }
 
@@ -2196,7 +2202,7 @@ async function handleIssueReport(
 
   if (error) {
     console.error('[Issue Report]', error.message);
-    await sendMessage(from, 'Sorry, I had trouble logging that issue. Please try again or report from the dashboard.');
+    await sendMessage(from, 'Sorry, I had trouble logging that issue. Please try again or report from the dashboard.', userId, projectId);
     return;
   }
 
@@ -2206,7 +2212,7 @@ async function handleIssueReport(
     200,
     lang
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 async function handleWeatherDelay(
@@ -3290,19 +3296,28 @@ async function runAgent(
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
   ]);
 
-  // ── Fetch conversation history for memory (last 12 messages, exclude current) ──
+  // ── Fetch conversation history for memory (last 12 messages, this project only) ──
   const { data: convHistory } = await supabase
     .from('whatsapp_messages')
     .select('direction, message_body, created_at')
     .eq('user_id', userId)
+    .eq('project_id', projectId)
+    .not('message_body', 'is', null)
+    .neq('message_body', '')
     .order('created_at', { ascending: false })
     .limit(12);
 
-  // Reverse to chronological order, drop the last row (= the inbound message we're
-  // currently processing, already logged before runAgent is called).
+  // Reverse to chronological order, exclude the current inbound message being processed
+  // by matching message_body exactly — safer than .slice(0,-1) which breaks if the inbound
+  // log failed, a concurrent message arrived, or the query returned fewer rows than expected.
   const formattedHistory = (convHistory || [])
     .reverse()
-    .slice(0, -1)
+    .filter((m: any) => {
+      if (m.direction === 'inbound' && m.message_body?.trim() === rawMessage.trim()) {
+        return false;
+      }
+      return true;
+    })
     .map((m: any) => ({
       role: m.direction === 'inbound' ? 'user' : 'model',
       parts: [{ text: (m.message_body || '').trim() }],
@@ -4016,6 +4031,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           direction: 'inbound',
           message_body: rawMessage.substring(0, 4000),
           processed: false,
+          project_id: profile.active_project_id ?? null,
         });
       } catch (logErr) {
         console.warn('[WhatsApp] Failed to log inbound message:', (logErr as any)?.message);
@@ -4028,7 +4044,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Duplicate prevention: same message within 30 seconds
     if (rawMessage.trim().length > 5 && !hasMedia) {
       if (checkDuplicateMessage(phoneNumber, rawMessage)) {
-        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?');
+        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?', userId);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4082,7 +4098,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               await sendMessage(From, await ai(
                 `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
                 `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-              ));
+              ), userId);
             }
           } else if (message.includes('2') || /edit/i.test(message)) {
             await updateOnboardingState(userId, 'welcome_sent', {});
@@ -4108,7 +4124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await sendMessage(From, await ai(
               `Tell the user no problem. Say they can create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. Until then you cannot log updates because there is no project to attach them to.`,
               `No problem! Create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. I can't log updates until a project exists.`
-            ));
+            ), userId);
           }
           break;
         default:
@@ -4194,22 +4210,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await sendMessage(From, await ai(
               `Tell the user you added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to their Materials & Supplies inventory. Be brief.`,
               `Added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to Materials & Supplies.`
-            ));
+            ), userId, pendingMaterial.project_id);
           } catch (err: any) {
             console.error('[Materials] Insert/update failed:', err?.message);
-            await sendMessage(From, 'Could not add to inventory. Please try again from the dashboard.');
+            await sendMessage(From, 'Could not add to inventory. Please try again from the dashboard.', userId, pendingMaterial.project_id);
           }
         } else {
           await sendMessage(From, await ai(
             'Tell the user you skipped adding to materials. Be brief.',
             'Skipped. Send another update anytime.'
-          ));
+          ), userId, pendingMaterial.project_id);
         }
         await clearPendingMaterialUpdate(userId);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
-        await sendMessage(From, 'Please reply YES to add to Materials & Supplies, or NO to skip.');
+        await sendMessage(From, 'Please reply YES to add to Materials & Supplies, or NO to skip.', userId, pendingMaterial.project_id);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4265,7 +4281,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendMessage(From, await ai(
         `Tell the user their photo caption was saved: "${caption}". It has been added to today's Daily Accountability log. Be brief.`,
         `Caption saved! "${caption}" added to today's Daily Accountability.`
-      ));
+      ), userId, pendingData.project_id);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
       } // end else (not looksLikeIntent)
@@ -4308,7 +4324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Tell the user you are now tracking updates for their project called "${selectedProject.name}". Be brief and encouraging. Tell them to send their first update.`,
           `Got it! Tracking updates for ${selectedProject.name}. Send your first update anytime.`
         );
-        await sendMessage(From, msg);
+        await sendMessage(From, msg, userId, selectedProject.id);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
@@ -4321,7 +4337,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .join('\n');
         await sendMessage(
           From,
-          `I didn't catch which project you meant. Reply with the number or the project name:\n\n${menuLines}\n\nOr type "list projects" to see details.`
+          `I didn't catch which project you meant. Reply with the number or the project name:\n\n${menuLines}\n\nOr type "list projects" to see details.`,
+          userId
         );
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -4346,7 +4363,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           `Tell the user they only have one active project: ${projects[0]?.name}. They cannot switch because there is nothing to switch to.`,
           `You only have one active project: ${projects[0]?.name}`
-        ));
+        ), userId, project?.id);
       } else {
         await supabase
           .from('profiles')
@@ -4383,12 +4400,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             `Tell the user that the expense "${lastExpense.description}" for ${fmt(parseFloat(lastExpense.amount))} UGX has been flagged as disputed on the dashboard.`,
             `Flagged "${lastExpense.description}" as disputed on the dashboard.`
-          ));
+          ), userId, project.id);
         } else {
           await sendMessage(From, await ai(
             'Tell the user there is no recent expense to dispute.',
             'No recent expense to dispute.'
-          ));
+          ), userId, project.id);
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -4397,7 +4414,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           'Tell the user politely that only the project manager can log updates in this group.',
           'Only the project manager can log updates in this group.'
-        ));
+        ), userId, project.id);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4416,13 +4433,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           const summary = transcribed.length > 60 ? transcribed.substring(0, 57) + '...' : transcribed;
           const voiceReply = `Transcribed ✅ "${summary}"\n\n${actionReply}`;
-          await sendMessage(From, voiceReply);
-          await logOutbound(userId, voiceReply);
+          await sendMessage(From, voiceReply, userId, project?.id);
         } else {
           await sendMessage(From, await ai(
             'Tell the user you could not transcribe their voice note clearly. Ask them to try again with clearer audio or type their update instead.',
             'Could not transcribe that voice note clearly. Try again or type your update.'
-          ));
+          ), userId, project?.id);
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -4502,12 +4518,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch (err: any) {
               console.log('[Photo Caption] site_photos insert skipped:', err?.message);
             }
-            await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`);
+            await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`, userId, project.id);
           } else {
             await sendMessage(From, await ai(
               'Tell the user their photo was saved. Ask them to add a caption by replying with a description.',
               'Photo saved! What caption would you like to add?'
-            ));
+            ), userId, project.id);
             await updateExpenseState(userId, 'awaiting_photo_caption', {
               photo_url: permanentUrl,
               project_id: project.id,
@@ -4519,7 +4535,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             'Tell the user their photo was saved. Tell them to view it on their dashboard.',
             'Photo saved! View it on your dashboard.'
-          ));
+          ), userId, project.id);
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -4531,7 +4547,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           'Tell the user their photo or video was saved to their progress feed on the dashboard. One short line.',
           'Photo/video saved to your progress feed on the dashboard!'
-        ));
+        ), userId, project.id);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -4560,7 +4576,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
           `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-        ));
+        ), userId);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -4630,7 +4646,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             `Tell the user there was an error saving their expense and ask them to try again. Error details: ${insertError.message}`,
             `Could not save that expense. Please try again.`
-          ));
+          ), userId, pendingData.project_id);
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
@@ -4640,7 +4656,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             'Tell the user the expense failed to save and ask them to try again.',
             'Failed to save expense. Please try again.'
-          ));
+          ), userId, pendingData.project_id);
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
@@ -4782,25 +4798,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Tell the user their expense was saved successfully: ${pendingData.description} — ${fmt(pendingData.amount!)} UGX. Tell them their dashboard and budget have been updated. Keep it short and friendly. Tell them to check Budgets & Costs page.`,
           `Saved! ${pendingData.description} — ${fmt(pendingData.amount!)} UGX logged. Check Budgets & Costs to see the update.`
         );
-        await sendMessage(From, msg);
+        await sendMessage(From, msg, userId, pendingData.project_id);
       } else if (message.includes('2') || /edit|✏️/i.test(message)) {
         await updateExpenseState(userId, null, {});
         await sendMessage(From, await ai(
           'Tell the user to send the corrected expense details.',
           'No problem! Send the corrected details.'
-        ));
+        ), userId, pendingData.project_id);
       } else if (message.includes('3') || /cancel|❌/i.test(message)) {
         await updateExpenseState(userId, null, {});
         await sendMessage(From, await ai(
           'Tell the user the expense was cancelled. Keep it very brief.',
           'Cancelled. Send a new update anytime.'
-        ));
+        ), userId, pendingData.project_id);
       } else {
         const stillMsg = await ai(
           `Tell the user you are still waiting for their reply on this pending expense: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX. Ask them to reply 1 to save, 2 to edit, or 3 to cancel.`,
           `Still waiting: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX\n\n1. Save\n2. Edit\n3. Cancel`
         );
-        await sendOptions(From, stillMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
+        await sendOptions(From, stillMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel'], userId, pendingData.project_id);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -4833,12 +4849,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `${description} — ${fmt(price)} UGX${vendor ? ' from ' + vendor : ''}. Save it?\n\n1. Yes\n2. Edit\n3. Cancel`
         );
         const finalMsg = anomalyAlert ? `${anomalyAlert}\n\n${confirmMsg}` : confirmMsg;
-        await sendOptions(From, finalMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
+        await sendOptions(From, finalMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel'], userId, pendingData.project_id);
       } else {
         await sendMessage(From, await ai(
           'Tell the user to send the total cost as a number. Give examples: 1,900,000 or 1.9M.',
           'Send the total cost as a number (e.g. 1,900,000 or 1.9M).'
-        ));
+        ), userId, pendingData.project_id);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -4849,7 +4865,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendMessage(From, await ai(
         'Tell the user they need to create a project first before logging updates. Tell them to say "hey jenga" or "start" to create one.',
         'You need a project first. Say "hey jenga" or "start" to create one!'
-      ));
+      ), userId);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
@@ -4857,14 +4873,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
     console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
     if (!checkRateLimit(phoneNumber)) {
-      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.");
+      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.", userId, project.id);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
     const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
-    await sendMessage(From, agentReply);
-    // Log outbound reply so runAgent() has memory of what the bot said last time
-    await logOutbound(userId, agentReply);
+    await sendMessage(From, agentReply, userId, project.id);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
@@ -4899,7 +4913,7 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
     await sendMessage(from, await ai(
       'Tell the user they have no projects yet. Tell them to type "start" to create their first project.',
       'You do not have any projects yet. Type "start" to create your first project.'
-    ));
+    ), userId);
     return;
   }
 
@@ -4913,7 +4927,7 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
     `List the user's projects and tell them they can say "switch project" to change their active project. Here are the projects:\n${lines}`,
     `Your projects (${all.length}):\n\n${lines}\n\nSay "switch project" to change your active project.`
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId);
 }
 
 async function handleAddPurchasesToInventory(
@@ -4939,7 +4953,7 @@ async function handleAddPurchasesToInventory(
       'Tell the user there are no recent expenses found to sync to inventory.',
       'No recent expenses found to add to inventory.',
       150, lang
-    ));
+    ), userId, projectId);
     return;
   }
 
@@ -5037,7 +5051,7 @@ async function handleAddPurchasesToInventory(
       'Tell the user no material purchases were found in their recent expenses. Labor, transport, and service expenses are not added to inventory.',
       'No material purchases found in recent expenses. Labor and service costs are not tracked as inventory.',
       200, lang
-    ));
+    ), userId, projectId);
     return;
   }
 
@@ -5049,7 +5063,7 @@ async function handleAddPurchasesToInventory(
     `Tell the user their recent purchases have been synced to inventory. Summary:\n${summary}\nBe brief and friendly.`,
     `Done! Here is your inventory update:\n\n${summary}`,
     300, lang
-  ));
+  ), userId, projectId);
 }
 
 async function routeIntent(
@@ -5109,7 +5123,7 @@ async function routeIntent(
             active_project_id: match.id,
             active_project_set_at: new Date().toISOString(),
           }).eq('id', userId);
-          await sendMessage(from, `Switched to ${match.name}! What would you like to update?`);
+          await sendMessage(from, `Switched to ${match.name}! What would you like to update?`, userId, match.id);
           break;
         }
       }
@@ -5117,7 +5131,7 @@ async function routeIntent(
       if (projects.length > 0) {
         await sendProjectSelectionMenu(from, userId, projects);
       } else {
-        await sendMessage(from, 'You only have one project. Say "list projects" to see it.');
+        await sendMessage(from, 'You only have one project. Say "list projects" to see it.', userId, project?.id);
       }
       break;
     }
@@ -5134,7 +5148,7 @@ async function routeIntent(
     default: {
       // Route unrecognized messages to AI with project context (no rigid menu)
       const aiResponse = await handleNaturalLanguageQuery(from, userId, project?.id ?? null, rawMessage);
-      await sendMessage(from, aiResponse);
+      await sendMessage(from, aiResponse, userId, project?.id);
       break;
     }
   }
