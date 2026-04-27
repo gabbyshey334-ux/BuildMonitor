@@ -250,10 +250,18 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       status: string;
       created_at: string;
       resolved_at?: string | null;
+      acknowledged_at?: string | null;
     }>;
+    /** Open = needs attention: not resolved and not yet acknowledged via checkbox */
+    const isOpenIssue = (i: (typeof list)[number]) => {
+      if (i.status === "resolved" || i.resolved_at) return false;
+      if (i.status === "acknowledged" || i.acknowledged_at) return false;
+      return true;
+    };
+    const openIssues = list.filter(isOpenIssue);
     return {
-      openIssues: list.filter((i) => i.status !== "resolved" && !i.resolved_at),
-      criticalCount: list.filter((i) => i.severity === "critical").length,
+      openIssues,
+      criticalCount: openIssues.filter((i) => i.severity === "critical").length,
       allIssues: list,
     };
   }, [issuesList]);
@@ -402,6 +410,9 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       });
       if (!res.ok) throw new Error("Failed to acknowledge issue");
       await refetchIssues();
+      queryClient.invalidateQueries({
+        queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId],
+      });
       toast({ title: "Issue acknowledged" });
     } catch {
       toast({ title: "Failed to acknowledge issue", variant: "destructive" });
