@@ -67,7 +67,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
       <SheetContent
         side="bottom"
         className={cn(
-          "p-0 border-t border-border bg-jenga-surface text-foreground",
+          "p-0 border-t border-border bg-card text-foreground",
           "rounded-t-modal rounded-b-none",
           "max-h-[92vh] overflow-y-auto",
           "pb-[env(safe-area-inset-bottom,16px)]",
@@ -116,7 +116,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-0.5">
-                        Active Project
+                        {t("nav.activeProject")}
                       </div>
                       <div className="font-display font-semibold text-foreground text-base truncate">
                         {currentProject.name}
@@ -128,7 +128,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
                       )}
                     </div>
                     <span className="text-[11px] font-semibold text-jenga-primary whitespace-nowrap shrink-0">
-                      Switch
+                      {t("nav.switch")}
                     </span>
                     <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                   </button>
@@ -169,7 +169,7 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
               >
                 <MessageCircle className="h-4 w-4 shrink-0" />
                 <span className="flex-1 truncate font-medium">
-                  {hasWhatsApp ? "WhatsApp connected" : "Connect WhatsApp"}
+                  {hasWhatsApp ? t("nav.whatsappConnected") : t("nav.connectWhatsapp")}
                 </span>
                 <span
                   className={cn(

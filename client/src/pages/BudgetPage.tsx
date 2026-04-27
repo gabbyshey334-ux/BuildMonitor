@@ -1136,7 +1136,7 @@ allData={costTrendDataRaw}
                         disabled={savingExpenseEdit}
                         onClick={() => handleSaveExpenseEdit(expense.id)}
                       >
-                        {savingExpenseEdit ? "Saving..." : "Save"}
+                        {savingExpenseEdit ? t("common.saving") : t("common.save")}
                       </Button>
                     </>
                   ) : (

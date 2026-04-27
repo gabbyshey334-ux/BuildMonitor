@@ -97,17 +97,17 @@ export default function MobileNav({
                 </span>
               </button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-[280px] bg-dark-bg border-white/10">
+            <SheetContent side="right" className="w-[280px] bg-card border-border/50">
               <div className="flex flex-col h-full">
                 {/* Header */}
                 <div className="mb-6">
-                  <h2 className="text-lg font-bold text-white">Menu</h2>
+                  <h2 className="text-lg font-bold text-foreground">Menu</h2>
                   {userName && (
                     <p className="text-sm text-muted-foreground mt-1">{userName}</p>
                   )}
                 </div>
 
-                <Separator className="bg-white/10 mb-4" />
+                <Separator className="border-border/50 mb-4" />
 
                 {/* Role Switcher */}
                 <div className="mb-6">
@@ -121,7 +121,7 @@ export default function MobileNav({
                       className={`h-10 px-4 rounded-lg text-sm font-medium transition-colors ${
                         role === 'owner'
                           ? 'bg-brand text-black'
-                          : 'bg-white/5 text-white hover:bg-white/10'
+                          : 'bg-muted/40 text-foreground hover:bg-muted/60'
                       }`}
                       data-testid="mobile-role-owner"
                     >
@@ -135,7 +135,7 @@ export default function MobileNav({
                       className={`h-10 px-4 rounded-lg text-sm font-medium transition-colors ${
                         role === 'manager'
                           ? 'bg-brand text-black'
-                          : 'bg-white/5 text-white hover:bg-white/10'
+                          : 'bg-muted/40 text-foreground hover:bg-muted/60'
                       }`}
                       data-testid="mobile-role-manager"
                     >
@@ -144,7 +144,7 @@ export default function MobileNav({
                   </div>
                 </div>
 
-                <Separator className="bg-white/10 mb-4" />
+                <Separator className="border-border/50 mb-4" />
 
                 {/* Additional Pages */}
                 <div className="flex-1 space-y-1">
@@ -156,7 +156,7 @@ export default function MobileNav({
                       className={`w-full flex items-center gap-3 h-12 px-4 rounded-lg transition-colors ${
                         activeTab === item.id
                           ? 'bg-brand/20 text-brand'
-                          : 'text-white hover:bg-white/5'
+                          : 'text-foreground hover:bg-muted/40'
                       }`}
                       data-testid={`mobile-drawer-${item.id}`}
                     >
@@ -166,13 +166,13 @@ export default function MobileNav({
                   ))}
                 </div>
 
-                <Separator className="bg-white/10 my-4" />
+                <Separator className="border-border/50 my-4" />
 
                 {/* Actions */}
                 <div className="space-y-2">
                   <Button
                     variant="ghost"
-                    className="w-full justify-start h-12 text-white hover:bg-white/5"
+                    className="w-full justify-start h-12 text-foreground hover:bg-muted/40"
                     onClick={() => {
                       onSettingsOpen();
                       setIsDrawerOpen(false);
@@ -184,7 +184,7 @@ export default function MobileNav({
                   </Button>
                   <Button
                     variant="ghost"
-                    className="w-full justify-start h-12 text-white hover:bg-white/5"
+                    className="w-full justify-start h-12 text-foreground hover:bg-muted/40"
                     onClick={() => {
                       onExport();
                       setIsDrawerOpen(false);

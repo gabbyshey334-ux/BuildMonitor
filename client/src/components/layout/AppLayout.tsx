@@ -47,7 +47,7 @@ export function AppLayout({ children }: AppLayoutProps) {
     // scrollbar on Windows/Linux and causes the right ~15px to be clipped on
     // laptops. width:100% (inherited from html/body) already follows the
     // visible viewport exactly.
-    <div className="min-h-screen w-full overflow-x-hidden bg-jenga-bg text-foreground bg-jenga-radial">
+    <div className="min-h-screen w-full overflow-x-hidden bg-background text-foreground">
       <Sidebar open={open} onToggle={toggle} />
 
       {/*

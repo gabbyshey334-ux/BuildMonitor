@@ -159,6 +159,59 @@
   --sidebar-ring: 88 52% 54%;
 }
 
+.light {
+  /* Shadcn tokens — light mode */
+  --background: 0 0% 98%;
+  --foreground: 180 5% 12%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 180 5% 12%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 180 5% 12%;
+
+  --primary: 88 52% 44%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 189 64% 32%;
+  --secondary-foreground: 0 0% 100%;
+
+  --muted: 120 5% 93%;
+  --muted-foreground: 120 5% 38%;
+
+  --accent: 88 52% 44%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 60% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 120 5% 85%;
+  --input: 120 5% 88%;
+  --ring: 88 52% 44%;
+
+  --sidebar: 120 8% 96%;
+  --sidebar-foreground: 180 5% 12%;
+  --sidebar-border: 120 5% 85%;
+
+  /* JengaTrack raw tokens — light overrides */
+  --jt-background:        #f5f7f5;
+  --jt-surface:           #ffffff;
+  --jt-surface-raised:    #f0f4f0;
+  --jt-border:            #d8e0d8;
+  --jt-border-strong:     #c0ccc0;
+  --jt-text-primary:      #1a2a1a;
+  --jt-text-secondary:    #4a6a4a;
+  --jt-text-tertiary:     #7a9a7a;
+  --jt-sidebar-bg:        #f0f5f0;
+  --background-color:     #f5f7f5;
+  --surface:              #ffffff;
+  --surface-raised:       #f0f4f0;
+  --border-strong:        #c0ccc0;
+  --text-primary:         #1a2a1a;
+  --text-secondary:       #4a6a4a;
+  --text-tertiary:        #7a9a7a;
+}
+
 html {
   scroll-behavior: smooth;
   -webkit-text-size-adjust: 100%;
@@ -202,12 +255,25 @@ html {
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.10);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .dark ::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,0.06);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(0,0,0,0.18);
+    background-clip: content-box;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255,255,255,0.14);
+    background-clip: content-box;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -312,6 +378,22 @@ html {
   /* Dense, touch-friendly table row */
   .jt-row {
     min-height: 48px;
+  }
+
+  /* Light mode card shadow overrides */
+  .light .jt-card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+  }
+  .light .jt-card-raised {
+    box-shadow: 0 8px 48px rgba(0,0,0,0.12);
+  }
+  .light .jt-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      rgba(0,0,0,0.03) 35%,
+      hsl(var(--muted)) 70%
+    );
   }
 }
 

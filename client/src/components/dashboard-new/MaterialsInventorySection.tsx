@@ -29,29 +29,29 @@ export function MaterialsInventorySection({ data }: { data?: MaterialsInventoryS
   const { items = [], usage = [] } = data || {};
 
   return (
-    <Card className="dark:bg-zinc-800/50 dark:border-zinc-700 bg-white border-slate-200 col-span-1 lg:col-span-2">
+    <Card className="bg-card border-border col-span-1 lg:col-span-2">
       <CardHeader>
-        <CardTitle className="dark:text-white text-slate-800 font-bold">Materials & Inventory</CardTitle>
+        <CardTitle className="text-foreground font-bold">Materials & Inventory</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
           {/* Inventory Items List */}
           <section>
-            <h3 className="text-lg font-semibold mb-3 dark:text-white text-slate-800">Current Inventory</h3>
+            <h3 className="text-lg font-semibold mb-3 text-foreground">Current Inventory</h3>
             <div className="space-y-3">
               {items.length > 0 ? (
                 items.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 dark:border-zinc-700 border-slate-200 border rounded-lg">
+                  <div key={item.id} className="flex items-center justify-between p-3 border border-border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium dark:text-white text-slate-800">{item.name}</span>
-                        <span className="text-sm dark:text-[#E2E8F0] text-slate-600">
+                        <span className="font-medium text-foreground">{item.name}</span>
+                        <span className="text-sm text-foreground/80">
                           {item.currentStock} / {item.totalStock} {item.unit}
                         </span>
                       </div>
                       <Progress value={item.stockPercent} className="h-2 rounded-full" />
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-xs dark:text-[#CBD5E1] text-slate-600">
+                        <span className="text-xs text-muted-foreground">
                           {item.stockPercent}% remaining
                         </span>
                         {item.consumptionVsEstimate > 0 && (
@@ -74,14 +74,14 @@ export function MaterialsInventorySection({ data }: { data?: MaterialsInventoryS
                   </div>
                 ))
               ) : (
-                <p className="dark:text-[#94A3B8] text-slate-500">No inventory data available.</p>
+                <p className="text-muted-foreground">No inventory data available.</p>
               )}
             </div>
           </section>
 
           {/* Material Usage Chart */}
           <section>
-            <h3 className="text-lg font-semibold mb-3 dark:text-white text-slate-800">Material Usage</h3>
+            <h3 className="text-lg font-semibold mb-3 text-foreground">Material Usage</h3>
             {usage.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={usage}>
@@ -94,7 +94,7 @@ export function MaterialsInventorySection({ data }: { data?: MaterialsInventoryS
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="dark:text-[#94A3B8] text-slate-500">No usage data available.</p>
+              <p className="text-muted-foreground">No usage data available.</p>
             )}
           </section>
         </div>

@@ -40,91 +40,107 @@ export function BottomNav() {
   const hrefWithProject = (path: string) =>
     currentProject ? `${path}?project=${currentProject.id}` : path;
 
-  const itemClass = (isActive: boolean) =>
-    cn(
-      "relative flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-1.5",
-      "transition-all duration-200 touch-manipulation active:scale-[0.96]",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jenga-primary/60 focus-visible:ring-inset",
-      isActive
-        ? "text-jenga-primary"
-        : "text-muted-foreground hover:text-foreground",
-    );
-
   return (
     <>
       <nav
         className={cn(
-          // Visible everywhere below lg; hidden on desktop
           "lg:hidden",
           "fixed bottom-0 left-0 right-0 z-50",
-          "grid grid-cols-5 items-stretch",
-          "border-t border-border/60",
-          "bg-[var(--jt-sidebar-bg,#0A0C0A)]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[var(--jt-sidebar-bg,#0A0C0A)]/85",
+          "flex items-stretch",
+          "bg-[hsl(var(--card))]/96 backdrop-blur-xl",
+          "supports-[backdrop-filter]:bg-[hsl(var(--card))]/88",
+          "border-t border-border/40",
+          "shadow-[0_-4px_24px_rgba(0,0,0,0.08)]",
+          "dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)]",
           "mobile-nav-safe",
-          "shadow-[0_-8px_32px_rgba(0,0,0,0.45)]",
         )}
         aria-label="Primary"
       >
-        {TABS.map((tab) => {
-          const href = hrefWithProject(tab.href);
-          const isActive =
-            location === tab.href ||
-            location.startsWith(tab.href + "/") ||
-            location.startsWith(tab.href + "?");
-          const label = t(tab.labelKey);
-          return (
-            <Link
-              key={tab.href}
-              href={href}
-              aria-current={isActive ? "page" : undefined}
-              aria-label={label}
-              className="flex h-full min-h-0 min-w-0"
-            >
-              <div className={itemClass(isActive)}>
-                {isActive && (
-                  <span
-                    className="absolute top-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-jenga-primary shadow-glow"
-                    aria-hidden
-                  />
-                )}
-                <tab.icon
+        <div className="flex flex-1 items-stretch px-1 pb-1 pt-1.5">
+          {TABS.map((tab) => {
+            const href = hrefWithProject(tab.href);
+            const isActive =
+              location === tab.href ||
+              location.startsWith(tab.href + "/") ||
+              location.startsWith(tab.href + "?");
+            const label = t(tab.labelKey);
+            return (
+              <Link
+                key={tab.href}
+                href={href}
+                aria-current={isActive ? "page" : undefined}
+                className="flex flex-1 min-w-0"
+              >
+                <div
                   className={cn(
-                    "h-6 w-6 shrink-0 transition-transform",
-                    isActive && "scale-105",
-                  )}
-                  strokeWidth={isActive ? 2.2 : 1.7}
-                  aria-hidden
-                />
-                <span
-                  className={cn(
-                    "w-full truncate text-center text-[10px] font-body leading-tight tracking-wide",
-                    isActive ? "font-semibold" : "font-medium",
+                    "relative flex flex-1 flex-col items-center justify-center",
+                    "min-h-[52px] gap-0.5 rounded-xl mx-0.5",
+                    "transition-all duration-200 touch-manipulation active:scale-[0.94]",
+                    "focus-visible:outline-none focus-visible:ring-2",
+                    "focus-visible:ring-primary/60 focus-visible:ring-inset",
+                    isActive
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
                   )}
                 >
-                  {label}
-                </span>
-              </div>
-            </Link>
-          );
-        })}
-        <button
-          type="button"
-          onClick={() => setMoreOpen(true)}
-          className={itemClass(moreOpen)}
-          aria-label={t("nav.more") || "More"}
-          aria-expanded={moreOpen}
-        >
-          {moreOpen && (
-            <span
-              className="absolute top-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-jenga-primary shadow-glow"
+                  <tab.icon
+                    className={cn(
+                      "h-[22px] w-[22px] shrink-0 transition-all duration-200",
+                      isActive ? "scale-110" : "scale-100",
+                    )}
+                    strokeWidth={isActive ? 2.3 : 1.7}
+                    aria-hidden
+                  />
+                  <span
+                    className={cn(
+                      "text-[10px] font-body leading-none tracking-wide transition-all duration-200 truncate max-w-full px-1",
+                      isActive
+                        ? "font-semibold opacity-100"
+                        : "font-medium opacity-70",
+                    )}
+                  >
+                    {label}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+
+          {/* More button */}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            aria-label={t("nav.more") || "More"}
+            aria-expanded={moreOpen}
+            className={cn(
+              "relative flex flex-1 flex-col items-center justify-center",
+              "min-h-[52px] gap-0.5 rounded-xl mx-0.5",
+              "transition-all duration-200 touch-manipulation active:scale-[0.94]",
+              moreOpen
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+            )}
+          >
+            <MoreHorizontal
+              className={cn(
+                "h-[22px] w-[22px] shrink-0 transition-all duration-200",
+                moreOpen ? "scale-110" : "scale-100",
+              )}
+              strokeWidth={moreOpen ? 2.3 : 1.7}
               aria-hidden
             />
-          )}
-          <MoreHorizontal className="h-6 w-6 shrink-0" aria-hidden />
-          <span className="w-full truncate text-center text-[10px] font-body font-medium leading-tight">
-            {t("nav.more") || "More"}
-          </span>
-        </button>
+            <span
+              className={cn(
+                "text-[10px] font-body leading-none tracking-wide transition-all duration-200",
+                moreOpen
+                  ? "font-semibold opacity-100"
+                  : "font-medium opacity-70",
+              )}
+            >
+              {t("nav.more") || "More"}
+            </span>
+          </button>
+        </div>
       </nav>
       <MoreBottomSheet open={moreOpen} onOpenChange={setMoreOpen} />
     </>

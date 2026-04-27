@@ -252,7 +252,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
         {open && currentProject && (
           <div className="px-1">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-              Active Project
+              {t("nav.activeProject")}
             </div>
             <div className="text-sm font-semibold text-foreground truncate">
               {currentProject.name}
@@ -277,7 +277,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
           >
             <MessageCircle className="h-3.5 w-3.5 shrink-0" />
             <span className="flex-1 truncate font-medium">
-              {hasWhatsApp ? "WhatsApp connected" : "Connect WhatsApp"}
+              {hasWhatsApp ? t("nav.whatsappConnected") : t("nav.connectWhatsapp")}
             </span>
             <span
               className={cn(
@@ -304,7 +304,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
-                {hasWhatsApp ? "WhatsApp connected" : "WhatsApp not connected"}
+                {hasWhatsApp ? t("nav.whatsappConnected") : t("nav.connectWhatsapp")}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

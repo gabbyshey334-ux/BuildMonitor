@@ -42,16 +42,15 @@ interface TopBarProps {
  * Desktop: page title + project switcher + actions on the right
  * Mobile:  brand logo + project switcher + avatar
  */
-const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/budget": "Budget",
-  "/materials": "Materials",
-  "/daily": "Daily Log",
-  "/trends": "Trends & Analytics",
-  "/projects": "Projects",
-  "/settings": "Settings",
-  "/help": "Help & Support",
-  "/demo": "Demo",
+const PAGE_TITLE_KEYS: Record<string, string> = {
+  "/dashboard": "nav.dashboard",
+  "/budget": "budget.title",
+  "/materials": "materials.title",
+  "/daily": "daily.title",
+  "/trends": "trends.title",
+  "/projects": "projects.title",
+  "/settings": "settings.title",
+  "/help": "help.title",
 };
 
 export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
@@ -64,7 +63,7 @@ export function TopBar({ onMenuClick, showHamburger = true }: TopBarProps) {
   const [projectOpen, setProjectOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
-  const pageTitle = PAGE_TITLES[currentPath] ?? "JengaTrack";
+  const pageTitle = t(PAGE_TITLE_KEYS[currentPath] ?? "") || "JengaTrack";
 
   const initials = user?.fullName
     ? user.fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
