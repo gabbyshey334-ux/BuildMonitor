@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Link } from "wouter";
 import { ArrowLeft, Mail, CheckCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Inline SVG grid — graph-paper texture at 4% opacity
 function GridPattern({ id }: { id: string }) {
@@ -27,6 +28,7 @@ function GridPattern({ id }: { id: string }) {
 }
 
 export default function ForgotPassword() {
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -127,7 +129,7 @@ export default function ForgotPassword() {
             <img src="/assets/images/logo.png" alt="JengaTrack" className="w-10 h-10 object-contain" />
           </div>
           <span className="text-2xl font-bold text-white tracking-tight">JengaTrack</span>
-          <p className="text-sm text-[#F59E0B]">We'll get you back in.</p>
+          <p className="text-sm text-[#F59E0B]">{t("auth.forgotPassword.tagline")}</p>
         </div>
       </div>
 
@@ -151,7 +153,7 @@ export default function ForgotPassword() {
               </div>
 
               <div className="space-y-1.5">
-                <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Check your inbox</h2>
+                <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">{t("auth.forgotPassword.checkInbox")}</h2>
                 <p className="text-sm text-gray-500 leading-relaxed">
                   We sent a reset link to{" "}
                   <span className="font-medium text-[#0F1A14]">{email}</span>.{" "}
@@ -166,16 +168,16 @@ export default function ForgotPassword() {
                 className="text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors disabled:opacity-60 flex items-center gap-1"
               >
                 {isLoading ? (
-                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Resending…</>
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> {t("auth.forgotPassword.resending")}</>
                 ) : (
-                  "Didn't receive it? Resend"
+                  t("auth.forgotPassword.resend")
                 )}
               </button>
 
               <Link href="/login">
                 <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors cursor-pointer mt-1">
                   <ArrowLeft className="w-4 h-4" />
-                  Back to login
+                  {t("auth.forgotPassword.backToLogin")}
                 </span>
               </Link>
             </div>
@@ -187,14 +189,14 @@ export default function ForgotPassword() {
               <Link href="/login">
                 <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#1E7A3E] transition-colors cursor-pointer mb-6">
                   <ArrowLeft className="w-4 h-4" />
-                  Back to login
+                  {t("auth.forgotPassword.backToLogin")}
                 </span>
               </Link>
 
               {/* Heading */}
-              <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Reset your password</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">{t("auth.forgotPassword.title")}</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Enter your email and we'll send a reset link
+                {t("auth.forgotPassword.subtitle")}
               </p>
 
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
@@ -202,7 +204,7 @@ export default function ForgotPassword() {
                 {/* Email */}
                 <div className="space-y-1.5">
                   <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                    Email
+                    {t("auth.login.email")}
                   </Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -233,10 +235,10 @@ export default function ForgotPassword() {
                   {isLoading ? (
                     <span className="flex items-center gap-2">
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Sending…
+                      {t("auth.forgotPassword.sending")}
                     </span>
                   ) : (
-                    "Send Reset Link"
+                    t("auth.forgotPassword.button")
                   )}
                 </Button>
               </form>

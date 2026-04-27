@@ -156,17 +156,17 @@ export default function HelpPage() {
           <div className="relative z-10 flex flex-col items-center">
             <div className="flex items-center gap-3 mb-4">
               <span className="text-4xl">🧱</span>
-              <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">Help Center</h1>
+              <h1 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">{t("help.centerTitle")}</h1>
             </div>
             <p className="text-muted-foreground text-lg max-w-lg mb-8">
-              Everything you need to get the most out of JengaTrack.
+              {t("help.tagline")}
             </p>
             
             <div className="relative w-full max-w-md group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-[#00bcd4] transition-colors" />
               <input
                 type="text"
-                placeholder="Search for help..."
+                placeholder={t("help.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full h-12 pl-12 pr-4 rounded-2xl bg-muted border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-[#00bcd4]/50 transition-all"
@@ -186,10 +186,10 @@ export default function HelpPage() {
             <div className="w-12 h-12 rounded-full bg-[#00bcd4]/10 flex items-center justify-center mb-4 group-hover:bg-[#00bcd4] transition-colors">
               <MessageCircle className="w-6 h-6 text-[#00bcd4] group-hover:text-black transition-colors" />
             </div>
-            <h3 className="font-bold text-foreground text-lg mb-1">WhatsApp Bot</h3>
-            <p className="text-muted-foreground text-sm mb-3">Start chatting instantly</p>
+            <h3 className="font-bold text-foreground text-lg mb-1">{t("help.whatsappBot")}</h3>
+            <p className="text-muted-foreground text-sm mb-3">{t("help.whatsappBotDesc")}</p>
             <span className="text-[#00bcd4] text-xs font-bold uppercase tracking-wider group-hover:underline">
-              Open Chat &rarr;
+              {t("help.openChat")} &rarr;
             </span>
           </a>
 
@@ -200,10 +200,10 @@ export default function HelpPage() {
             <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4 group-hover:bg-emerald-500 transition-colors">
               <LayoutDashboard className="w-6 h-6 text-emerald-500 group-hover:text-black transition-colors" />
             </div>
-            <h3 className="font-bold text-foreground text-lg mb-1">View Dashboard</h3>
-            <p className="text-muted-foreground text-sm mb-3">Go to your project</p>
+            <h3 className="font-bold text-foreground text-lg mb-1">{t("help.viewDashboard")}</h3>
+            <p className="text-muted-foreground text-sm mb-3">{t("help.viewDashboardDesc")}</p>
             <span className="text-emerald-500 text-xs font-bold uppercase tracking-wider group-hover:underline">
-              Go now &rarr;
+              {t("help.goNow")} &rarr;
             </span>
           </a>
 
@@ -214,35 +214,35 @@ export default function HelpPage() {
             <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500 transition-colors">
               <Mail className="w-6 h-6 text-purple-500 group-hover:text-white transition-colors" />
             </div>
-            <h3 className="font-bold text-foreground text-lg mb-1">Send Feedback</h3>
-            <p className="text-muted-foreground text-sm mb-3">Report a bug or suggestion</p>
+            <h3 className="font-bold text-foreground text-lg mb-1">{t("help.sendFeedback")}</h3>
+            <p className="text-muted-foreground text-sm mb-3">{t("help.sendFeedbackDesc")}</p>
             <span className="text-purple-500 text-xs font-bold uppercase tracking-wider group-hover:underline">
-              Email us &rarr;
+              {t("help.emailUs")} &rarr;
             </span>
           </a>
         </div>
 
         {/* 3. Getting Started */}
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-6">Get Started in 3 Steps</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-6">{t("help.getStarted")}</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
                 icon: Plus,
-                title: "Create your project",
-                desc: "Sign up and create your first construction project with budget and location.",
+                title: t("help.step1Title"),
+                desc: t("help.step1Desc"),
                 step: "01",
               },
               {
                 icon: Phone,
-                title: "Connect WhatsApp",
-                desc: "Save our WhatsApp number and send your first message to link your account.",
+                title: t("help.step2Title"),
+                desc: t("help.step2Desc"),
                 step: "02",
               },
               {
                 icon: Zap,
-                title: "Start logging",
-                desc: "Send expenses, materials, worker counts and photos directly from WhatsApp.",
+                title: t("help.step3Title"),
+                desc: t("help.step3Desc"),
                 step: "03",
               },
             ].map((step, i) => (
@@ -265,8 +265,8 @@ export default function HelpPage() {
 
         {/* 4. WhatsApp Commands */}
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-2">WhatsApp Commands</h2>
-          <p className="text-muted-foreground mb-6">Just type naturally — here are some examples:</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">{t("help.title")}</h2>
+          <p className="text-muted-foreground mb-6">{t("help.commandsDesc")}</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {COMMAND_CATEGORIES.map((cat) => (
@@ -291,7 +291,7 @@ export default function HelpPage() {
 
         {/* 5. FAQ */}
         <div>
-          <h2 className="text-2xl font-bold text-foreground mb-6">Frequently Asked Questions</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-6">{t("help.faqTitle")}</h2>
           <div className="space-y-3">
             {filteredFaqs.length > 0 ? (
               filteredFaqs.map((faq, i) => (
@@ -304,7 +304,7 @@ export default function HelpPage() {
                 />
               ))
             ) : (
-              <p className="text-muted-foreground text-center py-8">No results found for "{searchQuery}"</p>
+              <p className="text-muted-foreground text-center py-8">{t("help.noResults")} "{searchQuery}"</p>
             )}
           </div>
         </div>
@@ -312,9 +312,9 @@ export default function HelpPage() {
         {/* 6. Footer Support */}
         <div className="p-[1px] rounded-2xl bg-gradient-to-r from-[#00bcd4] to-purple-600">
           <div className="bg-card rounded-[15px] p-8 text-center">
-            <h2 className="text-2xl font-bold text-foreground mb-2">Still need help?</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-2">{t("help.stillNeedHelp")}</h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              Our team is available via WhatsApp during East Africa business hours.
+              {t("help.supportDesc")}
             </p>
             
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -324,7 +324,7 @@ export default function HelpPage() {
               >
                 <a href={WHATSAPP_LINK} target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="w-5 h-5 mr-2" />
-                  Chat on WhatsApp
+                  {t("help.chatOnWhatsapp")}
                 </a>
               </Button>
               <Button
@@ -334,11 +334,11 @@ export default function HelpPage() {
               >
                 <a href="mailto:support@jengatrack.com">
                   <Mail className="w-5 h-5 mr-2" />
-                  Email Support
+                  {t("help.emailSupport")}
                 </a>
               </Button>
             </div>
-            <p className="text-muted-foreground text-xs mt-4">Average response time: under 2 hours</p>
+            <p className="text-muted-foreground text-xs mt-4">{t("help.responseTime")}</p>
           </div>
         </div>
 

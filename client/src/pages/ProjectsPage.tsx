@@ -192,7 +192,7 @@ export default function ProjectsPage() {
       <div className="max-w-[1600px] mx-auto">
         <EmptyState
           icon={AlertTriangle}
-          title="Couldn't load projects"
+          title={t("projects.couldntLoad")}
           description={
             error instanceof Error ? error.message : t("projects.loadError")
           }
@@ -240,7 +240,7 @@ export default function ProjectsPage() {
               </h1>
               <p className="text-sm text-muted-foreground mt-1.5">
                 {list.length === 0
-                  ? "Start by creating your first project."
+                  ? t("projects.startFirst")
                   : `${list.length} project${list.length === 1 ? "" : "s"} — ${stats.activeProjects} active${stats.completedProjects ? `, ${stats.completedProjects} completed` : ""}`}
               </p>
             </div>
@@ -265,7 +265,7 @@ export default function ProjectsPage() {
           >
             <KPICard
               index={0}
-              label="Total Projects"
+              label={t("projects.kpiTotalProjects")}
               value={stats.totalProjects}
               sub={`${stats.activeProjects} active`}
               icon={LayoutGrid}
@@ -273,7 +273,7 @@ export default function ProjectsPage() {
             />
             <KPICard
               index={1}
-              label="Total Budget"
+              label={t("projects.kpiTotalBudget")}
               value={
                 <CurrencyValue
                   value={stats.totalBudget}
@@ -282,13 +282,13 @@ export default function ProjectsPage() {
                   size="xl"
                 />
               }
-              sub="Across all projects"
+              sub={t("projects.kpiAcrossAll")}
               icon={Wallet}
               accent="secondary"
             />
             <KPICard
               index={2}
-              label="Total Spent"
+              label={t("projects.kpiTotalSpent")}
               value={
                 <CurrencyValue
                   value={stats.totalSpent}
@@ -300,14 +300,14 @@ export default function ProjectsPage() {
               sub={
                 stats.totalBudget > 0
                   ? `${((stats.totalSpent / stats.totalBudget) * 100).toFixed(0)}% of budget`
-                  : "No budget set"
+                  : t("budget.notSet") || "No budget set"
               }
               icon={Activity}
               accent="info"
             />
             <KPICard
               index={3}
-              label="Active Sites"
+              label={t("projects.kpiActiveSites")}
               value={stats.activeProjects}
               sub={
                 stats.completedProjects > 0
@@ -332,7 +332,7 @@ export default function ProjectsPage() {
                   setQuery(e.target.value);
                   setPage(1);
                 }}
-                placeholder="Search projects by name or location…"
+                placeholder={t("projects.searchPlaceholder")}
                 className="jt-input pl-10 h-10"
                 aria-label="Search projects"
               />
@@ -354,10 +354,10 @@ export default function ProjectsPage() {
                 )}
                 aria-label="Sort projects"
               >
-                <option value="date">Sort: Date updated</option>
-                <option value="name">Sort: Name</option>
-                <option value="progress">Sort: Progress</option>
-                <option value="budget">Sort: Budget</option>
+                <option value="date">{t("projects.sortDate")}</option>
+                <option value="name">{t("projects.sortName")}</option>
+                <option value="progress">{t("projects.sortProgress")}</option>
+                <option value="budget">{t("projects.sortBudget")}</option>
               </select>
               <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 rotate-90 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
             </div>
@@ -369,8 +369,8 @@ export default function ProjectsPage() {
           sortedList.length === 0 ? (
             <EmptyState
               icon={Search}
-              title="No matches"
-              description={`No projects match "${query}". Try a different search.`}
+              title={t("projects.noMatchTitle")}
+              description={`${t("projects.noProjectFound") || "No projects match"} "${query}". ${t("projects.tryDifferentSearch") || "Try a different search."}`}
               compact
             />
           ) : (
@@ -459,7 +459,7 @@ export default function ProjectsPage() {
               </div>
               <div className="min-w-0">
                 <h3 className="font-display font-semibold text-foreground text-base mb-1">
-                  Log from WhatsApp
+                  {t("projects.logFromWhatsapp")}
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-xl leading-relaxed">
                   Send a message to{" "}
@@ -484,7 +484,7 @@ export default function ProjectsPage() {
               )}
             >
               <Smartphone className="h-4 w-4" />
-              Chat on WhatsApp
+              {t("projects.chatOnWhatsapp")}
             </a>
           </motion.aside>
         )}

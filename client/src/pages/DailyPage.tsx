@@ -136,20 +136,20 @@ function getDateKey(date: Date): string {
 
 const DESC_PREVIEW_LEN = 160;
 
-function activityTypeLabel(entry: TimelineEntry): string {
+function activityTypeLabel(entry: TimelineEntry, t: (key: string) => string): string {
   const raw = String(entry.activity_type || 'other').toLowerCase();
   if (raw === 'expense' && entry.amount != null && Number(entry.amount) > 0) {
-    return 'Labour payment';
+    return t('daily.activityType.labourPayment');
   }
   const map: Record<string, string> = {
-    delivery: 'Delivery',
-    progress: 'Task completion',
-    photo: 'Media upload',
-    labor: 'Staffing',
-    expense: 'Financials',
-    other: 'Activity',
+    delivery: t('daily.activityType.delivery'),
+    progress: t('daily.activityType.taskCompletion'),
+    photo: t('daily.activityType.mediaUpload'),
+    labor: t('daily.activityType.staffing'),
+    expense: t('daily.activityType.financials'),
+    other: t('daily.activityType.activity'),
   };
-  return map[raw] ?? 'Activity';
+  return map[raw] ?? t('daily.activityType.activity');
 }
 
 function sourceLabel(source?: string | null): string {
@@ -165,10 +165,11 @@ function DailyTimelineRow({
   entry: TimelineEntry;
   isLast: boolean;
 }) {
+  const { t } = useLanguage();
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
   const timeDisplay = formatTime12Hour(entry.log_time);
-  const typeLabel = activityTypeLabel(entry);
+  const typeLabel = activityTypeLabel(entry, t);
   const photos = toPhotoUrls(entry.photo_urls);
   const hasPhotos = photos.length > 0;
   const longText =
@@ -242,7 +243,7 @@ function DailyTimelineRow({
                   onClick={() => setGalleryOpen(true)}
                   className="text-xs font-bold text-[#93C54E] hover:text-[#7ab03e] flex items-center gap-1 whitespace-nowrap bg-[#93C54E]/10 hover:bg-[#93C54E]/20 px-2.5 py-1 rounded-md transition-colors"
                 >
-                  View all
+                  {t('daily.viewAll')}
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -252,7 +253,7 @@ function DailyTimelineRow({
                   onClick={() => setTextOpen(true)}
                   className="text-xs font-bold text-[#93C54E] hover:text-[#7ab03e] flex items-center gap-1 whitespace-nowrap bg-[#93C54E]/10 hover:bg-[#93C54E]/20 px-2.5 py-1 rounded-md transition-colors"
                 >
-                  View all
+                  {t('daily.viewAll')}
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -305,7 +306,7 @@ function DailyTimelineRow({
       <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Photos</DialogTitle>
+            <DialogTitle>{t('daily.photos')}</DialogTitle>
             <DialogDescription className="sr-only">Gallery of photos attached to this daily log entry.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
@@ -706,10 +707,10 @@ export default function DailyPage() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="space-y-1.5 min-w-0">
             <h1 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#93C54E] to-blue-500 truncate">
-              Daily Accountability
+              {t("daily.header")}
             </h1>
             <p className="text-muted-foreground text-sm sm:text-base max-w-xl">
-              Track site progress, worker attendance, and daily conditions.
+              {t("daily.subheader")}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -735,7 +736,7 @@ export default function DailyPage() {
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.totalActiveDays || 0}</span>
-              <span className="text-sm font-medium text-muted-foreground">days recorded</span>
+              <span className="text-sm font-medium text-muted-foreground">{t("daily.daysRecorded")}</span>
             </div>
           </div>
 
@@ -751,7 +752,7 @@ export default function DailyPage() {
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.currentStreak || 0}</span>
-              <span className="text-sm font-medium text-muted-foreground">days in a row</span>
+              <span className="text-sm font-medium text-muted-foreground">{t("daily.daysInARow")}</span>
             </div>
           </div>
 
@@ -767,7 +768,7 @@ export default function DailyPage() {
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.avgWorkerCount || 0}</span>
-              <span className="text-sm font-medium text-muted-foreground">per day</span>
+              <span className="text-sm font-medium text-muted-foreground">{t("daily.perDay")}</span>
             </div>
           </div>
 
@@ -783,7 +784,7 @@ export default function DailyPage() {
             </div>
             <div className="flex items-baseline gap-2 relative z-10">
               <span className="text-3xl sm:text-4xl font-black text-foreground tracking-tight">{stats?.totalPhotos || 0}</span>
-              <span className="text-sm font-medium text-muted-foreground">captured</span>
+              <span className="text-sm font-medium text-muted-foreground">{t("daily.captured")}</span>
             </div>
           </div>
         </div>
@@ -830,7 +831,7 @@ export default function DailyPage() {
                     chatFilterOnly && 'bg-[#93C54E]/10',
                   )}
                 >
-                  Chat reports · {formatChatReportsDateLabel()} ({chatReportCount})
+                  {t("daily.chatReports")} · {formatChatReportsDateLabel()} ({chatReportCount})
                 </Button>
                 <button
                   type="button"
@@ -839,7 +840,7 @@ export default function DailyPage() {
                   }
                   className="text-[#93C54E] hover:text-[#7ab03e] text-sm font-medium flex items-center gap-1 transition-colors xl:hidden"
                 >
-                  View heatmap <ChevronRight className="w-4 h-4" />
+                  {t("daily.viewHeatmap")} <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
@@ -853,7 +854,7 @@ export default function DailyPage() {
                 <div className="px-5 py-4 border-b border-border space-y-3 bg-gradient-to-r from-muted/30 to-transparent">
                   <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#93C54E]/70" />
-                    Day summary
+                    {t("daily.daySummary")}
                   </h3>
                   <div className="grid sm:grid-cols-2 gap-3 sm:gap-6">
                     <div className="space-y-2">
@@ -863,13 +864,13 @@ export default function DailyPage() {
                             <Users className="w-3.5 h-3.5" />
                           </div>
                           <span>
-                            <span className="font-bold text-foreground">{dailyLog.worker_count}</span> workers on site
+                            <span className="font-bold text-foreground">{dailyLog.worker_count}</span> {t("daily.workersOnSite")}
                           </span>
                         </div>
                       )}
                       {dailyLog.weather_condition?.trim() && (
                         <div className="flex items-start gap-2.5 text-sm text-muted-foreground">
-                          <span className="font-bold text-foreground mt-0.5">Weather:</span> 
+                          <span className="font-bold text-foreground mt-0.5">{t("daily.weather")}</span> 
                           <span className="leading-snug">{dailyLog.weather_condition}</span>
                         </div>
                       )}
@@ -878,7 +879,7 @@ export default function DailyPage() {
                     <div className="space-y-2">
                       {dailyLog.notes?.trim() && (
                         <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                          <span className="font-bold text-foreground block mb-0.5">Notes:</span> 
+                          <span className="font-bold text-foreground block mb-0.5">{t("daily.notes")}</span> 
                           {dailyLog.notes}
                         </div>
                       )}
@@ -905,24 +906,24 @@ export default function DailyPage() {
                 <TimelineSkeleton />
               ) : isDailyError ? (
                 <div className="text-center py-12">
-                  <p className="text-muted-foreground mb-4">Failed to load entries.</p>
+                  <p className="text-muted-foreground mb-4">{t("daily.failedToLoad")}</p>
                   <Button onClick={() => refetchDaily()} variant="outline" className="border-border text-muted-foreground">
                     <RefreshCw className="w-4 h-4 mr-2" />
-                    Retry
+                    {t("common.retry")}
                   </Button>
                 </div>
               ) : displayTimelineEntries.length === 0 ? (
                 <div className="text-center py-16">
                   {chatFilterOnly && timelineEntries.length > 0 ? (
                     <>
-                      <p className="text-muted-foreground mb-4">No WhatsApp chat reports for this day.</p>
+                      <p className="text-muted-foreground mb-4">{t("daily.noWhatsappReports")}</p>
                       <Button
                         type="button"
                         variant="outline"
                         className="border-border text-muted-foreground"
                         onClick={() => setChatFilterOnly(false)}
                       >
-                        Show all activity
+                        {t("daily.showAllActivity")}
                       </Button>
                     </>
                   ) : (
@@ -930,7 +931,7 @@ export default function DailyPage() {
                       <div className="w-16 h-16 rounded-full bg-[#93C54E]/10 flex items-center justify-center mx-auto mb-4 ring-1 ring-[#93C54E]/20 shadow-sm">
                         <Activity className="w-8 h-8 text-[#93C54E]" />
                       </div>
-                      <p className="text-muted-foreground font-medium mb-6">No activity logged for this day.</p>
+                      <p className="text-muted-foreground font-medium mb-6">{t("daily.noActivity")}</p>
                       <Button
                         onClick={() => {
                           setEntryErrors({});
@@ -953,7 +954,7 @@ export default function DailyPage() {
                         className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 rounded-xl px-6"
                       >
                         <Plus className="w-4 h-4 mr-2" />
-                        Log Activity
+                        {t("daily.logActivity")}
                       </Button>
                     </>
                   )}
@@ -976,7 +977,7 @@ export default function DailyPage() {
             id="daily-heatmap"
             className="w-full xl:w-[min(100%,320px)] xl:min-w-[260px] shrink-0 rounded-2xl border border-border bg-gradient-to-b from-card to-card/50 p-5 sm:p-6 scroll-mt-24 shadow-sm"
           >
-            <h3 className="text-lg font-bold text-foreground mb-6">Activity — last 60 days</h3>
+            <h3 className="text-lg font-bold text-foreground mb-6">{t("daily.activityLast60")}</h3>
             <div className="flex flex-wrap gap-2">
               {heatmap.map((h) => {
                 const ec = h.entryCount ?? 0;
@@ -1004,7 +1005,7 @@ export default function DailyPage() {
                     />
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-card border border-border rounded-lg text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20 shadow-xl">
                       <p className="font-bold text-foreground">{formatDate(h.date)}</p>
-                      <p className="text-[#93C54E]">{ec} entries</p>
+                      <p className="text-[#93C54E]">{ec} {t("daily.entry").toLowerCase()}</p>
                     </div>
                   </div>
                 );
@@ -1032,7 +1033,7 @@ export default function DailyPage() {
           className="fixed bottom-24 md:bottom-6 right-4 md:right-6 flex items-center gap-2 px-4 sm:px-5 py-3 rounded-full bg-gradient-to-r from-[#93C54E] to-blue-500 hover:from-[#7ab03e] hover:to-blue-600 text-white text-sm sm:text-base font-bold shadow-lg hover:shadow-xl hover:shadow-[#93C54E]/20 hover:-translate-y-1 transition-all duration-300 z-[60]"
         >
           <Plus className="w-5 h-5" />
-          Log Activity
+          {t("daily.logActivity")}
         </button>
 
         {/* Hidden file input — must be at root level (outside conditional block) so ref stays mounted */}
@@ -1050,7 +1051,7 @@ export default function DailyPage() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <div className="bg-card rounded-xl p-6 w-full max-w-lg border border-border shadow-2xl scale-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-foreground font-bold text-xl">Log Activity</h3>
+                <h3 className="text-foreground font-bold text-xl">{t("daily.logActivityTitle")}</h3>
                 <button 
                   type="button"
                   onClick={() => { setShowDailyModal(false); setEntryPhotos({}); }} 
@@ -1059,20 +1060,20 @@ export default function DailyPage() {
                   <X size={20} />
                 </button>
               </div>
-              <p className="text-muted-foreground text-sm mb-4">Record what happened on {formatTimelineDate(selectedDate)}</p>
+              <p className="text-muted-foreground text-sm mb-4">{t("daily.recordWhatHappened")} {formatTimelineDate(selectedDate)}</p>
 
               <div className="space-y-4">
                 {entries.map((entry, idx) => (
                   <div key={entry.id} className="bg-muted/50 rounded-lg p-3 border border-border/50">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-muted-foreground">Entry {idx + 1}</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t("daily.entry")} {idx + 1}</span>
                       {entries.length > 1 && (
                         <button
                           type="button"
                           onClick={() => removeEntry(entry.id)}
                           className="text-red-400 hover:text-red-300 text-xs"
                         >
-                          Remove
+                          {t("daily.remove")}
                         </button>
                       )}
                     </div>
@@ -1183,7 +1184,7 @@ export default function DailyPage() {
                   onClick={addEntry}
                   className="w-full py-2 rounded-lg border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-[#93C54E]/50 hover:bg-[#93C54E]/5 transition-all text-sm"
                 >
-                  + Add another entry
+                  {t("daily.addAnotherEntry")}
                 </button>
               </div>
 
@@ -1194,14 +1195,14 @@ export default function DailyPage() {
                   className="w-full text-muted-foreground hover:text-foreground hover:bg-muted h-11"
                   onClick={() => { setShowDailyModal(false); setEntryPhotos({}); }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button 
                   type="button" 
                   className="w-full bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold h-11"
                   onClick={handleSaveLog}
                 >
-                  Save Activity
+                  {t("daily.saveActivity")}
                 </Button>
               </div>
             </div>

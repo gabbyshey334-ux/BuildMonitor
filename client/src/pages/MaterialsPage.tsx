@@ -303,7 +303,7 @@ export default function MaterialsPage() {
           </p>
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="w-4 h-4 mr-2" />
-            Retry
+            {t("common.retry")}
           </Button>
         </div>
       </div>
@@ -316,10 +316,10 @@ export default function MaterialsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              Materials &amp; Supplies
+              {t("materials.title")}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Inventory by material — stock levels, value, and low-stock alerts.
+              {t("materials.headerSubtitle")}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -329,13 +329,13 @@ export default function MaterialsPage() {
               className="rounded-full"
               onClick={() => refetch()}
               disabled={isFetching}
-              aria-label="Refresh"
+              aria-label={t("common.refresh") || "Refresh"}
             >
               <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
             </Button>
             <Button onClick={openAdd}>
               <Plus className="w-4 h-4 mr-2" />
-              Add material
+              {t("materials.addMaterial")}
             </Button>
           </div>
         </div>
@@ -343,13 +343,13 @@ export default function MaterialsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Total materials
+              {t("materials.totalMaterials")}
             </p>
             <p className="text-2xl font-bold text-foreground mt-1">{kpis.totalMaterials}</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Total inventory value
+              {t("materials.totalInventoryValue")}
             </p>
             <p className="text-2xl font-bold text-foreground mt-1 tabular-nums">
               {formatUGX(kpis.totalValue)}
@@ -357,7 +357,7 @@ export default function MaterialsPage() {
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Low stock items
+              {t("materials.lowStockItems")}
             </p>
             <p
               className={cn(
@@ -370,7 +370,7 @@ export default function MaterialsPage() {
           </div>
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Last updated
+              {t("materials.lastUpdatedLabel")}
             </p>
             <p className="text-lg font-semibold text-foreground mt-1">{kpis.lastUpdatedLabel}</p>
           </div>
@@ -380,9 +380,9 @@ export default function MaterialsPage() {
         <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-muted border border-border text-sm text-muted-foreground">
           <Zap className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
           <span>
-            Auto-synced with WhatsApp — materials logged via chat appear here instantly.
+            {t("materials.autoSync")}
             {kpis.lastUpdatedLabel !== "—" && (
-              <span className="ml-1">Last synced: <span className="text-foreground">{kpis.lastUpdatedLabel}</span></span>
+              <span className="ml-1">{t("materials.lastSynced")} <span className="text-foreground">{kpis.lastUpdatedLabel}</span></span>
             )}
           </span>
         </div>
@@ -391,13 +391,13 @@ export default function MaterialsPage() {
           {inventory.length === 0 ? (
             <div className="p-12 text-center space-y-3">
               <Package className="w-12 h-12 text-muted-foreground mx-auto opacity-60" />
-              <p className="text-muted-foreground font-medium">No materials logged yet.</p>
+              <p className="text-muted-foreground font-medium">{t("materials.noMaterials")}</p>
               <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                Materials appear here automatically when you log purchases via WhatsApp, or add them manually using the button above.
+                {t("materials.noMaterialsDesc")}
               </p>
               <Button onClick={openAdd} className="mt-2">
                 <Plus className="w-4 h-4 mr-2" />
-                Add your first material
+                {t("materials.addFirst")}
               </Button>
             </div>
           ) : (
@@ -405,14 +405,14 @@ export default function MaterialsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Current stock</TableHead>
-                    <TableHead className="text-right">Unit cost</TableHead>
-                    <TableHead className="text-right">Total value</TableHead>
-                    <TableHead>Last purchased</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-[140px]">Stock level</TableHead>
-                    <TableHead className="text-right w-[100px]">Actions</TableHead>
+                    <TableHead>{t("materials.colName")}</TableHead>
+                    <TableHead>{t("materials.colCurrentStock")}</TableHead>
+                    <TableHead className="text-right">{t("materials.colUnitCost")}</TableHead>
+                    <TableHead className="text-right">{t("materials.colTotalValue")}</TableHead>
+                    <TableHead>{t("materials.colLastPurchased")}</TableHead>
+                    <TableHead>{t("materials.colStatus")}</TableHead>
+                    <TableHead className="w-[140px]">{t("materials.colStockLevel")}</TableHead>
+                    <TableHead className="text-right w-[100px]">{t("materials.colActions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -441,17 +441,17 @@ export default function MaterialsPage() {
                         <TableCell>
                           {st === "out" && (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground">
-                              Out of Stock
+                              {t("materials.outOfStock")}
                             </Badge>
                           )}
                           {st === "low" && (
                             <Badge className="bg-red-600/15 text-red-700 dark:text-red-400 hover:bg-red-600/20 border-red-600/30">
-                              Low Stock
+                              {t("materials.lowStock")}
                             </Badge>
                           )}
                           {st === "ok" && (
                             <Badge className="bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-600/20 border-emerald-600/30">
-                              In Stock
+                              {t("materials.inStock")}
                             </Badge>
                           )}
                         </TableCell>
@@ -497,16 +497,14 @@ export default function MaterialsPage() {
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle>{editRow ? "Edit material" : "Add material"}</DialogTitle>
+            <DialogTitle>{editRow ? t("materials.editMaterialTitle") : t("materials.addMaterial")}</DialogTitle>
             <DialogDescription>
-              {editRow
-                ? "Update quantity, costs, and low-stock threshold for this row."
-                : "Add stock to inventory. If the material name already exists, quantities are combined."}
+              {editRow ? t("materials.editDesc") : t("materials.addDesc")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div className="space-y-2">
-              <Label htmlFor="mat-name">Name</Label>
+              <Label htmlFor="mat-name">{t("materials.nameLbl")}</Label>
               <Input
                 id="mat-name"
                 value={formName}
@@ -518,7 +516,7 @@ export default function MaterialsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label htmlFor="mat-qty">Quantity</Label>
+                <Label htmlFor="mat-qty">{t("materials.quantityLbl")}</Label>
                 <Input
                   id="mat-qty"
                   inputMode="decimal"
@@ -529,7 +527,7 @@ export default function MaterialsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="mat-unit">Unit</Label>
+                <Label htmlFor="mat-unit">{t("materials.unitLbl")}</Label>
                 <Input
                   id="mat-unit"
                   value={formUnit}
@@ -540,7 +538,7 @@ export default function MaterialsPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="mat-uc">Unit cost (UGX)</Label>
+              <Label htmlFor="mat-uc">{t("materials.unitCostLbl")}</Label>
               <Input
                 id="mat-uc"
                 inputMode="decimal"
@@ -551,7 +549,7 @@ export default function MaterialsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="mat-th">Low stock threshold</Label>
+              <Label htmlFor="mat-th">{t("materials.thresholdLbl")}</Label>
               <Input
                 id="mat-th"
                 inputMode="numeric"
@@ -563,10 +561,10 @@ export default function MaterialsPage() {
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setAddOpen(false)} disabled={saving}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" onClick={handleSaveAddOrEdit} disabled={saving}>
-              {saving ? "Saving…" : editRow ? "Save changes" : "Add"}
+              {saving ? t("common.saving") : editRow ? t("common.save") : t("materials.addMaterial")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -575,7 +573,7 @@ export default function MaterialsPage() {
       <Dialog open={!!deleteRow} onOpenChange={(o) => !o && setDeleteRow(null)}>
         <DialogContent className="sm:max-w-md bg-card border-border">
           <DialogHeader>
-            <DialogTitle>Remove material?</DialogTitle>
+            <DialogTitle>{t("materials.removeTitle")}</DialogTitle>
             <DialogDescription>
               This removes the inventory row for{" "}
               <span className="font-medium text-foreground">
@@ -588,10 +586,10 @@ export default function MaterialsPage() {
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setDeleteRow(null)} disabled={saving}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" variant="destructive" onClick={handleDelete} disabled={saving}>
-              {saving ? "Removing…" : "Delete"}
+              {saving ? t("materials.removeSaving") : t("common.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>

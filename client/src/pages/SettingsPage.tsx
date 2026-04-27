@@ -335,8 +335,8 @@ export default function SettingsPage() {
         
         {/* 1. Header */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">Settings</h1>
-          <p className="text-sm sm:text-base text-muted-foreground mt-1">Manage your project configuration and profile details.</p>
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground tracking-tight">{t("settings.title")}</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">{t("settings.subheader")}</p>
         </div>
 
         {/* WhatsApp Link Utility (Preserved but styled) */}
@@ -345,10 +345,10 @@ export default function SettingsPage() {
             <div className="flex-1">
               <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mb-2">
                 <Smartphone className="w-5 h-5 text-[#4CAF7D]" />
-                Link WhatsApp
+                {t("settings.linkWhatsapp")}
               </h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Created a project via WhatsApp? Link your number to sync projects.
+                {t("settings.linkWhatsappDesc")}
               </p>
               <div className="flex gap-3 max-w-md">
                 <Input
@@ -362,7 +362,7 @@ export default function SettingsPage() {
                   disabled={linkingWhatsApp}
                   className="bg-[#4CAF7D] hover:bg-[#16a34a] text-white"
                 >
-                  {linkingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : "Link"}
+                  {linkingWhatsApp ? <Loader2 className="w-4 h-4 animate-spin" /> : t("settings.link")}
                 </Button>
               </div>
               {linkSuccess && <p className="text-[#4CAF7D] text-sm mt-2">✅ Number linked successfully.</p>}
@@ -380,13 +380,13 @@ export default function SettingsPage() {
               <div className="p-2 rounded-lg bg-[#93C54E]/10 text-[#93C54E]">
                 <Settings className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-foreground">Project Settings</h2>
+              <h2 className="text-xl font-bold text-foreground">{t("settings.project")}</h2>
             </div>
             
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">Project Name</Label>
+                  <Label className="text-muted-foreground">{t("settings.projectname")}</Label>
                   <Input
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -394,7 +394,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">Budget (UGX)</Label>
+                  <Label className="text-muted-foreground">{t("settings.budget")}</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-2.5 text-muted-foreground">UGX</span>
                     <Input
@@ -408,7 +408,7 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Description</Label>
+                <Label className="text-muted-foreground">{t("settings.description")}</Label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -419,27 +419,27 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">Status</Label>
+                  <Label className="text-muted-foreground">{t("settings.status")}</Label>
                   <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
                     <SelectTrigger className="bg-muted border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-muted border-border text-foreground">
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="completed">Completed</SelectItem>
-                      <SelectItem value="on_hold">On Hold</SelectItem>
+                      <SelectItem value="active">{t("settings.statusActive")}</SelectItem>
+                      <SelectItem value="completed">{t("settings.statusCompleted")}</SelectItem>
+                      <SelectItem value="on_hold">{t("settings.statusOnHold")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">Channel Type</Label>
+                  <Label className="text-muted-foreground">{t("settings.channelType")}</Label>
                   <Select value={form.channel_type} onValueChange={(v) => setForm({ ...form, channel_type: v })}>
                     <SelectTrigger className="bg-muted border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-muted border-border text-foreground">
-                      <SelectItem value="direct">Direct Message</SelectItem>
-                      <SelectItem value="group">Group Chat</SelectItem>
+                      <SelectItem value="direct">{t("settings.directMessage")}</SelectItem>
+                      <SelectItem value="group">{t("settings.groupChat")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -452,7 +452,7 @@ export default function SettingsPage() {
                   className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                  Save Changes
+                  {t("settings.save")}
                 </Button>
               </div>
             </div>
@@ -464,13 +464,13 @@ export default function SettingsPage() {
               <div className="p-2 rounded-lg bg-[#93C54E]/10 text-[#93C54E]">
                 <User className="w-6 h-6" />
               </div>
-              <h2 className="text-xl font-bold text-foreground">Profile Settings</h2>
+              <h2 className="text-xl font-bold text-foreground">{t("settings.profile")}</h2>
             </div>
 
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">Full Name</Label>
+                  <Label className="text-muted-foreground">{t("settings.displayname")}</Label>
                   <Input
                     value={form.full_name}
                     onChange={(e) => setForm({ ...form, full_name: e.target.value })}
@@ -478,7 +478,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground">WhatsApp Number</Label>
+                  <Label className="text-muted-foreground">{t("settings.whatsapp")}</Label>
                   <div className="relative">
                     <Phone className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -491,7 +491,7 @@ export default function SettingsPage() {
               </div>
 
                <div className="space-y-2">
-                  <Label className="text-muted-foreground">Language</Label>
+                  <Label className="text-muted-foreground">{t("settings.language")}</Label>
                   <div className="bg-muted border border-border rounded-md p-2">
                     <LanguageSwitcher variant="full" />
                   </div>
@@ -504,7 +504,7 @@ export default function SettingsPage() {
                   className="bg-[#93C54E] hover:bg-[#7ab03e] text-black font-bold min-w-[120px]"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-                  Save Profile
+                  {t("settings.saveProfile")}
                 </Button>
               </div>
             </div>
@@ -518,7 +518,7 @@ export default function SettingsPage() {
              <div className="p-2 rounded-lg bg-red-500/10 text-red-500">
                 <AlertTriangle className="w-6 h-6" />
               </div>
-            <h2 className="text-xl font-bold text-red-500">Danger Zone</h2>
+            <h2 className="text-xl font-bold text-red-500">{t("settings.danger")}</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
@@ -526,7 +526,7 @@ export default function SettingsPage() {
             <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); handlePasswordChange(); }}>
               <h3 className="text-foreground font-medium flex items-center gap-2">
                 <Lock className="w-4 h-4 text-muted-foreground" />
-                Change Password
+                {t("settings.changePassword")}
               </h3>
               <div className="space-y-3">
                 <input
@@ -540,7 +540,7 @@ export default function SettingsPage() {
                 />
                 <Input
                   type="password"
-                  placeholder="Current Password"
+                  placeholder={t("settings.currentPassword")}
                   autoComplete="current-password"
                   value={passwordForm.currentPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
@@ -548,7 +548,7 @@ export default function SettingsPage() {
                 />
                 <Input
                   type="password"
-                  placeholder="New Password"
+                  placeholder={t("settings.newPassword")}
                   autoComplete="new-password"
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
@@ -556,7 +556,7 @@ export default function SettingsPage() {
                 />
                 <Input
                   type="password"
-                  placeholder="Confirm New Password"
+                  placeholder={t("settings.confirmNewPassword")}
                   autoComplete="new-password"
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
@@ -565,7 +565,7 @@ export default function SettingsPage() {
               </div>
               
               {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
-              {passwordSuccess && <p className="text-[#4CAF7D] text-sm">Password updated successfully.</p>}
+              {passwordSuccess && <p className="text-[#4CAF7D] text-sm">{t("settings.passwordUpdated")}</p>}
               
               <Button 
                 type="submit"
@@ -573,7 +573,7 @@ export default function SettingsPage() {
                 variant="destructive"
                 className="w-full bg-red-500 hover:bg-red-600 text-white font-bold"
               >
-                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : "Change Password"}
+                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : t("settings.changePassword")}
               </Button>
             </form>
 
@@ -581,10 +581,10 @@ export default function SettingsPage() {
              <div className="space-y-4">
               <h3 className="text-foreground font-medium flex items-center gap-2">
                 <Trash2 className="w-4 h-4 text-muted-foreground" />
-                Complete Project
+                {t("settings.completeProject")}
               </h3>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                Marking this project as completed will archive it. You won't be able to make further changes unless reactivated.
+                {t("settings.completeDescription")}
               </p>
               
               <AlertDialog open={confirmCompletedOpen} onOpenChange={setConfirmCompletedOpen}>
@@ -595,17 +595,17 @@ export default function SettingsPage() {
                   onClick={() => setConfirmCompletedOpen(true)}
                   className="w-full border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-500/40"
                 >
-                  Mark as Completed
+                  {t("settings.markAsCompleted")}
                 </Button>
                 <AlertDialogContent className="bg-card border border-border text-foreground">
                   <AlertDialogHeader>
-                    <AlertDialogTitle className="text-foreground">Mark project as completed?</AlertDialogTitle>
+                    <AlertDialogTitle className="text-foreground">{t("settings.completeConfirm")}</AlertDialogTitle>
                     <AlertDialogDescription className="text-muted-foreground">
-                      This action will archive the project. You can reactivate it later from the project settings if needed.
+                      {t("settings.completeDescription")}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel className="bg-transparent border-border text-foreground hover:bg-muted hover:text-foreground">Cancel</AlertDialogCancel>
+                    <AlertDialogCancel className="bg-transparent border-border text-foreground hover:bg-muted hover:text-foreground">{t("common.cancel")}</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={(e) => {
                         e.preventDefault();
@@ -614,7 +614,7 @@ export default function SettingsPage() {
                       }}
                       className="bg-red-500 hover:bg-red-600 text-white"
                     >
-                      Mark Completed
+                      {t("settings.markCompleted")}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

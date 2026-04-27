@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { User, Mail, Lock, Phone, Eye, EyeOff, Loader2 } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // Inline SVG grid — graph-paper texture at 4% opacity
 function GridPattern({ id }: { id: string }) {
@@ -35,13 +36,14 @@ function getPasswordStrength(pw: string): { score: number; label: string; color:
   if (/[A-Z]/.test(pw)) raw++;
   if (/[0-9]/.test(pw)) raw++;
   if (/[^A-Za-z0-9]/.test(pw)) raw++;
-  if (raw <= 1) return { score: 1, label: "Weak", color: "#DC2626" };
-  if (raw <= 2) return { score: 2, label: "Fair", color: "#F59E0B" };
-  if (raw <= 3) return { score: 3, label: "Good", color: "#EAB308" };
-  return { score: 4, label: "Strong", color: "#1E7A3E" };
+  if (raw <= 1) return { score: 1, label: "auth.register.strength.weak", color: "#DC2626" };
+  if (raw <= 2) return { score: 2, label: "auth.register.strength.fair", color: "#F59E0B" };
+  if (raw <= 3) return { score: 3, label: "auth.register.strength.good", color: "#EAB308" };
+  return { score: 4, label: "auth.register.strength.strong", color: "#1E7A3E" };
 }
 
 export default function Signup() {
+  const { t } = useLanguage();
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
@@ -156,15 +158,15 @@ export default function Signup() {
           </div>
 
           {/* Form heading */}
-          <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Create your account</h2>
-          <p className="text-sm text-gray-500 mt-1">Free to start. No credit card.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">{t("auth.register.title")}</h2>
+          <p className="text-sm text-gray-500 mt-1">{t("auth.register.subtitle")}</p>
 
           <form onSubmit={handleSignup} className="mt-6 space-y-4">
 
             {/* Full Name */}
             <div className="space-y-1.5">
               <Label htmlFor="fullName" className="text-sm font-medium text-gray-700">
-                Full Name
+                {t("auth.register.name")}
               </Label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -187,7 +189,7 @@ export default function Signup() {
             {/* WhatsApp Number */}
             <div className="space-y-1.5">
               <Label htmlFor="whatsappNumber" className="text-sm font-medium text-gray-700">
-                WhatsApp Number
+                {t("auth.register.whatsapp")}
               </Label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -210,7 +212,7 @@ export default function Signup() {
             {/* Email */}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email
+                {t("auth.register.email")}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -233,7 +235,7 @@ export default function Signup() {
             {/* Password + strength indicator */}
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-                Password
+                {t("auth.register.password")}
               </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -276,7 +278,7 @@ export default function Signup() {
                     ))}
                   </div>
                   <p className="text-xs font-medium" style={{ color: strength.color }}>
-                    {strength.label}
+                    {strength.label ? t(strength.label) : ""}
                   </p>
                 </div>
               )}
@@ -285,7 +287,7 @@ export default function Signup() {
             {/* Confirm Password */}
             <div className="space-y-1.5">
               <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
-                Confirm Password
+                {t("auth.register.confirmPassword")}
               </Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -325,10 +327,10 @@ export default function Signup() {
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Creating account…
+                  {t("auth.register.creating")}
                 </span>
               ) : (
-                "Create Account"
+                t("auth.register.button")
               )}
             </Button>
           </form>
@@ -343,10 +345,10 @@ export default function Signup() {
 
           {/* Bottom link */}
           <p className="text-sm text-gray-500 text-center mt-4">
-            Already have an account?{" "}
+            {t("auth.register.hasaccount")}{" "}
             <Link href="/login">
               <span className="text-[#1E7A3E] font-medium cursor-pointer hover:underline underline-offset-2">
-                Sign in
+                {t("auth.register.signin")}
               </span>
             </Link>
           </p>

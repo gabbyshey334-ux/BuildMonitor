@@ -90,15 +90,15 @@ export default function Login() {
           </div>
 
           {/* Form heading */}
-          <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Welcome back</h2>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your account</p>
+          <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">{t("auth.login.title")}</h2>
+          <p className="text-sm text-gray-500 mt-1">{t("auth.login.subtitle")}</p>
 
           <form onSubmit={handleLogin} className="mt-6 space-y-4">
 
             {/* Email */}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email
+                {t("auth.login.email")}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
@@ -118,11 +118,11 @@ export default function Login() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-sm font-medium text-gray-700">
-                  Password
+                  {t("auth.login.password")}
                 </Label>
                 <Link href="/forgot-password">
                   <span className="text-xs text-[#1E7A3E] cursor-pointer hover:underline underline-offset-2 font-medium">
-                    Forgot password?
+                    {t("auth.login.forgot")}
                   </span>
                 </Link>
               </div>
@@ -158,20 +158,20 @@ export default function Login() {
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  Signing in…
+                  {t("auth.login.signingIn")}
                 </span>
               ) : (
-                "Sign In"
+                t("auth.login.button")
               )}
             </Button>
           </form>
 
           {/* Bottom link */}
           <p className="text-sm text-gray-500 text-center mt-4">
-            Don't have an account?{" "}
+            {t("auth.login.noaccount")}{" "}
             <Link href="/signup">
               <span className="text-[#1E7A3E] font-medium cursor-pointer hover:underline underline-offset-2">
-                Sign up
+                {t("auth.login.signupLink")}
               </span>
             </Link>
           </p>
