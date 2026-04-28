@@ -14,23 +14,36 @@ import { MoreBottomSheet } from "./MoreBottomSheet";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/LanguageContext";
 
+// SHORT labels only — these go inside a narrow tab bar.
+// Full translated labels (nav.budgets etc.) are used as aria-labels
+// for accessibility but NOT rendered as visible text.
 const TABS = [
-  { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { labelKey: "nav.budgets", href: "/budget", icon: Wallet },
-  { labelKey: "nav.materials", href: "/materials", icon: Package },
-  { labelKey: "nav.daily", href: "/daily", icon: ClipboardList },
+  {
+    labelKey: "nav.dashboard",
+    shortLabel: "Home",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    labelKey: "nav.budgets",
+    shortLabel: "Budget",
+    href: "/budget",
+    icon: Wallet,
+  },
+  {
+    labelKey: "nav.materials",
+    shortLabel: "Materials",
+    href: "/materials",
+    icon: Package,
+  },
+  {
+    labelKey: "nav.daily",
+    shortLabel: "Daily",
+    href: "/daily",
+    icon: ClipboardList,
+  },
 ];
 
-/**
- * Mobile bottom navigation.
- *
- * Visibility:
- *   < 1024px (xs, sm, md): visible.
- *   ≥ 1024px (lg+):        hidden — desktop uses the <Sidebar />.
- *
- * Height: 64px base + safe-area (handled by `mobile-nav-safe` utility).
- * Each tap target is min-h-[56px] flex-1 to guarantee ≥ 44×44px.
- */
 export function BottomNav() {
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -47,45 +60,65 @@ export function BottomNav() {
           "lg:hidden",
           "fixed bottom-0 left-0 right-0 z-50",
           "flex items-stretch",
-          "bg-[hsl(var(--card))]/96 backdrop-blur-xl",
+          "bg-[hsl(var(--card))]/95 backdrop-blur-xl",
           "supports-[backdrop-filter]:bg-[hsl(var(--card))]/88",
-          "border-t border-border/40",
-          "shadow-[0_-4px_24px_rgba(0,0,0,0.08)]",
-          "dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)]",
+          "border-t border-border/50",
+          "shadow-[0_-1px_0_0_hsl(var(--border)/0.6)]",
+          "dark:shadow-[0_-8px_32px_rgba(0,0,0,0.5)]",
           "mobile-nav-safe",
         )}
-        aria-label="Primary"
+        aria-label="Primary navigation"
       >
-        <div className="flex flex-1 items-stretch px-1 pb-1 pt-1.5">
+        <div className="flex flex-1 items-stretch px-1 pt-1 pb-0.5">
+
           {TABS.map((tab) => {
             const href = hrefWithProject(tab.href);
             const isActive =
               location === tab.href ||
               location.startsWith(tab.href + "/") ||
               location.startsWith(tab.href + "?");
-            const label = t(tab.labelKey);
+            const fullLabel = t(tab.labelKey);
+
             return (
               <Link
                 key={tab.href}
                 href={href}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={fullLabel}
                 className="flex flex-1 min-w-0"
               >
                 <div
                   className={cn(
                     "relative flex flex-1 flex-col items-center justify-center",
-                    "min-h-[52px] gap-0.5 rounded-xl mx-0.5",
-                    "transition-all duration-200 touch-manipulation active:scale-[0.94]",
-                    "focus-visible:outline-none focus-visible:ring-2",
-                    "focus-visible:ring-primary/60 focus-visible:ring-inset",
+                    "min-h-[52px] gap-[3px] rounded-xl mx-0.5 px-1",
+                    "transition-all duration-200 ease-out",
+                    "touch-manipulation active:scale-[0.93]",
+                    "focus-visible:outline-none",
                     isActive
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
+                  {/* Active pill background */}
+                  {isActive && (
+                    <span
+                      className="absolute inset-0 rounded-xl bg-primary/10 dark:bg-primary/15"
+                      aria-hidden
+                    />
+                  )}
+
+                  {/* Active top bar indicator */}
+                  {isActive && (
+                    <span
+                      className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-[3px] w-8 rounded-b-full bg-primary"
+                      aria-hidden
+                    />
+                  )}
+
                   <tab.icon
                     className={cn(
-                      "h-[22px] w-[22px] shrink-0 transition-all duration-200",
+                      "relative h-[22px] w-[22px] shrink-0",
+                      "transition-all duration-200",
                       isActive ? "scale-110" : "scale-100",
                     )}
                     strokeWidth={isActive ? 2.3 : 1.7}
@@ -93,13 +126,14 @@ export function BottomNav() {
                   />
                   <span
                     className={cn(
-                      "text-[10px] font-body leading-none tracking-wide transition-all duration-200 truncate max-w-full px-1",
+                      "relative w-full text-center leading-none tracking-wide truncate",
+                      "text-[10px]",
                       isActive
                         ? "font-semibold opacity-100"
-                        : "font-medium opacity-70",
+                        : "font-medium opacity-60",
                     )}
                   >
-                    {label}
+                    {tab.shortLabel}
                   </span>
                 </div>
               </Link>
@@ -114,16 +148,30 @@ export function BottomNav() {
             aria-expanded={moreOpen}
             className={cn(
               "relative flex flex-1 flex-col items-center justify-center",
-              "min-h-[52px] gap-0.5 rounded-xl mx-0.5",
-              "transition-all duration-200 touch-manipulation active:scale-[0.94]",
+              "min-h-[52px] gap-[3px] rounded-xl mx-0.5 px-1",
+              "transition-all duration-200 ease-out",
+              "touch-manipulation active:scale-[0.93]",
+              "focus-visible:outline-none",
               moreOpen
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/40",
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
+            {moreOpen && (
+              <span
+                className="absolute inset-0 rounded-xl bg-primary/10 dark:bg-primary/15"
+                aria-hidden
+              />
+            )}
+            {moreOpen && (
+              <span
+                className="absolute -top-0.5 left-1/2 -translate-x-1/2 h-[3px] w-8 rounded-b-full bg-primary"
+                aria-hidden
+              />
+            )}
             <MoreHorizontal
               className={cn(
-                "h-[22px] w-[22px] shrink-0 transition-all duration-200",
+                "relative h-[22px] w-[22px] shrink-0 transition-all duration-200",
                 moreOpen ? "scale-110" : "scale-100",
               )}
               strokeWidth={moreOpen ? 2.3 : 1.7}
@@ -131,15 +179,16 @@ export function BottomNav() {
             />
             <span
               className={cn(
-                "text-[10px] font-body leading-none tracking-wide transition-all duration-200",
+                "relative text-[10px] leading-none tracking-wide",
                 moreOpen
                   ? "font-semibold opacity-100"
-                  : "font-medium opacity-70",
+                  : "font-medium opacity-60",
               )}
             >
               {t("nav.more") || "More"}
             </span>
           </button>
+
         </div>
       </nav>
       <MoreBottomSheet open={moreOpen} onOpenChange={setMoreOpen} />
