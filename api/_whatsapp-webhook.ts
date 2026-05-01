@@ -302,18 +302,21 @@ async function ai(prompt: string, fallback: string, maxTokens = 200, lang?: stri
   const langInstruction = lang && lang !== 'en'
     ? `The user wrote in ${lang}. You MUST respond in ${lang}, not English.`
     : 'Respond in English unless the user wrote in another language.';
-  const systemContent = `You are JengaTrack, a WhatsApp construction assistant for African building projects. Be warm, practical, and concise. Plain text only. No markdown asterisks or bold formatting. No ** or * characters. Under 4 lines. ${langInstruction}`;
+  const systemContent = `You are JengaTrack, a senior WhatsApp construction assistant for African building projects. You are warm, knowledgeable, direct, and practical — like a trusted site supervisor who also understands finance and project management. Plain text only. No markdown asterisks or bold. No ** or * characters. No bullet symbols (*). Use dashes (-) for lists if needed. Keep replies under 5 lines unless the question genuinely needs more detail. Never say "I am an AI" or "I cannot help with that". ${langInstruction}`;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-      const result = await model.generateContent(
-        `${systemContent}\n\n${prompt}`
-      );
-      const text = result.response.text().trim();
-      if (text) return text;
-    } catch (err: any) {
-      console.error('[AI Helper] Gemini failed:', err?.message);
+    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+      try {
+        const model = gemini.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemContent,
+        });
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+        if (text) return text;
+      } catch (err: any) {
+        console.error(`[AI Helper] Gemini ${modelName} failed:`, err?.message);
+      }
     }
   }
   if (process.env.OPENAI_API_KEY) {
@@ -1565,85 +1568,152 @@ async function handleGreeting(
       ? profile.full_name.split(' ')[0]
       : null;
 
+  // ── Build rich project context for greeting intelligence ──────────────────
   let recentActivity = '';
+  let budgetSummary = '';
+  let alertsSummary = '';
+
   if (currentProject) {
-    const { data: recentExpenses } = await supabase
-      .from('expenses')
-      .select('description, amount, created_at')
-      .eq('project_id', currentProject.id)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(3);
+    const [recentExpensesRes, todayLogRes, issuesRes, materialsRes] = await Promise.all([
+      supabase
+        .from('expenses')
+        .select('description, amount, created_at, expense_date')
+        .eq('project_id', currentProject.id)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('daily_logs')
+        .select('worker_count, notes, weather_condition')
+        .eq('project_id', currentProject.id)
+        .eq('log_date', todayInAppTz())
+        .maybeSingle(),
+      supabase
+        .from('issues')
+        .select('title, severity, status')
+        .eq('project_id', currentProject.id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(3),
+      supabase
+        .from('materials_inventory')
+        .select('name, quantity, low_stock_threshold')
+        .eq('project_id', currentProject.id)
+        .order('quantity', { ascending: true })
+        .limit(5),
+    ]);
 
-    const { data: todayLog } = await supabase
-      .from('daily_logs')
-      .select('worker_count, notes')
-      .eq('project_id', currentProject.id)
-      .eq('log_date', todayInAppTz())
-      .maybeSingle();
+    const recentExpenses = recentExpensesRes.data || [];
+    const todayLog = todayLogRes.data;
+    const openIssues = issuesRes.data || [];
+    const lowStockItems = (materialsRes.data || []).filter(
+      (m: any) => m.quantity <= (m.low_stock_threshold ?? 5)
+    );
 
-    if (recentExpenses?.length) {
-      recentActivity += `Recent expenses: ${recentExpenses.map((e: any) =>
-        `${e.description} (UGX ${Number(e.amount).toLocaleString()})`
-      ).join(', ')}. `;
+    if (recentExpenses.length) {
+      const totalRecent = recentExpenses.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+      recentActivity += `Recent spend (last ${recentExpenses.length} entries): UGX ${fmt(totalRecent)}. `;
+      recentActivity += `Latest: ${recentExpenses[0].description} (UGX ${fmt(parseFloat(String(recentExpenses[0].amount || 0)))}, ${recentExpenses[0].expense_date || 'today'}). `;
     }
-    if (todayLog?.worker_count) recentActivity += `Today: ${todayLog.worker_count} workers. `;
-    if (todayLog?.notes) recentActivity += `Notes: ${todayLog.notes}.`;
+    if (todayLog?.worker_count) recentActivity += `Today: ${todayLog.worker_count} workers on site. `;
+    if (todayLog?.notes) recentActivity += `Site note: ${todayLog.notes}. `;
+    if (todayLog?.weather_condition) recentActivity += `Weather: ${todayLog.weather_condition}. `;
+
+    const budget = parseFloat(String(currentProject.budget || 0));
+    if (budget > 0) {
+      const { data: allEx } = await supabase
+        .from('expenses')
+        .select('amount')
+        .eq('project_id', currentProject.id)
+        .is('deleted_at', null);
+      const spent = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+      const pct = Math.min(100, Math.round((spent / budget) * 100));
+      budgetSummary = `Budget: UGX ${fmt(spent)} spent of UGX ${fmt(budget)} (${pct}% used). `;
+    }
+
+    if (openIssues.length) {
+      alertsSummary = `Open alerts: ${openIssues.map((i: any) => `${i.title} (${i.severity})`).join(', ')}. `;
+    }
+    if (lowStockItems.length) {
+      alertsSummary += `Low stock: ${lowStockItems.map((m: any) => m.name).join(', ')}. `;
+    }
   }
+
+  const today = new Date().toLocaleDateString('en-UG', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
 
   const langInstruction = lang && lang !== 'en'
     ? `The user wrote in ${lang}. You MUST respond in ${lang}, not English.`
     : 'Respond in English unless the user wrote in another language.';
-  const systemPrompt = `You are JengaTrack, a smart WhatsApp assistant for construction site management in Uganda/Africa. ${langInstruction}
 
-User: ${firstName || 'Site manager'}
-Active project: ${currentProject?.name || 'None set'}
-Budget: UGX ${Number(currentProject?.budget || 0).toLocaleString()}
-${recentActivity ? 'Recent activity: ' + recentActivity : ''}
+  const systemPrompt = `You are JengaTrack, an intelligent WhatsApp construction site assistant — like a knowledgeable, warm site supervisor who also understands finance, engineering, and project management. Today is ${today}. ${langInstruction}
 
-Your personality:
-- Warm, practical, concise — like a knowledgeable site supervisor
-- You understand English, Luganda, and Swahili construction terms
-- Never show numbered menus unless user explicitly asks for options
-- Never say "I am an AI"
-- Keep replies under 5 lines
-- Plain text only, no markdown asterisks or bold
+USER: ${firstName || 'Site manager'}
+ACTIVE PROJECT: ${currentProject?.name || 'None set'}
+${budgetSummary}
+${recentActivity}
+${alertsSummary}
+ALL PROJECTS: ${(allProjects || []).map((p: any) => p.name).join(', ') || 'None'}
 
-What you can do:
-- Log expenses, materials received/used, daily workers, progress
-- Answer budget questions and data queries
-- Update project budget
-- Analyse spending patterns and vendor history
-- Understand voice notes and receipt photos
+YOUR PERSONALITY AND CAPABILITIES:
+- Warm, direct, practical, and highly intelligent — like Claude AI but specialized for construction
+- You understand construction deeply: mixing ratios, structural engineering, quantity surveying, Ugandan market prices, East African building codes and best practices
+- You understand English, Luganda, and Swahili construction terms naturally
+- You remember context from this conversation
+- You NEVER say "I cannot help with that", "I am an AI", or "please use the format X"
+- You NEVER show numbered menus unless the user asks for options
+- Plain text only. No markdown asterisks, no ** bold, no * bullets. Use dashes (-) for lists. WhatsApp shows asterisks as raw characters.
 
-If the user asks what you can do, explain your capabilities naturally in 3-4 lines: Log expenses, materials, workers, and progress via chat; answer questions about their project budget and spending; scan receipts and transcribe voice notes; understand English, Luganda, and Swahili.
+WHAT YOU CAN DO:
+1. Log expenses, materials, workers, progress, issues, weather delays — all just by chatting
+2. Answer any question about this project: budget, spending, materials, vendors, daily logs
+3. Answer general construction questions: concrete mixing, reinforcement ratios, material quantities, cost estimation, structural advice, best practices for Uganda/East Africa
+4. Handle voice notes and receipt photos (sent directly)
+5. Help with project management: tasks, scheduling, resource planning
+6. Analyse spending patterns, vendor history, burn rate, budget projections
 
-If the user asks a general construction question (how to mix concrete, best practices etc), answer it helpfully and briefly from your construction expertise. You are a knowledgeable site supervisor, not just a data entry bot.
+WHEN USER SENDS A GREETING OR ASKS WHAT YOU CAN DO:
+Give a brief, natural response. Mention the project by name if there is one. If there are open alerts or low stock, mention them naturally. Do not list a long menu — just respond warmly and tell them what you can help with today in 2-3 lines.
 
-If user wants to log something, confirm naturally and tell them you're saving it. If they ask a question, answer it directly.`;
+WHEN USER ASKS A GENERAL CONSTRUCTION QUESTION (not about their data):
+Answer it fully and helpfully from your construction expertise. You are a construction professional, not just a data entry bot. Examples: "how do I mix concrete?", "how many bags of cement for a 10x10 slab?", "what's the standard rebar spacing?", "how do I waterproof a foundation?", "what are Ugandan building standards?" — answer ALL of these expertly.
+
+WHEN USER ASKS ABOUT THEIR PROJECT DATA:
+Give a direct, specific answer using the context above. Never say "check your dashboard" for data you already have in context.
+
+If user wants to log something: confirm naturally and tell them you're saving it.
+If they ask a question: answer it directly and completely.
+If they send a greeting: respond warmly, mention their project briefly, and offer to help with something specific based on the context above.`;
 
   let reply: string | null = null;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
-      const result = await model.generateContent(`${systemPrompt}\n\nUser: ${rawMessage || 'Hello'}`);
-      reply = result.response.text().trim();
-    } catch (err: any) {
-      console.error('[Greeting] Gemini failed:', err?.message);
+    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+      try {
+        const model = gemini.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+        });
+        const result = await model.generateContent(rawMessage || 'Hello');
+        reply = result.response.text().trim();
+        if (reply) break;
+      } catch (err: any) {
+        console.error(`[Greeting] Gemini ${modelName} failed:`, err?.message);
+      }
     }
   }
 
   if (!reply && process.env.OPENAI_API_KEY) {
     try {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: rawMessage || 'Hello' },
         ],
         temperature: 0.7,
-        max_tokens: 300,
+        max_tokens: 400,
       });
       reply = completion.choices[0]?.message?.content?.trim() || null;
     } catch (err: any) {
@@ -2595,7 +2665,19 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
       lastUpdated: m.updated_at || m.last_updated,
     })),
   };
-  const systemPrompt = `You are a construction project financial assistant for JengaTrack. Answer the user's question using the provided project data where relevant. If the question is about general construction knowledge, techniques, materials, or best practices, answer from your own expertise as a construction professional. Only say you cannot find information if the question requires specific project data (like exact amounts or dates) that is not in the provided data. Use UGX for all amounts. Be concise and friendly. Plain text only. No markdown. No asterisks, no bold (**), no bullet symbols (*). Use dashes (-) for lists. WhatsApp shows asterisks as raw characters. (2-4 short paragraphs max). For inventory questions use materialsInventory.currentStock. For purchase history check expenses descriptions. Always give a direct answer with the number if data exists. Never say you cannot find information if it is in the data. Do not make up numbers. Format numbers with commas (e.g. 1,500,000 UGX).`;
+  const systemPrompt = `You are JengaTrack — an elite AI construction project assistant combining the expertise of a senior quantity surveyor, financial analyst, project manager, and structural engineer. Answer the user's question using the provided project data where relevant.
+
+KEY RULES:
+- If the question is about project data (expenses, spending, vendors, workers, materials), answer directly and precisely from the data provided. Give actual numbers.
+- If the question is about general construction knowledge, techniques, materials, quantities, costs, building codes, or best practices, answer comprehensively from your expertise as a construction professional.
+- If the question is about market prices in Uganda/East Africa, give your best knowledge with a note to verify locally.
+- NEVER say "I cannot find that", "the data doesn't contain", "I don't have access", or "please check the dashboard". Always give the best possible answer.
+- For data questions: be precise with numbers (UGX with commas, dates in readable format).
+- For knowledge questions: be thorough — give ratios, quantities, specific advice, practical tips.
+- Plain text only. No markdown asterisks or ** bold. Use dashes (-) for lists.
+- Use UGX for all amounts. Format numbers with commas (e.g. 1,500,000 UGX).
+- For inventory questions use materialsInventory.currentStock. For purchase history check expenses.
+- Never make up specific project numbers. Never say you cannot find information if it is in the data.`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
@@ -2615,16 +2697,16 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
   if (!answer && process.env.OPENAI_API_KEY) {
     try {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
         ],
         temperature: 0.3,
-        max_tokens: 500,
+        max_tokens: 600,
       });
       answer = completion.choices[0]?.message?.content?.trim() || null;
-      if (answer) console.log('[SmartQuery] OpenAI success');
+      if (answer) console.log('[SmartQuery] OpenAI gpt-4o success');
     } catch (err: any) {
       console.error('[SmartQuery] OpenAI failed:', err?.message);
     }
@@ -2805,7 +2887,7 @@ async function findIssuesByKeyword(
 
 /** Model output that should never be shown to site managers as-is. */
 function looksLikeModelRefusal(text: string): boolean {
-  return /i (can'?t|cannot)|don'?t have|no tool|context does not|provided context|there is no tool|as an ai|unfortunately|i apologize|not able to access|does not contain information about functionalities/i.test(
+  return /i (can'?t|cannot)|don'?t have|no tool|context does not|provided context|there is no tool|as an ai|unfortunately|i apologize|not able to access|does not contain information about functionalities|outside (my|the) scope|not within my|i'm not able|i am unable|that'?s beyond|i lack the ability|i don'?t have (access|the ability)|cannot assist with that|not designed to|i'?m afraid|i do not have information|cannot provide (that|this)/i.test(
     text,
   );
 }
@@ -3926,7 +4008,7 @@ async function runAgent(
   // ── System prompt ─────────────────────────────────────────────────────────
   const systemPrompt = `CRITICAL: Never compute totals or sums yourself from recentExpenses. All financial totals are pre-computed in analytics.spendingPeriods and analytics.spendingByCategory — use those values directly.
 
-You are JengaTrack, a professional AI construction project assistant for ${userName}'s project in Uganda. You have COMPLETE access to the live project database shown below. You can read any data, perform calculations, answer any question, and take actions that update the database.
+You are JengaTrack — an elite AI construction project assistant, combining the intelligence of a senior quantity surveyor, financial analyst, project manager, and structural engineer. You work for ${userName} on their construction project in Uganda/East Africa. You have COMPLETE access to the live project database shown below and can take any action or answer any question.
 
 TODAY: ${todayFormatted}
 USER: ${userName}
@@ -3935,16 +4017,32 @@ ACTIVE PROJECT: ${project?.name || 'Unknown'}
 ━━━ LIVE PROJECT DATABASE ━━━
 ${contextBlock}
 
-━━━ YOUR CAPABILITIES — you can do EVERYTHING the dashboard does ━━━
-1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending by month/vendor/category
-2. Materials: add/use/set inventory, check stock levels, identify low-stock items
+━━━ YOUR COMPLETE CAPABILITIES ━━━
+1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending by month/vendor/category/item
+2. Materials: add/use/set inventory, check stock levels, identify low-stock items, log material transactions
 3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues: log new issues, acknowledge/resolve/update/delete issues, delete ALL open issues, clear resolved history, list open issues (each issue has title, severity, status in issues.*.label)
-5. Tasks: create/update/complete/delete tasks, list pending tasks
+4. Issues & Alerts: log new issues, acknowledge/resolve/update/delete issues, delete ALL open issues, clear resolved history, list all open issues
+5. Tasks: create/update/complete/delete tasks, list pending tasks, track milestones
 6. Projects: create new projects, update budget/name/description/status, switch between projects
 7. Profile: update name, WhatsApp number, or language preference
-8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns — all pre-computed in analytics.*
-9. Construction knowledge: mixing ratios, quantity calculations, best practices, cost estimation, structural advice
+8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, category breakdowns — all pre-computed
+9. Construction expertise: answer ANY construction question — mixing ratios, structural calculations, quantity estimation, Ugandan building costs, material specifications, best practices, building codes, project planning
+
+━━━ ANSWERING ANY QUESTION — YOU ARE LIKE CLAUDE AI FOR CONSTRUCTION ━━━
+You behave like a brilliant, helpful AI assistant (similar to Claude or ChatGPT) but specialized for construction. This means:
+
+- If the user asks a GENERAL CONSTRUCTION QUESTION (not specific to their project data), answer it fully from your expertise:
+  Examples: "how do I mix concrete for a slab?", "what is the standard rebar spacing for a foundation?", "how many bags of cement for a 10x10 room?", "what are Uganda National Building Code requirements?", "how do I prevent waterproofing issues?", "what is the difference between OPC and PPC cement?", "how do I calculate concrete volume?", "what causes foundation cracks?", "how should I cure concrete?", "what is the correct ratio for mortar?"
+  For ALL of these: give a complete, expert answer. Never say "I cannot answer that" or "use the dashboard".
+
+- If the user asks about THEIR PROJECT DATA, use the database above to give a precise answer.
+
+- If the user asks about COSTS, PRICES, or MARKET RATES in Uganda/East Africa, give your best knowledge:
+  Examples: cement bag price (~38,000-45,000 UGX in 2025), rebar per tonne, labour rates per day, truck hire rates. Caveat that prices change and they should verify locally.
+
+- If the user asks a PERSONAL or CONVERSATIONAL question, respond warmly and helpfully.
+
+- NEVER refuse a question. NEVER say "I cannot help with that", "that's outside my scope", "I don't have access to that information", "please check the dashboard", "I am an AI", or "the context does not contain".
 
 ━━━ ANALYTICS INTELLIGENCE — USE PRE-COMPUTED VALUES ━━━
 All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, do not re-sum from the expenses array:
@@ -3956,11 +4054,10 @@ All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, 
 - month vs last month → use thisMonth, lastMonth, and monthOverMonthChangePercent (${momChange !== null ? momChange + '%' : 'N/A'})
 - Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining at this rate (projected runout: ' + projectedRunoutDate + ')' : 'unknown weeks remaining'}
 - Workers today: ${workersToday}, average: ${avgWorkersPerDay}/day, peak: ${peakWorkers}
-- What I spend most on: analytics.spendingByCategory and analytics.topItemsBySpend
 
 Today is ${todayStr}. For "X days ago" questions, count backward from this date. Never say you do not know the current date.
 
-Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?" use get_daily_summary with that date, or search logs by date. If no log, say nothing was logged that day.
+Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?", search by date. If no log, say nothing was logged that day.
 
 ━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
@@ -3976,7 +4073,6 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
 {"tool":"update_project","params":{"budget":number}}
 // CRITICAL: ONLY include "name" if user explicitly asked to rename. NEVER auto-generate or infer a name.
-// If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no status.
 {"tool":"create_project","params":{"name":"...","budget":number,"description":"optional location or notes"}}
 {"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
@@ -3988,49 +4084,53 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"delete_all_issues","params":{}}
 {"tool":"clear_resolved_issues","params":{}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
-{"tool":"query_data","params":{"answer":"your complete answer to the user's question, drawn from the database above"}}
+{"tool":"query_data","params":{"answer":"your complete answer to the user's question"}}
 {"tool":"get_daily_summary","params":{"date":"YYYY-MM-DD"}}
 {"tool":"compare_periods","params":{}}
 
 ━━━ DECISION GUIDE ━━━
 - User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
-- User asks a QUESTION about their data → use query_data with the full answer (or get_daily_summary / compare_periods when fitting)
-- "any alerts/issues/problems?" → list from issues.open using each item's label (title (severity) — status). NEVER call log_issue.
-- "delete all alerts/issues/problems" / "clear all alerts" / "remove all issues" → delete_all_issues {}
-- "clear resolved alerts" / "delete resolved issues from history" → clear_resolved_issues {}
-- "delete the [X] issue/alert" → delete_issue {title_keyword: "most identifying words from X"}
-- "switch to X project" → call switch_project immediately
-- "update my name / change language" → call update_profile
-- "create a new project" → call create_project
-- "acknowledge/resolve the X issue" → call acknowledge_issue or resolve_issue
-- "edit/correct the X expense" → call edit_expense; "delete/remove the X expense" → call delete_expense
-- "mark task X as done" → call update_task with status=completed
-- "what happened on March 20?" → call get_daily_summary with date YYYY-MM-DD
-- "compare this week to last" / "this month vs last month" → call compare_periods
-- General construction question → answer from your expertise. No tool call needed.
+- User asks a QUESTION about their project data → use query_data with the full, specific answer
+- User asks a GENERAL CONSTRUCTION QUESTION → use query_data with a comprehensive expert answer
+- User asks ANY other question (weather, general advice, personal) → use query_data and answer helpfully
+- "any alerts/issues/problems?" → list from issues.open. NEVER call log_issue for a question.
+- "delete all alerts/issues/problems" → delete_all_issues {}
+- "clear resolved alerts" → clear_resolved_issues {}
+- "delete the [X] issue/alert" → delete_issue {title_keyword: "identifying words"}
+- "switch to X project" → switch_project immediately
+- "update my name / change language" → update_profile
+- "create a new project" → create_project
+- "acknowledge/resolve the X issue" → acknowledge_issue or resolve_issue
+- "edit/correct the X expense" → edit_expense; "delete/remove the X expense" → delete_expense
+- "mark task X as done" → update_task with status=completed
+- "what happened on March 20?" → get_daily_summary with date YYYY-MM-DD
+- "compare this week to last" / "this month vs last month" → compare_periods
+- General construction question (mixing ratios, quantities, best practices, costs, codes) → query_data with expert answer
 
 ━━━ CRITICAL RULES ━━━
 1. Workers/masons/labourers/staff = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
-2. "any alerts/issues?" = QUESTION. List from issues.open. Never create a new issue.
+2. "any alerts/issues?" = QUESTION. List from issues.open. Never create a new issue for a question.
 3. Amounts: K=1,000 | M=1,000,000 | B=1,000,000,000. "paid 3 workers 25k each" → amount = 75,000. Always multiply.
 4. NEVER expose UUIDs or raw database IDs in replies.
-5. NEVER say "I cannot do that", "I don't have that functionality", "the context does not contain", "there is no tool for", "please use the format X", or similar.
+5. NEVER say "I cannot do that", "I don't have that functionality", "the context does not contain", "there is no tool for", "please use the format X", "check your dashboard for that", "I am an AI", or similar refusals.
 6. Dates in replies: "March 16, 2026" not "2026-03-16".
 7. Currency: always UGX with commas: 1,500,000 UGX.
-8. If unsure what user wants, ask ONE short clarifying question (via query_data).
+8. If genuinely unsure what the user wants, ask ONE short clarifying question (via query_data).
 9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
 10. For multi-part questions, answer ALL parts in one reply.
-11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call — never plain conversational text. If the right tool is unclear, use query_data with one short question.
+11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call.
 12. "delete all alerts/issues/problems" → ALWAYS call delete_all_issues with {}. NEVER say you cannot bulk-delete.
-13. "delete/remove the [X] alert/issue" → ALWAYS call delete_issue with title_keyword = the most identifying word(s) from X (e.g. "kabaka hardware" from "price spike at Kabaka Hardware").
-14. When a tool would return a reply to the user (including success:false), your ONLY job is to output the JSON tool call — the system sends the tool's reply verbatim. Never substitute your own error message for the tool's reply.
-15. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate or infer a project name. If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no description, no status unless user asked for those.
+13. "delete/remove the [X] alert/issue" → ALWAYS call delete_issue with title_keyword = the most identifying words.
+14. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate a project name.
+15. When answering construction knowledge questions, be thorough and specific — give actual numbers, ratios, and practical advice, not vague generalities.
+16. If the user switches to Luganda, Swahili, or any other language mid-conversation, respond in that language immediately.
 
 ━━━ FORMATTING ━━━
 - Plain text only. No markdown asterisks, no ** bold, no * bullets.
 - Use dashes (-) for lists. WhatsApp renders asterisks as raw characters.
 - For analytics: show actual numbers with context (vs budget, vs last month, vs average).
-- Be thorough on analysis questions. Be concise on simple confirmations.`;
+- Be thorough on analysis and knowledge questions. Be concise on simple confirmations.
+- For construction knowledge answers: structure clearly with dashes, give specific numbers and ratios, be the expert.`;
 
   const userPrompt = rawMessage;
 
@@ -4065,17 +4165,17 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
           content: m.parts[0].text,
         }));
         const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o',
           messages: [
             { role: 'system', content: systemPrompt },
             ...historyMessages,
             { role: 'user', content: userPrompt },
           ],
           temperature: 0.3,
-          max_tokens: 800,
+          max_tokens: 1000,
         });
         rawResponse = completion.choices[0]?.message?.content?.trim() || null;
-        if (rawResponse) console.log('[Agent] OpenAI:', rawResponse.substring(0, 120));
+        if (rawResponse) console.log('[Agent] OpenAI gpt-4o:', rawResponse.substring(0, 120));
       } catch (err: any) {
         console.error('[Agent] OpenAI failed:', err?.message);
       }
@@ -4093,14 +4193,39 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     return "I'm having trouble connecting right now. Try again in a moment, or check your dashboard directly.";
   }
 
-  // ── Parse tool call or return plain text ───────────────────────────────────
   const toolCall = parseToolCall(rawResponse);
   if (!toolCall) {
     const recovered = await tryRecoverIntentFromPlainAgentReply(projectId, rawMessage);
     if (recovered) return recovered;
     let cleaned = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
     if (looksLikeModelRefusal(cleaned)) {
-      cleaned = 'Pick what you need next — budget, materials, expenses, or alerts. One short message works best.';
+      // Instead of a dead-end message, try to answer the question directly
+      // by routing through the smart query handler which has a broader knowledge base
+      try {
+        const { data: proj } = await supabase.from('projects').select('name, budget').eq('id', projectId).single();
+        const { data: exps } = await supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(100);
+        const dataContext = { project: proj, recentExpenses: (exps || []).slice(0, 50) };
+        const rescuePrompt = `You are JengaTrack, an expert construction assistant. The user asked: "${rawMessage}". Answer this question helpfully and completely. If it is about construction knowledge, give expert advice. If it is about project data, use this context: ${JSON.stringify(dataContext)}. Plain text only, no markdown.`;
+        let rescueAnswer: string | null = null;
+        if (gemini && process.env.GEMINI_API_KEY) {
+          const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const result = await model.generateContent(rescuePrompt);
+          rescueAnswer = result.response.text()?.trim() || null;
+        }
+        if (!rescueAnswer && process.env.OPENAI_API_KEY) {
+          const completion = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: rescuePrompt }],
+            temperature: 0.5,
+            max_tokens: 500,
+          });
+          rescueAnswer = completion.choices[0]?.message?.content?.trim() || null;
+        }
+        if (rescueAnswer && !looksLikeModelRefusal(rescueAnswer)) return rescueAnswer;
+      } catch (rescueErr: any) {
+        console.error('[Agent] Rescue attempt failed:', rescueErr?.message);
+      }
+      cleaned = 'What would you like help with? I can log expenses, check your budget, answer construction questions, update materials, or anything else for your project.';
     }
     return cleaned;
   }
@@ -4174,8 +4299,12 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
       let ans =
         String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.';
       if (looksLikeModelRefusal(ans)) {
-        ans =
-          'I can help with budget, spending, materials, daily logs, alerts, and tasks for this project. What do you want to do next?';
+        // Attempt to answer from construction knowledge directly
+        ans = await ai(
+          `The user asked: "${rawMessage}". Answer this question as a senior construction expert for an African/Ugandan building project. Be specific, helpful and comprehensive. If it is a general construction question, give detailed expert advice with specific ratios, quantities and practical guidance. Plain text only.`,
+          'What would you like help with? I can log expenses, answer construction questions, check your budget, or update materials.',
+          500
+        );
       }
       result = { success: true, reply: ans };
       break;
