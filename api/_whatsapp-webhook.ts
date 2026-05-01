@@ -972,6 +972,22 @@ async function translateToEnglish(text: string): Promise<string> {
 function preClassifyIntent(message: string): IntentResult | null {
   const m = message.toLowerCase().trim();
 
+  // DELETE ALL / DELETE SPECIFIC issues → route to AI agent (bulk + fuzzy delete live there)
+  if (
+    /delete|remove|clear|dismiss/i.test(m) &&
+    /all|every|each/i.test(m) &&
+    /alert|issue|problem|risk/i.test(m)
+  ) {
+    return { intent: 'SMART_QUERY', extracted: {} };
+  }
+  if (
+    /delete|remove|dismiss/i.test(m) &&
+    /alert|issue|problem/i.test(m) &&
+    !/log|report|create|add/i.test(m)
+  ) {
+    return { intent: 'SMART_QUERY', extracted: {} };
+  }
+
   // BUDGET_UPDATE — must be at top so "add 10M to budget" is caught before other budget patterns
   if (/edit.*budget|update.*budget|add.*budget|increase.*budget|change.*budget|set.*budget|new.*budget/i.test(m)) {
     const amount = parseAmount(message);
@@ -2693,7 +2709,10 @@ function parseToolCall(text: string): { tool: string; params: any } | null {
   const stripped = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
   try {
     const parsed = JSON.parse(stripped);
-    if (parsed.tool && parsed.params !== undefined) return parsed;
+    if (parsed.tool) {
+      if (parsed.params === undefined) parsed.params = {};
+      return parsed;
+    }
   } catch { /* continue to brace-matching */ }
   const start = stripped.indexOf('{"tool"');
   if (start === -1) return null;
@@ -2706,8 +2725,112 @@ function parseToolCall(text: string): { tool: string; params: any } | null {
   if (end === -1) return null;
   try {
     const parsed = JSON.parse(stripped.substring(start, end));
-    if (parsed.tool && parsed.params !== undefined) return parsed;
+    if (parsed.tool) {
+      if (parsed.params === undefined) parsed.params = {};
+      return parsed;
+    }
   } catch { /* not valid */ }
+  return null;
+}
+
+const NO_ACTIVE_PROJECT_REPLY =
+  "No active project found. Say 'switch to [project name]' to select one.";
+
+/** Guard for tools that require an active project. */
+function requireActiveProject(projectId: string | null | undefined): AgentToolResult | null {
+  if (!projectId || String(projectId).trim() === '') {
+    return { success: false, reply: NO_ACTIVE_PROJECT_REPLY };
+  }
+  return null;
+}
+
+type IssueRowLite = {
+  id: string;
+  title: string;
+  description: string | null;
+  severity: string | null;
+  status: string | null;
+};
+
+/**
+ * Multi-step fuzzy match: title → description → significant words → none.
+ * When statusScope is set, only issues with those statuses are considered.
+ */
+async function findIssuesByKeyword(
+  projectId: string,
+  rawKeyword: string,
+  statusScope: string[] | null
+): Promise<IssueRowLite[]> {
+  const keyword = String(rawKeyword || '')
+    .toLowerCase()
+    .trim();
+  if (!keyword) return [];
+
+  const base = () => {
+    let q = supabase
+      .from('issues')
+      .select('id, title, description, severity, status')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false });
+    if (statusScope && statusScope.length > 0) {
+      q = q.in('status', statusScope);
+    }
+    return q;
+  };
+
+  let { data: issues } = await base().ilike('title', `%${keyword}%`);
+
+  if (!issues || issues.length === 0) {
+    const res = await base().ilike('description', `%${keyword}%`);
+    issues = res.data;
+  }
+
+  if (!issues || issues.length === 0) {
+    const words = keyword.split(/\s+/).filter((w) => w.length > 3);
+    for (const word of words) {
+      const safe = word.replace(/[^a-z0-9]/gi, '');
+      if (safe.length < 3) continue;
+      const res = await base().or(
+        `title.ilike.%${safe}%,description.ilike.%${safe}%`
+      );
+      if (res.data && res.data.length > 0) {
+        issues = res.data;
+        break;
+      }
+    }
+  }
+
+  return (issues || []) as IssueRowLite[];
+}
+
+/** Model output that should never be shown to site managers as-is. */
+function looksLikeModelRefusal(text: string): boolean {
+  return /i (can'?t|cannot)|don'?t have|no tool|context does not|provided context|there is no tool|as an ai|unfortunately|i apologize|not able to access|does not contain information about functionalities/i.test(
+    text,
+  );
+}
+
+/** When the model returns plain text, still execute obvious issue intents. */
+async function tryRecoverIntentFromPlainAgentReply(
+  projectId: string,
+  rawMessage: string
+): Promise<string | null> {
+  const m = rawMessage.toLowerCase().trim();
+  if (
+    /delete|remove|clear|dismiss/.test(m) &&
+    /all|every|each/.test(m) &&
+    /alert|issue|problem|risk/.test(m)
+  ) {
+    const r = await toolDeleteAllIssues(projectId);
+    return r.reply;
+  }
+  if (
+    (/clear|delete|remove/.test(m) && /resolved/.test(m) && /alert|issue|problem/.test(m)) ||
+    (/clear\s+resolved/.test(m) && /alert|issue/.test(m))
+  ) {
+    const r = await toolClearResolvedIssues(projectId);
+    return r.reply;
+  }
   return null;
 }
 
@@ -2762,7 +2885,10 @@ async function toolCreateProject(userId: string, params: any): Promise<AgentTool
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).select('id, name').single();
-  if (error || !newProject) return { success: false, reply: `Failed to create the project. ${error?.message || 'Please try again.'}` };
+  if (error || !newProject) {
+    console.error('[toolCreateProject] error:', { error, params });
+    return { success: false, reply: `Failed to create the project. ${error?.message || 'Please try again.'}` };
+  }
   await supabase.from('profiles').update({
     active_project_id: newProject.id,
     active_project_set_at: new Date().toISOString(),
@@ -2777,24 +2903,58 @@ async function toolCreateProject(userId: string, params: any): Promise<AgentTool
 
 // ─── Tool: acknowledge_issue ──────────────────────────────────────────────────
 async function toolAcknowledgeIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword } = params;
-  if (!title_keyword) return { success: false, reply: 'Please specify which issue to acknowledge (part of its title).' };
-  const { data: issues } = await supabase.from('issues').select('id, title').eq('project_id', projectId)
-    .ilike('title', `%${title_keyword}%`).eq('status', 'open').limit(1);
-  if (!issues || issues.length === 0) {
-    return { success: false, reply: `No open issue found matching "${title_keyword}". It may already be acknowledged or resolved.` };
+  if (!title_keyword) {
+    return { success: false, reply: 'Which alert should I acknowledge? Say part of its title.' };
   }
-  const issue = issues[0];
-  await supabase.from('issues').update({
-    status: 'acknowledged',
-    acknowledged_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq('id', issue.id);
-  return { success: true, reply: `✅ Issue acknowledged: "${issue.title}". It will show as acknowledged on the Issues & Risks page.`, data: { title: issue.title } };
+  try {
+    const matches = await findIssuesByKeyword(projectId, title_keyword, ['open']);
+    if (!matches.length) {
+      const { data: openList } = await supabase
+        .from('issues')
+        .select('title, severity, status')
+        .eq('project_id', projectId)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false });
+      if (!openList?.length) {
+        return { success: true, reply: '✅ No open alerts to acknowledge.' };
+      }
+      const list = openList.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
+      return {
+        success: false,
+        reply: `No alert matched "${title_keyword}". Open alerts:\n${list}\n\nWhich one should I acknowledge?`,
+      };
+    }
+    const issue = matches[0];
+    const { error } = await supabase
+      .from('issues')
+      .update({
+        status: 'acknowledged',
+        acknowledged_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', issue.id);
+    if (error) {
+      console.error('[toolAcknowledgeIssue] error:', { error, params });
+      return { success: false, reply: 'Could not update that alert. Try again.' };
+    }
+    return {
+      success: true,
+      reply: `✅ Noted — "${issue.title}" is acknowledged.`,
+      data: { title: issue.title },
+    };
+  } catch (e: any) {
+    console.error('[toolAcknowledgeIssue] error:', { error: e?.message, params });
+    return { success: false, reply: 'Could not update that alert. Try again.' };
+  }
 }
 
 // ─── Tool: edit_expense ───────────────────────────────────────────────────────
 async function toolEditExpense(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { description_keyword, new_amount, new_description, date } = params;
   if (!description_keyword) {
     return { success: false, reply: 'Please say which expense to edit (part of the description), e.g. "edit the cement expense".' };
@@ -2818,7 +2978,10 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
     return { success: false, reply: 'Please specify the new amount, description, or date for this expense.' };
   }
   const { error } = await supabase.from('expenses').update(updates).eq('id', expense.id);
-  if (error) return { success: false, reply: 'Failed to update that expense. Please try again.' };
+  if (error) {
+    console.error('[toolEditExpense] error:', { error, params });
+    return { success: false, reply: 'Failed to update that expense. Please try again.' };
+  }
   const oldAmt = parseFloat(String(expense.amount || 0));
   const newAmt = updates.amount ? parseFloat(updates.amount) : oldAmt;
   const parts: string[] = [];
@@ -2830,6 +2993,8 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
 
 // ─── Tool: delete_expense ─────────────────────────────────────────────────────
 async function toolDeleteExpense(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { description_keyword } = params;
   if (!description_keyword) {
     return { success: false, reply: 'Please specify which expense to delete (part of the description), e.g. "delete the cement expense".' };
@@ -2852,19 +3017,24 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', expense.id)
     .is('deleted_at', null);
-  if (error) return { success: false, reply: 'Failed to delete that expense. Please try again.' };
+  if (error) {
+    console.error('[toolDeleteExpense] error:', { error, params });
+    return { success: false, reply: 'Failed to delete that expense. Please try again.' };
+  }
   // Look up the project currency so we don't reply "UGX" to a KES/USD project.
   const { data: projRow } = await supabase
     .from('projects').select('currency').eq('id', projectId).maybeSingle();
   const currency = String((projRow as any)?.currency || 'UGX').toUpperCase();
   return {
     success: true,
-    reply: `✅ Deleted! Expense "${expense.description}" — ${fmtMoney(amt, currency)} has been removed. Your budget and dashboard have been updated.`,
+    reply: `🗑️ Removed "${expense.description}" (${fmtMoney(amt, currency)}). Budget updated.`,
     data: { deleted: expense.description, amount: amt },
   };
 }
 
 async function toolUpdateProject(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { budget, name, description, status } = params;
   const updateData: any = { updated_at: new Date().toISOString() };
   if (budget != null && parseFloat(String(budget)) > 0) updateData.budget = parseFloat(String(budget));
@@ -2888,7 +3058,10 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   }
   if (Object.keys(updateData).length === 1) return { success: false, reply: 'Please specify what to update — budget, name, description, or status.' };
   const { error } = await supabase.from('projects').update(updateData).eq('id', projectId);
-  if (error) return { success: false, reply: 'Failed to update project. Please try again.' };
+  if (error) {
+    console.error('[toolUpdateProject] error:', { error, params });
+    return { success: false, reply: 'Failed to update project. Please try again.' };
+  }
   const parts: string[] = [];
   if (updateData.budget) parts.push(`budget updated to UGX ${fmt(updateData.budget)}`);
   if (updateData.name) parts.push(`name updated to "${updateData.name}"`);
@@ -2898,18 +3071,54 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
 }
 
 async function toolResolveIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword, resolution_note } = params;
-  if (!title_keyword) return { success: false, reply: 'Please specify which issue to resolve (part of its title).' };
-  const { data: issues } = await supabase
-    .from('issues').select('id, title').eq('project_id', projectId)
-    .ilike('title', `%${title_keyword}%`).in('status', ['open', 'acknowledged']).limit(1);
-  if (!issues || issues.length === 0) return { success: false, reply: `No open issue found matching "${title_keyword}". Check the Issues page for the exact title.` };
-  const issue = issues[0];
-  await supabase.from('issues').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', issue.id);
-  return { success: true, reply: `✅ Issue resolved: "${issue.title}".${resolution_note ? ' Note: ' + resolution_note : ''} View on Issues & Risks page.`, data: { title: issue.title } };
+  if (!title_keyword) {
+    return { success: false, reply: 'Which alert should I resolve? Say part of its title.' };
+  }
+  try {
+    const matches = await findIssuesByKeyword(projectId, title_keyword, ['open', 'acknowledged']);
+    if (!matches.length) {
+      const { data: cand } = await supabase
+        .from('issues')
+        .select('title, severity, status')
+        .eq('project_id', projectId)
+        .in('status', ['open', 'acknowledged'])
+        .order('created_at', { ascending: false });
+      if (!cand?.length) {
+        return { success: true, reply: '✅ No open alerts left to resolve.' };
+      }
+      const list = cand.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
+      return {
+        success: false,
+        reply: `No alert matched "${title_keyword}". Current alerts:\n${list}\n\nWhich one is resolved?`,
+      };
+    }
+    const issue = matches[0];
+    const { error } = await supabase
+      .from('issues')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', issue.id);
+    if (error) {
+      console.error('[toolResolveIssue] error:', { error, params });
+      return { success: false, reply: 'Could not mark that alert resolved. Try again.' };
+    }
+    const note = resolution_note ? ` ${resolution_note}` : '';
+    return {
+      success: true,
+      reply: `✅ Resolved: "${issue.title}".${note}`,
+      data: { title: issue.title },
+    };
+  } catch (e: any) {
+    console.error('[toolResolveIssue] error:', { error: e?.message, params });
+    return { success: false, reply: 'Could not mark that alert resolved. Try again.' };
+  }
 }
 
 async function toolLogWeatherDelay(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { reason, date } = params;
   if (!reason) return { success: false, reply: 'Please describe the weather delay.' };
   const logDate = date || todayInAppTz();
@@ -2925,6 +3134,8 @@ async function toolLogWeatherDelay(projectId: string, params: any): Promise<Agen
 }
 
 async function toolCreateTask(_actingUserId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title, status } = params;
   if (!title) return { success: false, reply: 'Please provide a task title.' };
   const taskOwnerId = await projectOwnerProfileId(projectId);
@@ -2946,6 +3157,8 @@ async function toolCreateTask(_actingUserId: string, projectId: string, params: 
 }
 
 async function toolUpdateTask(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword, status, new_title } = params;
   if (!title_keyword) return { success: false, reply: 'Please specify which task to update.' };
   const { data: task } = await supabase
@@ -2975,6 +3188,8 @@ async function toolUpdateTask(projectId: string, params: any): Promise<AgentTool
 }
 
 async function toolDeleteTask(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword } = params;
   if (!title_keyword) return { success: false, reply: 'Please specify which task to delete.' };
   const { data: task } = await supabase
@@ -2996,52 +3211,180 @@ async function toolDeleteTask(projectId: string, params: any): Promise<AgentTool
 }
 
 async function toolUpdateIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword, severity, description } = params;
-  if (!title_keyword) return { success: false, reply: 'Please specify which issue to update.' };
-  const { data: issue } = await supabase
-    .from('issues')
-    .select('id, title, severity, description')
-    .eq('project_id', projectId)
-    .ilike('title', `%${title_keyword}%`)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
-  const updates: any = { updated_at: new Date().toISOString() };
-  if (severity) {
-    const s = String(severity).toLowerCase();
-    if (!['low', 'medium', 'high', 'critical'].includes(s)) {
-      return { success: false, reply: 'Severity must be low, medium, high, or critical.' };
+  if (!title_keyword) return { success: false, reply: 'Which alert should I update? Say part of its title.' };
+  try {
+    const matches = await findIssuesByKeyword(projectId, title_keyword, null);
+    if (!matches.length) {
+      const { data: allIssues } = await supabase
+        .from('issues')
+        .select('title, severity, status')
+        .eq('project_id', projectId)
+        .not('status', 'eq', 'resolved')
+        .order('created_at', { ascending: false });
+      if (!allIssues?.length) {
+        return { success: true, reply: '✅ No open alerts to update.' };
+      }
+      const list = allIssues.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
+      return {
+        success: false,
+        reply: `No alert matched "${title_keyword}". Open alerts:\n${list}\n\nWhich one should I change?`,
+      };
     }
-    updates.severity = s;
+    const issue = matches[0];
+    const updates: any = { updated_at: new Date().toISOString() };
+    if (severity) {
+      const s = String(severity).toLowerCase();
+      if (!['low', 'medium', 'high', 'critical'].includes(s)) {
+        return { success: false, reply: 'Severity must be low, medium, high, or critical.' };
+      }
+      updates.severity = s;
+    }
+    if (description) updates.description = String(description).trim();
+    if (Object.keys(updates).length === 1) {
+      return { success: false, reply: 'Tell me the new severity or description for this alert.' };
+    }
+    const { error } = await supabase.from('issues').update(updates).eq('id', issue.id);
+    if (error) {
+      console.error('[toolUpdateIssue] error:', { error, params });
+      return { success: false, reply: 'Could not update that alert. Try again.' };
+    }
+    const parts: string[] = [];
+    if (updates.severity) parts.push(`severity → ${updates.severity}`);
+    if (updates.description) parts.push('description updated');
+    return { success: true, reply: `✅ Updated "${issue.title}": ${parts.join(', ')}.`, data: { title: issue.title } };
+  } catch (e: any) {
+    console.error('[toolUpdateIssue] error:', { error: e?.message, params });
+    return { success: false, reply: 'Could not update that alert. Try again.' };
   }
-  if (description) updates.description = String(description).trim();
-  const { error } = await supabase.from('issues').update(updates).eq('id', issue.id);
-  if (error) return { success: false, reply: 'Failed to update the issue. Please try again.' };
-  const parts: string[] = [];
-  if (updates.severity) parts.push(`severity → *${updates.severity}*`);
-  if (updates.description) parts.push('description updated');
-  return { success: true, reply: `✅ Issue "${issue.title}" updated: ${parts.join(', ')}.`, data: { title: issue.title } };
 }
 
 async function toolDeleteIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title_keyword } = params;
-  if (!title_keyword) return { success: false, reply: 'Please specify which issue to delete.' };
-  const { data: issue } = await supabase
+  if (!title_keyword) {
+    return { success: false, reply: 'Which alert should I delete? Say part of its title.' };
+  }
+  try {
+    const matches = await findIssuesByKeyword(projectId, title_keyword, null);
+    if (!matches.length) {
+      const { data: allIssues } = await supabase
+        .from('issues')
+        .select('title, severity, status')
+        .eq('project_id', projectId)
+        .not('status', 'eq', 'resolved')
+        .order('created_at', { ascending: false });
+      if (!allIssues?.length) {
+        return { success: true, reply: '✅ No open alerts found — your list is already clear.' };
+      }
+      const list = allIssues.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
+      return {
+        success: false,
+        reply: `I couldn't find an alert matching "${title_keyword}". Your open alerts:\n${list}\n\nWhich one should I remove?`,
+      };
+    }
+    const issue = matches[0];
+    const { error } = await supabase.from('issues').delete().eq('id', issue.id);
+    if (error) {
+      console.error('[toolDeleteIssue] error:', { error, params });
+      return { success: false, reply: 'Could not delete that alert. Try again.' };
+    }
+    return {
+      success: true,
+      reply: `🗑️ Removed "${issue.title}" from Issues & Risks.`,
+      data: { title: issue.title },
+    };
+  } catch (e: any) {
+    console.error('[toolDeleteIssue] error:', { error: e?.message, params });
+    return { success: false, reply: 'Could not delete that alert. Try again.' };
+  }
+}
+
+async function toolDeleteAllIssues(projectId: string): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
+  const { data: issues, error: fetchError } = await supabase
+    .from('issues')
+    .select('id, title, severity, status')
+    .eq('project_id', projectId)
+    .not('status', 'eq', 'resolved');
+
+  if (fetchError) {
+    console.error('[toolDeleteAllIssues] fetch error:', fetchError);
+    return { success: false, reply: 'Could not load alerts. Try again.' };
+  }
+
+  if (!issues || issues.length === 0) {
+    return {
+      success: true,
+      reply: '✅ No open alerts to delete — your issues list is already clear.',
+    };
+  }
+
+  const count = issues.length;
+  const titles = issues.map((i) => `• ${i.title}`).join('\n');
+
+  const { error: deleteError } = await supabase
+    .from('issues')
+    .delete()
+    .eq('project_id', projectId)
+    .not('status', 'eq', 'resolved');
+
+  if (deleteError) {
+    console.error('[toolDeleteAllIssues] delete error:', deleteError);
+    return { success: false, reply: 'Could not delete those alerts. Try again.' };
+  }
+
+  return {
+    success: true,
+    reply: `🗑️ Cleared ${count} alert${count > 1 ? 's' : ''}:\n${titles}\n\nIssues & Risks is clean.`,
+    data: { deletedCount: count, deletedTitles: issues.map((i) => i.title) },
+  };
+}
+
+async function toolClearResolvedIssues(projectId: string): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
+  const { data: issues, error: fetchError } = await supabase
     .from('issues')
     .select('id, title')
     .eq('project_id', projectId)
-    .ilike('title', `%${title_keyword}%`)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
-  const { error } = await supabase.from('issues').delete().eq('id', issue.id);
-  if (error) return { success: false, reply: 'Failed to delete the issue. Please try again.' };
-  return { success: true, reply: `🗑️ Issue "${issue.title}" removed from the project.`, data: { title: issue.title } };
+    .eq('status', 'resolved');
+
+  if (fetchError) {
+    console.error('[toolClearResolvedIssues] fetch error:', fetchError);
+    return { success: false, reply: 'Could not load resolved alerts. Try again.' };
+  }
+
+  if (!issues || issues.length === 0) {
+    return { success: true, reply: '✅ No resolved alerts in history to clear.' };
+  }
+
+  const n = issues.length;
+  const { error: deleteError } = await supabase
+    .from('issues')
+    .delete()
+    .eq('project_id', projectId)
+    .eq('status', 'resolved');
+
+  if (deleteError) {
+    console.error('[toolClearResolvedIssues] delete error:', deleteError);
+    return { success: false, reply: 'Could not clear resolved alerts. Try again.' };
+  }
+
+  return {
+    success: true,
+    reply: `🗑️ Cleared ${n} resolved alert${n > 1 ? 's' : ''} from history.`,
+    data: { deletedCount: n },
+  };
 }
 
 async function toolLogExpense(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { description, amount, items, date, vendor } = params;
   const expenseDate = date || todayInAppTz();
 
@@ -3051,11 +3394,15 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
       const desc = item.item
         ? `${item.quantity || 1} ${item.unit || 'units'} of ${item.item}`
         : description || 'Expense';
-      await supabase.from('expenses').insert({
+      const { error: rowErr } = await supabase.from('expenses').insert({
         user_id: userId, project_id: projectId, description: desc,
         amount: String(amt), quantity_logged: item.quantity ? String(item.quantity) : null,
         currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
       });
+      if (rowErr) {
+        console.error('[toolLogExpense] insert error:', { error: rowErr, params });
+        return { success: false, reply: 'Could not save that expense. Try again.' };
+      }
       const itemName = normalizeMaterialName(item.item || '');
       const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
       if (isMat && item.quantity > 0 && itemName.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
@@ -3082,7 +3429,10 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
     description: description || `Expense: ${fmt(amt)} UGX`,
     amount: String(amt), currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
   });
-  if (error) return { success: false, reply: 'Failed to save that expense. Please try again.' };
+  if (error) {
+    console.error('[toolLogExpense] insert error:', { error, params });
+    return { success: false, reply: 'Could not save that expense. Try again.' };
+  }
 
   if (vendor) await upsertVendor(projectId, vendor, amt);
 
@@ -3114,6 +3464,8 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
 }
 
 async function toolLogLabor(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { worker_count, amount, description, date } = params;
   const wc = parseInt(String(worker_count || 0), 10) || 0;
   const amt = parseFloat(String(amount || 0));
@@ -3136,6 +3488,8 @@ async function toolLogLabor(userId: string, projectId: string, params: any): Pro
 }
 
 async function toolUpdateInventory(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { material_name, action, quantity, unit } = params;
   if (!material_name) return { success: false, reply: 'Please specify the material name.' };
   if (!quantity || parseFloat(String(quantity)) <= 0) return { success: false, reply: 'Please specify the quantity.' };
@@ -3190,6 +3544,8 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
 }
 
 async function toolLogIssue(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { title, description, severity } = params;
   if (!title) return { success: false, reply: 'Please describe the issue so I can log it.' };
   const sev = ['low', 'medium', 'high', 'critical'].includes(String(severity || '').toLowerCase()) ? String(severity).toLowerCase() : 'medium';
@@ -3197,11 +3553,16 @@ async function toolLogIssue(projectId: string, params: any): Promise<AgentToolRe
     project_id: projectId, title: String(title).substring(0, 120),
     description: description || title, severity: sev, status: 'open', type: 'general',
   });
-  if (error) return { success: false, reply: 'Failed to log that issue. Please try again or report from the dashboard.' };
+  if (error) {
+    console.error('[toolLogIssue] error:', { error, params });
+    return { success: false, reply: 'Could not log that alert. Try again or use the dashboard.' };
+  }
   return { success: true, reply: `✅ Issue logged: "${title}" (${sev} severity). View it on the Issues & Risks page.`, data: { title, severity: sev } };
 }
 
 async function toolLogProgress(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { description, worker_count, date } = params;
   if (!description) return { success: false, reply: 'Please describe the progress update.' };
   const logTime = nowInAppTzHHmm();
@@ -3241,6 +3602,8 @@ async function toolSwitchProject(userId: string, params: any, allProjects: any[]
 }
 
 async function toolUpdateDailyLog(projectId: string, params: any): Promise<AgentToolResult> {
+  const bad = requireActiveProject(projectId);
+  if (bad) return bad;
   const { date, worker_count, notes, milestones } = params;
   const wc = worker_count != null ? parseInt(String(worker_count), 10) : null;
   const updateData: any = {};
@@ -3359,7 +3722,11 @@ async function runAgent(
     weatherCondition: l.weather_condition,
   }));
   const allIssues = (issuesRes.data || []).map((i: any) => ({
-    title: i.title, severity: i.severity, status: i.status, date: i.created_at?.split('T')[0],
+    title: i.title,
+    severity: i.severity,
+    status: i.status,
+    date: i.created_at?.split('T')[0],
+    label: `${i.title} (${i.severity}) — ${i.status}`,
   }));
   const tasks = (!tasksRes.error && tasksRes.data)
     ? tasksRes.data.map((t: any) => ({ title: t.title, status: t.status, completedAt: t.completed_at }))
@@ -3572,7 +3939,7 @@ ${contextBlock}
 1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending by month/vendor/category
 2. Materials: add/use/set inventory, check stock levels, identify low-stock items
 3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues: log new issues, acknowledge/resolve/close/delete issues, update severity, list open issues
+4. Issues: log new issues, acknowledge/resolve/update/delete issues, delete ALL open issues, clear resolved history, list open issues (each issue has title, severity, status in issues.*.label)
 5. Tasks: create/update/complete/delete tasks, list pending tasks
 6. Projects: create new projects, update budget/name/description/status, switch between projects
 7. Profile: update name, WhatsApp number, or language preference
@@ -3617,7 +3984,9 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"update_task","params":{"title_keyword":"part of task title","status":"pending|in_progress|completed","new_title":"optional new title"}}
 {"tool":"delete_task","params":{"title_keyword":"part of task title"}}
 {"tool":"update_issue","params":{"title_keyword":"part of issue title","severity":"low|medium|high|critical","description":"optional updated description"}}
-{"tool":"delete_issue","params":{"title_keyword":"part of issue title"}}
+{"tool":"delete_issue","params":{"title_keyword":"part of issue title or distinctive words"}}
+{"tool":"delete_all_issues","params":{}}
+{"tool":"clear_resolved_issues","params":{}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
 {"tool":"query_data","params":{"answer":"your complete answer to the user's question, drawn from the database above"}}
 {"tool":"get_daily_summary","params":{"date":"YYYY-MM-DD"}}
@@ -3626,7 +3995,10 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 ━━━ DECISION GUIDE ━━━
 - User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
 - User asks a QUESTION about their data → use query_data with the full answer (or get_daily_summary / compare_periods when fitting)
-- "any alerts/issues/problems?" → list from issues.open as plain text. NEVER call log_issue.
+- "any alerts/issues/problems?" → list from issues.open using each item's label (title (severity) — status). NEVER call log_issue.
+- "delete all alerts/issues/problems" / "clear all alerts" / "remove all issues" → delete_all_issues {}
+- "clear resolved alerts" / "delete resolved issues from history" → clear_resolved_issues {}
+- "delete the [X] issue/alert" → delete_issue {title_keyword: "most identifying words from X"}
 - "switch to X project" → call switch_project immediately
 - "update my name / change language" → call update_profile
 - "create a new project" → call create_project
@@ -3642,13 +4014,17 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 2. "any alerts/issues?" = QUESTION. List from issues.open. Never create a new issue.
 3. Amounts: K=1,000 | M=1,000,000 | B=1,000,000,000. "paid 3 workers 25k each" → amount = 75,000. Always multiply.
 4. NEVER expose UUIDs or raw database IDs in replies.
-5. NEVER say "I cannot do that", "I don't have that functionality", or "please use the format X".
+5. NEVER say "I cannot do that", "I don't have that functionality", "the context does not contain", "there is no tool for", "please use the format X", or similar.
 6. Dates in replies: "March 16, 2026" not "2026-03-16".
 7. Currency: always UGX with commas: 1,500,000 UGX.
-8. If unsure what user wants, ask ONE short clarifying question.
+8. If unsure what user wants, ask ONE short clarifying question (via query_data).
 9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
 10. For multi-part questions, answer ALL parts in one reply.
-11. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate or infer a project name. If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no description, no status unless user asked for those.
+11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call — never plain conversational text. If the right tool is unclear, use query_data with one short question.
+12. "delete all alerts/issues/problems" → ALWAYS call delete_all_issues with {}. NEVER say you cannot bulk-delete.
+13. "delete/remove the [X] alert/issue" → ALWAYS call delete_issue with title_keyword = the most identifying word(s) from X (e.g. "kabaka hardware" from "price spike at Kabaka Hardware").
+14. When a tool would return a reply to the user (including success:false), your ONLY job is to output the JSON tool call — the system sends the tool's reply verbatim. Never substitute your own error message for the tool's reply.
+15. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate or infer a project name. If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no description, no status unless user asked for those.
 
 ━━━ FORMATTING ━━━
 - Plain text only. No markdown asterisks, no ** bold, no * bullets.
@@ -3661,49 +4037,56 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
   // ── Call AI (Gemini primary, OpenAI fallback) ──────────────────────────────
   let rawResponse: string | null = null;
 
-  if (gemini && process.env.GEMINI_API_KEY) {
-    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
-      try {
-        const model = gemini.getGenerativeModel({
-          model: modelName,
-          systemInstruction: systemPrompt,
-        });
-        // Pass conversation history so the model has memory of prior turns
-        const chat = model.startChat({ history: formattedHistory });
-        const result = await chat.sendMessage(userPrompt);
-        rawResponse = result.response.text()?.trim() || null;
-        if (rawResponse) {
-          console.log(`[Agent] Gemini (${modelName}):`, rawResponse.substring(0, 120));
-          break;
+  try {
+    if (gemini && process.env.GEMINI_API_KEY) {
+      for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+        try {
+          const model = gemini.getGenerativeModel({
+            model: modelName,
+            systemInstruction: systemPrompt,
+          });
+          const chat = model.startChat({ history: formattedHistory });
+          const result = await chat.sendMessage(userPrompt);
+          rawResponse = result.response.text()?.trim() || null;
+          if (rawResponse) {
+            console.log(`[Agent] Gemini (${modelName}):`, rawResponse.substring(0, 120));
+            break;
+          }
+        } catch (err: any) {
+          console.error(`[Agent] Gemini ${modelName} failed:`, err?.message);
         }
-      } catch (err: any) {
-        console.error(`[Agent] Gemini ${modelName} failed:`, err?.message);
       }
     }
-  }
 
-  if (!rawResponse && process.env.OPENAI_API_KEY) {
-    try {
-      // Map Gemini-style history (role: 'model') to OpenAI format (role: 'assistant')
-      const historyMessages = formattedHistory.map((m: any) => ({
-        role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
-        content: m.parts[0].text,
-      }));
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...historyMessages,
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 800,
-      });
-      rawResponse = completion.choices[0]?.message?.content?.trim() || null;
-      if (rawResponse) console.log('[Agent] OpenAI:', rawResponse.substring(0, 120));
-    } catch (err: any) {
-      console.error('[Agent] OpenAI failed:', err?.message);
+    if (!rawResponse && process.env.OPENAI_API_KEY) {
+      try {
+        const historyMessages = formattedHistory.map((m: any) => ({
+          role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+          content: m.parts[0].text,
+        }));
+        const completion = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...historyMessages,
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 800,
+        });
+        rawResponse = completion.choices[0]?.message?.content?.trim() || null;
+        if (rawResponse) console.log('[Agent] OpenAI:', rawResponse.substring(0, 120));
+      } catch (err: any) {
+        console.error('[Agent] OpenAI failed:', err?.message);
+      }
     }
+  } catch (aiError: any) {
+    console.error('[Agent] AI call failed:', {
+      error: aiError?.message,
+      stack: aiError?.stack?.split('\n').slice(0, 5).join('\n'),
+      messagePreview: rawMessage.substring(0, 80),
+    });
+    return "I'm having a moment — please try again. Your project data is safe.";
   }
 
   if (!rawResponse) {
@@ -3713,13 +4096,20 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
   // ── Parse tool call or return plain text ───────────────────────────────────
   const toolCall = parseToolCall(rawResponse);
   if (!toolCall) {
-    return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
+    const recovered = await tryRecoverIntentFromPlainAgentReply(projectId, rawMessage);
+    if (recovered) return recovered;
+    let cleaned = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
+    if (looksLikeModelRefusal(cleaned)) {
+      cleaned = 'Pick what you need next — budget, materials, expenses, or alerts. One short message works best.';
+    }
+    return cleaned;
   }
 
   console.log('[Agent] Tool:', toolCall.tool, JSON.stringify(toolCall.params).substring(0, 100));
 
   let result: AgentToolResult;
-  switch (toolCall.tool) {
+  try {
+    switch (toolCall.tool) {
     case 'log_expense':
       result = await toolLogExpense(userId, projectId, toolCall.params);
       break;
@@ -3780,12 +4170,16 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     case 'switch_project':
       result = await toolSwitchProject(userId, toolCall.params, allProjects);
       break;
-    case 'query_data':
-      result = {
-        success: true,
-        reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
-      };
+    case 'query_data': {
+      let ans =
+        String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.';
+      if (looksLikeModelRefusal(ans)) {
+        ans =
+          'I can help with budget, spending, materials, daily logs, alerts, and tasks for this project. What do you want to do next?';
+      }
+      result = { success: true, reply: ans };
       break;
+    }
     case 'get_daily_summary': {
       const queryDate = String(toolCall.params.date || todayStr);
       const log = dailyLogs.find((l: any) => l.date === queryDate);
@@ -3832,12 +4226,26 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
       };
       break;
     }
+    case 'delete_all_issues':
+      result = await toolDeleteAllIssues(projectId);
+      break;
+    case 'clear_resolved_issues':
+      result = await toolClearResolvedIssues(projectId);
+      break;
     default:
       console.log('[Agent] Unknown tool:', toolCall.tool);
       return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || "Got it! What else can I help with?";
   }
 
   return result.reply;
+  } catch (execErr: any) {
+    console.error('[Agent] Tool execution failed:', {
+      tool: toolCall.tool,
+      message: execErr?.message,
+      stack: execErr?.stack?.split('\n').slice(0, 5).join('\n'),
+    });
+    return "That didn't go through — try again. Your project data is safe.";
+  }
 }
 
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
@@ -4887,10 +5295,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).send(twimlOk);
 
   } catch (error: any) {
-    console.error('❌ Webhook error:', error.message, error.stack);
+    const b = (req as any).body;
+    const fromRaw = typeof b === 'object' && b?.From ? String(b.From) : '';
+    const bodyRaw = typeof b === 'object' && b?.Body ? String(b.Body) : '';
+    console.error('❌ Webhook fatal error:', {
+      message: error?.message,
+      stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
+      phone: fromRaw ? fromRaw.slice(-4) : 'unknown',
+      bodyPreview: bodyRaw.substring(0, 100),
+    });
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Message>Sorry, something went wrong. Please try again.</Message></Response>`);
+<Response><Message>Something went wrong on our end. Your message was received — please try again in a moment.</Message></Response>`);
   }
 }
 
