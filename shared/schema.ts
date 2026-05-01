@@ -58,6 +58,7 @@ export const profiles = pgTable("profiles", {
   onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
   expenseState: text("expense_state"), // 'awaiting_price' | 'awaiting_confirmation'
   expensePendingData: jsonb("expense_pending_data").default('{}'),
+  expenseStateSetAt: timestamp("expense_state_set_at", { withTimezone: true }),
   pendingMaterialUpdate: jsonb("pending_material_update"), // { project_id, material_name, quantity, unit } for YES/NO confirmation
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

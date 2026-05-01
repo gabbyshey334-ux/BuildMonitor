@@ -392,6 +392,7 @@ async function updateExpenseState(userId: string, state: ExpenseState, data?: Ex
   const { error } = await supabase.from('profiles').update({
     expense_state: state,
     expense_pending_data: data || {},
+    expense_state_set_at: state ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   }).eq('id', userId);
   if (error) { console.error('[Update Expense State Error]', error); throw error; }
@@ -478,6 +479,8 @@ async function sendProjectSelectionMenu(
           location: p.description || 'No location',
         })),
       },
+      expense_state_set_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
 
@@ -548,6 +551,7 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
     .update({
       expense_state: null,
       expense_pending_data: {},
+      expense_state_set_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
@@ -642,6 +646,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
       onboarding_data: {},
       expense_state: null,
       expense_pending_data: {},
+      expense_state_set_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
@@ -4557,6 +4562,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = profile.id;
 
+    // ── Auto-expire stale expense states ────────────────────────────
+    if (profile.expense_state && profile.expense_state_set_at) {
+      const stateAgeMs = Date.now() - new Date(profile.expense_state_set_at).getTime();
+      const THIRTY_MINUTES_MS = 30 * 60 * 1000;
+      if (stateAgeMs > THIRTY_MINUTES_MS) {
+        console.log('[StateExpiry] Clearing stale expense_state:', profile.expense_state,
+          'age:', Math.round(stateAgeMs / 60000), 'min');
+        await supabase.from('profiles').update({
+          expense_state: null,
+          expense_pending_data: {},
+          expense_state_set_at: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', userId);
+        profile.expense_state = null;
+        profile.expense_pending_data = {};
+      }
+    }
+
     // Log the inbound message BEFORE any mutations. This is the second half
     // of the MessageSid idempotency contract above: if this write succeeds,
     // any concurrent retry will either hit the SELECT guard at the top or
@@ -4598,12 +4621,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         onboarding_completed_at: null,
         expense_state: null,
         expense_pending_data: {},
+        expense_state_set_at: null,
         pending_material_update: null,
         updated_at: new Date().toISOString(),
       }).eq('id', userId);
       await sendWelcomeMessage(From, profile.full_name);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
+    }
+
+    // ── Greeting interceptor: clear any stale state ──────────────
+    const isObviousGreeting =
+      /^(hello|hi|hey|good\s*(morning|afternoon|evening|night)|howdy|greetings|sup|hiya|yo\b|ola|jambo|oli\s*otya|hi\s*there|hey\s*there)/i.test(rawMessage.trim()) &&
+      rawMessage.trim().split(/\s+/).length <= 5;
+
+    if (isObviousGreeting && (profile.expense_state || profile.pending_material_update)) {
+      console.log('[GreetingInterceptor] Clearing stale state for greeting:', rawMessage.trim());
+      await supabase.from('profiles').update({
+        expense_state: null,
+        expense_pending_data: {},
+        expense_state_set_at: null,
+        pending_material_update: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId);
+      profile.expense_state = null;
+      profile.expense_pending_data = {};
+      profile.pending_material_update = null;
     }
 
     // ── STEP 2: Onboarding flow ───────────────────────────────────────────────
@@ -4857,6 +4900,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             active_project_set_at: new Date().toISOString(),
             expense_state: null,
             expense_pending_data: {},
+            expense_state_set_at: null,
+            updated_at: new Date().toISOString(),
           })
           .eq('id', userId);
 
@@ -5124,13 +5169,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
+      const trimmed = rawMessage.trim();
       const isConfirmationResponse =
-        /^[123]$/.test(rawMessage.trim()) ||
-        /^(yes|ok|no|log it|confirm|edit|cancel|save)$/i.test(rawMessage.trim());
+        /^[123]$/.test(trimmed) ||
+        (trimmed.length <= 10 &&
+          /^(yes|yep|yea|yeah|ok|okay|no|nope|save|confirm|cancel|edit|log it|log|✅|❌|✏️)$/i.test(trimmed));
 
-      if (!isConfirmationResponse) {
-        // Any non-confirmation message clears stale state and goes straight to the agent
-        console.log('[AutoClear] Non-confirmation message, clearing state and routing to agent');
+      const looksLikeNewMessage =
+        /^(hello|hi|hey|good|morning|evening|afternoon|howdy|greetings|sup|hiya|yo\b)/i.test(trimmed) ||
+        trimmed.length > 60 ||
+        trimmed.split(/\s+/).length > 8;
+
+      const shouldProcessAsConfirmation = isConfirmationResponse && !looksLikeNewMessage;
+
+      if (!shouldProcessAsConfirmation) {
+        console.log('[AutoClear] Clearing stale expense_state — message does not look like confirmation:', trimmed.substring(0, 50));
         await updateExpenseState(userId, null, {});
         // Fall through to STEP 9 (runAgent) below
       } else {
