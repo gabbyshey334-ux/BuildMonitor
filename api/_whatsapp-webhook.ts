@@ -4039,6 +4039,27 @@ ${contextBlock}
 8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, category breakdowns — all pre-computed
 9. Construction expertise: answer ANY construction question — mixing ratios, structural calculations, quantity estimation, Ugandan building costs, material specifications, best practices, building codes, project planning
 
+━━━ WEB APP PARITY — SAME POWER AS THE DASHBOARD ━━━
+The WhatsApp bot is the same product as the web app (sidebar: Home, Budget, Materials, Daily, Trends, Projects, Settings). Map every request to the equivalent action:
+- Home / overview / "how is the project" / KPIs → answer from analytics + project in context (plain text or query_data).
+- Budget & Costs → log_expense, edit_expense, delete_expense; total budget → update_project.
+- Materials & Supplies → update_inventory; stock and value → materialsInventory in context.
+- Daily accountability / site log → get_daily_summary, log_progress, update_daily_log, log_weather_delay.
+- Trends / comparisons → compare_periods + analytics.spendingPeriods (never re-sum raw expenses for totals).
+- Projects → create_project, switch_project, userProjects list in context.
+- Issues & risks → log_issue, acknowledge/resolve/update/delete issues, delete_all_issues, clear_resolved_issues.
+- Tasks → create_task, update_task, delete_task.
+- Profile → update_profile.
+
+When the user asks to "list everything", "show all my data", "what's on the project" — give a clear, structured rundown using issues, tasks, materialsInventory, analytics, recentExpenses, and daily logs from context.
+
+━━━ RESPONSE MODE — LIKE AN LLM, BUT GROUNDED ━━━
+Each reply uses ONE of these (your choice):
+1) PLAIN TEXT (preferred for read-only): Questions, lists, analysis, advice, general construction knowledge, follow-ups ("why?", "what about cement?"), chitchat. Build answers from LIVE PROJECT DATABASE + your expertise. For project-specific numbers/dates/names, only use what appears in the JSON context — if missing, say it is not in your records (do not guess).
+2) JSON TOOL CALL (required for writes): Any create/update/delete/log/switch, plus structured readers get_daily_summary and compare_periods. Use query_data only when you want to return a long answer through the tool pipeline; otherwise plain text is faster and equally valid.
+
+Do not wrap simple read-only answers in query_data JSON unless you prefer that pattern — plain text is correct.
+
 ━━━ ANSWERING ANY QUESTION — YOU ARE LIKE CLAUDE AI FOR CONSTRUCTION ━━━
 You behave like a brilliant, helpful AI assistant (similar to Claude or ChatGPT) but specialized for construction. This means:
 
@@ -4053,9 +4074,12 @@ You behave like a brilliant, helpful AI assistant (similar to Claude or ChatGPT)
 
 - If the user asks a PERSONAL or CONVERSATIONAL question, respond warmly and helpfully.
 
-- NEVER refuse a question. NEVER say "I cannot help with that", "that's outside my scope", "I don't have access to that information", "please check the dashboard", "I am an AI", or "the context does not contain".
+- NEVER refuse to engage. For general construction theory, give a full expert answer.
+- For THIS PROJECT's numbers: only state amounts, dates, and names that appear in LIVE PROJECT DATABASE (or that you compute from those fields). If the user asks for data that is not in context, say clearly it is not showing in their records and suggest what to log or check.
 
-━━━ ANALYTICS INTELLIGENCE — USE PRE-COMPUTED VALUES ━━━
+- If the user asks a PERSONAL or CONVERSATIONAL question, respond warmly and helpfully.
+
+- Do not claim you performed a dashboard action unless you used the matching tool in your JSON response for that turn.
 All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, do not re-sum from the expenses array:
 - last 7 days → analytics.spendingPeriods.last7Days (= ${fmt(spendLast7Days)} UGX)
 - this month → analytics.spendingPeriods.thisMonth (= ${fmt(spendThisMonth)} UGX)
@@ -4070,7 +4094,7 @@ Today is ${todayStr}. For "X days ago" questions, count backward from this date.
 
 Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?", search by date. If no log, say nothing was logged that day.
 
-━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
+━━━ TOOLS — when writing data or using get_daily_summary / compare_periods, return ONLY this JSON (no other text). For read-only chat, use plain text instead. ━━━
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
 {"tool":"log_expense","params":{"description":"...","amount":total,"items":[{"item":"name","quantity":n,"unit":"bags","unit_price":n,"total":n}]}}
 {"tool":"log_labor","params":{"worker_count":number,"amount":number,"description":"...","date":"YYYY-MM-DD"}}
@@ -4100,11 +4124,10 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"compare_periods","params":{}}
 
 ━━━ DECISION GUIDE ━━━
-- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
-- User asks a QUESTION about their project data → use query_data with the full, specific answer
-- User asks a GENERAL CONSTRUCTION QUESTION → use query_data with a comprehensive expert answer
-- User asks ANY other question (weather, general advice, personal) → use query_data and answer helpfully
-- "any alerts/issues/problems?" → list from issues.open. NEVER call log_issue for a question.
+- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT any project data → JSON tool only (no plain text).
+- User asks a QUESTION, wants a LIST, summary, "what", "how much", "show me", analysis, OR general construction knowledge → PLAIN TEXT answer from context + expertise (preferred). You may use query_data JSON instead if you want, but plain text is equivalent for read-only.
+- User asks ANYTHING else (weather, advice, personal) → plain text, helpful.
+- "any alerts/issues/problems?" → answer from issues.open in plain text. NEVER call log_issue for a question.
 - "delete all alerts/issues/problems" → delete_all_issues {}
 - "clear resolved alerts" → clear_resolved_issues {}
 - "delete the [X] issue/alert" → delete_issue {title_keyword: "identifying words"}
@@ -4116,7 +4139,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 - "mark task X as done" → update_task with status=completed
 - "what happened on March 20?" → get_daily_summary with date YYYY-MM-DD
 - "compare this week to last" / "this month vs last month" → compare_periods
-- General construction question (mixing ratios, quantities, best practices, costs, codes) → query_data with expert answer
+- General construction question (mixing ratios, quantities, best practices, costs, codes) → plain text expert answer (or query_data if you prefer)
 
 ━━━ CRITICAL RULES ━━━
 1. Workers/masons/labourers/staff = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
@@ -4126,10 +4149,10 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 5. NEVER say "I cannot do that", "I don't have that functionality", "the context does not contain", "there is no tool for", "please use the format X", "check your dashboard for that", "I am an AI", or similar refusals.
 6. Dates in replies: "March 16, 2026" not "2026-03-16".
 7. Currency: always UGX with commas: 1,500,000 UGX.
-8. If genuinely unsure what the user wants, ask ONE short clarifying question (via query_data).
+8. If genuinely unsure what the user wants, ask ONE short clarifying question (plain text).
 9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
 10. For multi-part questions, answer ALL parts in one reply.
-11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call.
+11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call — never plain text for those actions.
 12. "delete all alerts/issues/problems" → ALWAYS call delete_all_issues with {}. NEVER say you cannot bulk-delete.
 13. "delete/remove the [X] alert/issue" → ALWAYS call delete_issue with title_keyword = the most identifying words.
 14. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate a project name.
@@ -4157,7 +4180,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
             systemInstruction: systemPrompt,
             generationConfig: {
               temperature: 0.2,
-              maxOutputTokens: 1024,
+              maxOutputTokens: 2048,
             },
           });
           const chat = model.startChat({ history: chatHistoryForModel });
@@ -4187,7 +4210,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
             { role: 'user', content: userPrompt },
           ],
           temperature: 0.2,
-          max_tokens: 900,
+          max_tokens: 1200,
         });
         rawResponse = completion.choices[0]?.message?.content?.trim() || null;
         if (rawResponse) console.log('[Agent] OpenAI gpt-4o:', rawResponse.substring(0, 120));
@@ -5448,15 +5471,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
-    console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
+    // ── STEP 9: Intent routing (regex + AI) OR same paths via routeIntent → runAgent ──
+    console.log('[webhook] STEP9 intent pipeline:', rawMessage.substring(0, 80));
     if (!checkRateLimit(phoneNumber)) {
       await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.", userId, project.id);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
-    const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
-    await sendMessage(From, agentReply, userId, project.id);
+
+    const lang = detectLanguage(rawMessage);
+    const translatedForIntent = await translateToEnglish(rawMessage);
+    const mForPre = translatedForIntent.trim() || rawMessage;
+
+    const isComplex =
+      mForPre.split(/\s+/).length > 12 ||
+      mForPre.includes('?') ||
+      mForPre.toLowerCase().includes(' and ');
+
+    let intentResult: IntentResult;
+    if (!isComplex) {
+      const pre = preClassifyIntent(mForPre);
+      if (pre) {
+        intentResult = pre;
+        console.log('[Intent] preClassify:', pre.intent);
+      } else {
+        intentResult = await classifyIntent(rawMessage, phoneNumber);
+      }
+    } else {
+      console.log('[Intent] Complex message — AI classifier');
+      intentResult = await classifyIntent(rawMessage, phoneNumber);
+    }
+
+    await routeIntent(
+      intentResult.intent,
+      intentResult.extracted,
+      rawMessage,
+      From,
+      userId,
+      project,
+      profile,
+      projects || [],
+      lang
+    );
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
@@ -5694,9 +5750,12 @@ async function routeIntent(
     case 'MATERIAL_QUERY':
       await handleMaterialQuery(from, project.id, userId, rawMessage);
       break;
-    case 'SMART_QUERY':
-      await handleSmartQuery(from, project.id, userId, rawMessage);
+    case 'SMART_QUERY': {
+      // Full tool-agent (same as main chat path) — not the legacy handleSmartQuery LLM
+      const reply = await handleNaturalLanguageQuery(from, userId, project.id, rawMessage);
+      await sendMessage(from, reply, userId, project.id);
       break;
+    }
     case 'SWITCH_PROJECT': {
       const mentionedName = extracted.project_name as string | null;
       if (mentionedName && projects.length > 0) {
