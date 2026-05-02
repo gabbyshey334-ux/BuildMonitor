@@ -24,23 +24,6 @@ import twilio from 'twilio';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
-import {
-  calcBudgetPercent,
-  calcBurnRate,
-  calcInventoryTotal,
-  findFirstExpenseDate,
-  normalizeCategory,
-  sumExpenses,
-  sumByCategory,
-  resolveTransactionType,
-  dateKey,
-} from '../shared/calculations.js';
-import {
-  formatCurrency as fmtMoney,
-  formatDate as fmtDate,
-  formatProjectionDate,
-} from '../shared/formatting.js';
-import { todayInAppTz, nowInAppTzHHmm } from './utils/timezone.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
@@ -166,33 +149,6 @@ const SKIP_KEYWORDS = [
 
 const GARBAGE_MATERIAL_NAMES = ['material', 'item', 'thing', 'stuff', 'goods', 'product', 'units'];
 
-// Words that must never be singularized (would produce wrong stems)
-const _MAT_KEEP = new Set([
-  'glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar',
-  'hardcore', 'murram', 'gravel', 'ballast', 'aggregate', 'cement',
-]);
-function _singularize(w: string): string {
-  if (w.length < 2) return w;
-  if (_MAT_KEEP.has(w)) return w;
-  if (w.endsWith("'s")) return w.slice(0, -2);
-  if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
-  if (w.endsWith('s') && !w.endsWith('ss') && w.length >= 4) {
-    const stem = w.slice(0, -1);
-    if (stem.length >= 3) return stem;
-  }
-  return w;
-}
-/**
- * Canonical material storage name: lowercase, trimmed, each token singularized.
- * "Cements" → "cement", "Iron Bars" → "iron bar", "Tiles" → "tile".
- * Must be used identically in both dashboard (api/index.js) and webhook.
- */
-function normalizeMaterialName(raw: string): string {
-  const s = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  if (!s) return '';
-  return s.split(/\s+/).map(_singularize).join(' ');
-}
-
 function parseQuantityFromDescription(desc: string): { quantity: number; unit?: string } | null {
   const m = desc.match(/(\d+)\s*(bags?|tonnes?|pieces?|bars?|sheets?|litres?|rolls?)?/i);
   if (!m) return null;
@@ -226,7 +182,6 @@ type IntentType =
   | 'BUDGET_UPDATE'
   | 'ISSUE_REPORT'
   | 'PROJECT_QUERY'
-  | 'ADD_PURCHASES_TO_INVENTORY'
   | 'GREETING';
 
 interface IntentResult {
@@ -235,6 +190,22 @@ interface IntentResult {
 }
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
+
+// FIX: phone_number is nullable in whatsapp_messages (outbound msgs don't have one)
+async function logOutbound(userId: string, messageBody: string, projectId?: string): Promise<void> {
+  try {
+    await supabase.from('whatsapp_messages').insert({
+      user_id:      userId,
+      direction:    'outbound',
+      message_body: messageBody.substring(0, 4000),
+      processed:    true,
+      project_id:   projectId ?? null,
+      // phone_number intentionally omitted — column is nullable, outbound msgs don't have one
+    });
+  } catch (err: any) {
+    console.warn('[LogOutbound] Failed:', err?.message);
+  }
+}
 
 async function sendMessage(to: string, message: string, userId?: string, projectId?: string): Promise<void> {
   try {
@@ -245,9 +216,7 @@ async function sendMessage(to: string, message: string, userId?: string, project
       body: message,
     });
     // Auto-log every outbound message for conversation memory
-    if (userId) {
-      await logOutbound(userId, message, projectId);
-    }
+    if (userId) await logOutbound(userId, message, projectId);
   } catch (error: any) {
     console.error('[Twilio Send Error]', error);
     throw error;
@@ -258,21 +227,6 @@ async function sendOptions(to: string, message: string, options: string[], userI
   let text = message + '\n\n';
   options.forEach((opt, idx) => { text += `${idx + 1}. ${opt}\n`; });
   await sendMessage(to, text, userId, projectId);
-}
-
-/** Log an outbound bot reply to whatsapp_messages for conversation memory. Best-effort — never throws. */
-async function logOutbound(userId: string, messageBody: string, projectId?: string): Promise<void> {
-  try {
-    await supabase.from('whatsapp_messages').insert({
-      user_id: userId,
-      direction: 'outbound',
-      message_body: messageBody.substring(0, 4000),
-      processed: true,
-      project_id: projectId ?? null,
-    });
-  } catch (err) {
-    console.warn('[LogOutbound] Failed:', (err as any)?.message);
-  }
 }
 
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
@@ -298,19 +252,21 @@ function detectLanguage(text: string): string {
   return 'en';
 }
 
-async function ai(prompt: string, fallback: string, maxTokens = 200, lang?: string): Promise<string> {
+async function ai(prompt: string, fallback: string, maxTokens = 300, lang?: string): Promise<string> {
   const langInstruction = lang && lang !== 'en'
     ? `The user wrote in ${lang}. You MUST respond in ${lang}, not English.`
     : 'Respond in English unless the user wrote in another language.';
-  const systemContent = `You are JengaTrack, a senior WhatsApp construction assistant for African building projects. You are warm, knowledgeable, direct, and practical — like a trusted site supervisor who also understands finance and project management. Plain text only. No markdown asterisks or bold. No ** or * characters. No bullet symbols (*). Use dashes (-) for lists if needed. Keep replies under 5 lines unless the question genuinely needs more detail. Do not invent project-specific costs or dates — if you lack site-specific data, say what you need from the user. ${langInstruction}`;
+  const systemContent = `You are JengaTrack — a brilliant, warm WhatsApp construction assistant for African building projects. You combine the expertise of a senior site supervisor, quantity surveyor, and financial analyst. You are like Claude AI but specialized for construction.
+
+Plain text only. No markdown asterisks (**), no bold, no bullet (*) symbols. Use dashes (-) for lists. WhatsApp displays asterisks as raw characters.
+Never say "I am an AI" or "I cannot help with that". Never refuse a question.
+Keep replies concise unless depth is genuinely needed.
+${langInstruction}`;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
+    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
       try {
-        const model = gemini.getGenerativeModel({
-          model: modelName,
-          systemInstruction: systemContent,
-        });
+        const model = gemini.getGenerativeModel({ model: modelName, systemInstruction: systemContent });
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim();
         if (text) return text;
@@ -327,7 +283,7 @@ async function ai(prompt: string, fallback: string, maxTokens = 200, lang?: stri
           { role: 'system', content: systemContent },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.25,
+        temperature: 0.7,
         max_tokens: maxTokens,
       });
       const text = completion.choices[0]?.message?.content?.trim();
@@ -479,8 +435,6 @@ async function sendProjectSelectionMenu(
           location: p.description || 'No location',
         })),
       },
-      expense_state_set_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
 
@@ -492,7 +446,7 @@ async function sendProjectSelectionMenu(
     `Ask the user which project they are working on today. List these projects:\n${projectList}\nTell them to reply with the number.`,
     `You have ${projects.length} active projects:\n\n${projectList}\n\nWhich one are you updating today? Reply with the number.`
   );
-  await sendMessage(to, msg, userId);
+  await sendMessage(to, msg);
 }
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────
@@ -551,7 +505,6 @@ async function handleBudgetInput(userId: string, to: string, body: string) {
     .update({
       expense_state: null,
       expense_pending_data: {},
-      expense_state_set_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
@@ -604,7 +557,7 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
   const budgetNum = parseFloat(String(onboardingData.budget || 0));
   const startDate =
     onboardingData.start_date ||
-    todayInAppTz();
+    new Date().toISOString().split('T')[0];
 
   const { data: newProject, error } = await supabase
     .from('projects')
@@ -646,7 +599,6 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
       onboarding_data: {},
       expense_state: null,
       expense_pending_data: {},
-      expense_state_set_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', userId);
@@ -654,35 +606,34 @@ async function createProjectFromOnboarding(userId: string): Promise<string> {
   return newProject.id;
 }
 
-async function sendPostCreationMessage(to: string, projectId: string, userId: string) {
+async function sendPostCreationMessage(to: string, projectId: string) {
   const msg = await ai(
     `Tell the user their construction project has been created and their dashboard is live at this URL: ${DASHBOARD_URL}/dashboard?project=${projectId}. Then briefly explain they can now log expenses, materials, workers and progress just by chatting. Give 3-4 short examples naturally. End by saying they can send a receipt photo or voice note too.`,
     `Project created! Dashboard: ${DASHBOARD_URL}/dashboard?project=${projectId}\n\nJust chat updates to me anytime:\n• "Bought cement for 400,000"\n• "6 workers on site"\n• "Foundation 80% done"\n• Send receipt photos or voice notes`
   );
-  await sendMessage(to, msg, userId, projectId);
+  await sendMessage(to, msg);
 }
 
 /** Route message to onboarding flow (e.g. when "1" was meant to confirm project, not expense). */
 async function handleOnboardingMessage(from: string, profile: any, message: string): Promise<void> {
-  const userId = profile.id as string;
   const state = profile.onboarding_state as OnboardingState;
   if (state === 'confirmation' && (message.includes('1') || /yes|create|confirm/i.test(message))) {
     try {
-      const projectId = await createProjectFromOnboarding(userId);
-      await sendPostCreationMessage(from, projectId, userId);
+      const projectId = await createProjectFromOnboarding(profile.id);
+      await sendPostCreationMessage(from, projectId);
     } catch (err: any) {
       console.error('[Onboarding] Project creation failed (handleOnboardingMessage):', err);
       await sendMessage(from, await ai(
         `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
         `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-      ), userId);
+      ));
     }
     return;
   }
   await sendMessage(from, await ai(
     'Tell the user to confirm their project first by replying 1, or type "start over" to begin again.',
     'Please confirm your project first (reply 1), or type "start over" to begin again.'
-  ), userId);
+  ));
 }
 
 // ─── OCR: Receipt Photo ───────────────────────────────────────────────────────
@@ -696,7 +647,7 @@ async function processReceiptPhoto(
   await sendMessage(from, await ai(
     'Tell the user you received their receipt and are scanning it. One short line.',
     'Receipt received! Scanning it now...'
-  ), userId, projectId);
+  ));
 
   const receiptPrompt = `This is a construction receipt. Extract all details and return ONLY valid JSON:
 {
@@ -724,7 +675,7 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     if (ocrData.items && ocrData.items.length > 0) {
       for (const item of ocrData.items) {
         if (!item.name) continue;
-        const materialName = normalizeMaterialName(item.name);
+        const materialName = String(item.name).toLowerCase().trim();
         const qty = parseFloat(String(item.quantity || 0));
         if (qty <= 0) continue;
         const itemUnitCost = parseFloat(String(item.amount || 0)) / (qty || 1);
@@ -765,7 +716,7 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
         } else {
           const { data: inserted } = await supabase.from('materials_inventory').insert({
             project_id: projectId,
-            // user_id intentionally omitted — profiles.id ≠ auth.users.id for WhatsApp-only users
+            user_id: userId,
             name: materialName,
             quantity: qty,
             unit: item.unit || 'units',
@@ -810,7 +761,7 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
       vendor,
       project_id: projectId,
     });
-    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel'], userId, projectId);
+    await sendOptions(from, summary, ['✅ Yes – Save it', '✏️ Edit details', '❌ Cancel']);
       return true;
     } catch {
       return false;
@@ -882,13 +833,13 @@ If amounts are in another currency, convert to UGX (1 USD ≈ 3700 UGX, 1 KES �
     await sendMessage(from, await ai(
       'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
       'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
-    ), userId, projectId);
+    ));
   } catch (err: any) {
     console.error('[OCR Error]', err);
     await sendMessage(from, await ai(
       'Tell the user you could not read the receipt clearly. Suggest better lighting, laying it flat, or typing the details manually with an example.',
       'Could not read that receipt clearly. Try better lighting or type: "Bought [item] for [amount] from [vendor]"'
-    ), userId, projectId);
+    ));
   }
 }
 
@@ -980,22 +931,6 @@ async function translateToEnglish(text: string): Promise<string> {
 function preClassifyIntent(message: string): IntentResult | null {
   const m = message.toLowerCase().trim();
 
-  // DELETE ALL / DELETE SPECIFIC issues → route to AI agent (bulk + fuzzy delete live there)
-  if (
-    /delete|remove|clear|dismiss/i.test(m) &&
-    /all|every|each/i.test(m) &&
-    /alert|issue|problem|risk/i.test(m)
-  ) {
-    return { intent: 'SMART_QUERY', extracted: {} };
-  }
-  if (
-    /delete|remove|dismiss/i.test(m) &&
-    /alert|issue|problem/i.test(m) &&
-    !/log|report|create|add/i.test(m)
-  ) {
-    return { intent: 'SMART_QUERY', extracted: {} };
-  }
-
   // BUDGET_UPDATE — must be at top so "add 10M to budget" is caught before other budget patterns
   if (/edit.*budget|update.*budget|add.*budget|increase.*budget|change.*budget|set.*budget|new.*budget/i.test(m)) {
     const amount = parseAmount(message);
@@ -1006,14 +941,6 @@ function preClassifyIntent(message: string): IntentResult | null {
   // Force EXPENSE_LOG when user explicitly says log/add/record expense
   if (/log\s+this\s+expense|add\s+expense|record\s+expense|log\s+expense/i.test(m)) {
     return { intent: 'EXPENSE_LOG', extracted: { description: message.trim() } };
-  }
-
-  // ADD_PURCHASES_TO_INVENTORY — user wants to sync recent purchases into inventory stock
-  if (
-    /(?:log|add|put|also\s+add|please\s+add|can\s+you\s+add).*(?:into|to|in)\s*(?:my\s+)?inventory|(?:that|those|them)\s+.*(?:into|to|in)\s*(?:my\s+)?inventory|(?:what\s+(?:i|we)\s+bought|stuff\s+(?:i|we)\s+bought|my\s+purchases?|recent\s+purchases?).*inventory|log\s+(?:that|those|it|them).*inventory|add\s+(?:that|those|it|them).*inventory/i.test(m) &&
-    !/used|consumed|deduct|reduce|expense\s+log/i.test(m)
-  ) {
-    return { intent: 'ADD_PURCHASES_TO_INVENTORY', extracted: {} };
   }
 
   // MATERIAL_QUERY — inventory/stock questions; exclude worker-related and require material context
@@ -1069,8 +996,8 @@ function preClassifyIntent(message: string): IntentResult | null {
     };
   }
 
-  // MATERIAL used patterns — only trigger on explicit usage/consumption words (NOT "applied for" or "for the site")
-  if (/\b(?:used|consumed|finished\s+using|use\s+up)\b/i.test(m) && /\d/.test(m)) {
+  // MATERIAL used patterns — also match "today we used 4 bricks" / "used 4 bricks"
+  if (/used|consumed|applied|finished\s+using/i.test(m) && /\d/.test(m)) {
     const qtyMatch = message.match(/(\d+)\s*(bags?|kg|tons?|pieces?|trips?|units?|bricks?|rods?|bars?)/i);
     const itemMatch = message.match(/(?:used|consumed)\s+\d+\s+\w+\s+(?:of\s+)?([a-z\s]+?)(?:\s+for|\s+on|\s*$)/i);
     const usedEndMatch = message.match(/(?:used|consumed|update)\s+.*?(\d+)\s+(bags?|kg|bricks?|pieces?|units?|rods?|bars?|sheets?)\s*[,.]?\s*$/i);
@@ -1179,23 +1106,10 @@ function parseMultiItemMessage(message: string): Array<{ item: string; quantity:
 
 async function classifyIntent(message: string, phoneNumber: string): Promise<IntentResult> {
   const translatedMessage = await translateToEnglish(message);
-
-  // Only use regex pre-classification for short, unambiguous messages.
-  // Long or multi-part messages (>12 words, contains ?, contains ' and ') are routed
-  // straight to the AI classifier to avoid misclassification and wrong handler dispatch.
-  const isComplex =
-    translatedMessage.trim().split(/\s+/).length > 12 ||
-    translatedMessage.includes('?') ||
-    translatedMessage.toLowerCase().includes(' and ');
-
-  if (!isComplex) {
-    const preClassified = preClassifyIntent(translatedMessage);
-    if (preClassified) {
-      console.log('[Intent] Regex match:', preClassified.intent);
-      return preClassified;
-    }
-  } else {
-    console.log('[Intent] Complex message — skipping regex, going straight to AI classifier');
+  const preClassified = preClassifyIntent(translatedMessage);
+  if (preClassified) {
+    console.log('[Intent] Regex match:', preClassified.intent);
+    return preClassified;
   }
 
   if (!checkRateLimit(phoneNumber)) {
@@ -1208,16 +1122,6 @@ async function classifyIntent(message: string, phoneNumber: string): Promise<Int
 IMPORTANT: Be aggressive about classifying expense and material messages. When in doubt between EXPENSE_LOG and GREETING, choose EXPENSE_LOG if there are numbers involved.
 Amounts: 150K means 150,000 UGX, 1.5M means 1,500,000 UGX, 2B means 2,000,000,000 UGX. Always use these conversions in extracted.amount.
 CRITICAL amount parsing rules: K or k = multiply by 1,000 (4k=4000, 30k=30000, 150k=150000). M or m = multiply by 1,000,000. B or b = multiply by 1,000,000,000. Never multiply K by 10.
-
-CRITICAL FIELD SEMANTICS (READ CAREFULLY — these bugs have caused real data loss):
-- "amount" is ALWAYS the TOTAL PURCHASE PRICE of the transaction in UGX. It is NEVER the quantity, the unit count, or the per-unit price.
-  • "Bought 5 bags cement for 500,000" → amount: 500000 (total), quantity: 5, unit: "bags".
-  • "Bought 5 bags cement at 40k each" → amount: 200000 (5 × 40,000 TOTAL), quantity: 5, unit: "bags".
-  • "Bought cement 1,900,000" → amount: 1900000, quantity: 0 (unknown), unit: null.
-  • NEVER output amount: 5 when a user says "5 bags cement for 500,000". That 5 is the QUANTITY, not the amount.
-- "quantity" is ALWAYS the NUMBER OF ITEMS (bags / pieces / trips / kg / etc.). Never the price.
-- If a user mentions only a quantity and NO explicit price ("bought 5 bags cement"), set amount: 0 and let the bot ask. Do NOT guess a price.
-- If you are ever unsure whether a number is the amount or the quantity, check the unit: prices in Uganda are almost always ≥ 1,000 UGX. Any expense with amount < 1,000 in UGX should be treated as suspicious and typically means you confused quantity with amount.
 
 Common patterns you MUST classify correctly:
 
@@ -1237,22 +1141,11 @@ EXPENSE_LOG examples (always has numbers):
 - MULTI-ITEM: "I bought 10 bags cement at 30k each and 5 wood poles at 10k each" → return items: [{item:"cement",quantity:10,unit:"bags",amount:300000},{item:"wood poles",quantity:5,unit:"pieces",amount:50000}]
 CRITICAL: For multi-item messages with commas listing different things each with a price, ALWAYS return intent EXPENSE_LOG with items array. Parse each item separately. 30k = 30000, 4k = 4000, 150k = 150000.
 
-ADD_PURCHASES_TO_INVENTORY examples (user wants to add their already-logged expense purchases into inventory stock):
-- "Please log that into my inventory as well"
-- "Add what I bought to inventory"
-- "Add those to my inventory"
-- "Log the stuff I bought into inventory"
-- "Please add my recent purchases to inventory"
-- "Add that to my inventory too"
-- "Put what we bought in inventory"
-Use ADD_PURCHASES_TO_INVENTORY when the user is referring to purchases they already logged (as expenses) and now wants them reflected in inventory stock. Never use MATERIAL_LOG for these vague retroactive requests.
-
 MATERIAL_LOG examples:
-- "Received 50 bags cement from Hima" → action: "bought" (adds to stock)
-- "2 trips of sand delivered" → action: "bought" (adds to stock)
-- "Used 5 bags cement for foundation" → action: "used" (deducts from stock)
-- "consumed 10 bags cement today" → action: "used" (deducts from stock)
-CRITICAL: action must be "bought" for received/delivered/got/arrived/purchased messages (stock increases). action must be "used" ONLY when the user explicitly says used/consumed. Never set action "used" just because a message contains "for" — "Received cement for 1,900,000" is a purchase (action: bought), NOT usage.
+- "Received 50 bags cement from Hima"
+- "Used 5 bags for foundation"
+- "2 trips of sand delivered"
+- "consumed 10 bags cement today"
 
 LABOR_LOG examples:
 - "6 workers today"
@@ -1308,7 +1201,7 @@ Return ONLY valid JSON:
     "amount": number_in_UGX,
     "quantity": number,
     "unit": "bags/kg/etc",
-    "action": "bought (for received/delivered/purchased = adds stock) | used (ONLY for consumed/used = deducts stock)",
+    "action": "bought|used|received",
     "vendor": "vendor name if mentioned",
     "worker_count": number,
     "note": "for progress updates",
@@ -1319,7 +1212,7 @@ Return ONLY valid JSON:
   const validIntents: IntentType[] = [
     'EXPENSE_LOG', 'MATERIAL_LOG', 'LABOR_LOG', 'PROGRESS_UPDATE',
     'BUDGET_QUERY', 'MATERIAL_QUERY', 'BUDGET_UPDATE', 'WEATHER_DELAY', 'SMART_QUERY', 'LIST_PROJECTS',
-    'ISSUE_REPORT', 'PROJECT_QUERY', 'ADD_PURCHASES_TO_INVENTORY', 'GREETING',
+    'ISSUE_REPORT', 'PROJECT_QUERY', 'GREETING',
   ];
 
   function parseIntentResponse(content: string): IntentResult | null {
@@ -1389,12 +1282,11 @@ async function checkPriceAnomaly(
   if (!quantity || quantity <= 0) return null;
   const unitPrice = amount / quantity;
 
-  // Get historical prices for this item on this project (exclude soft-deleted)
+  // Get historical prices for this item on this project
   const { data: history } = await supabase
     .from('expenses')
     .select('amount, quantity_logged')
     .eq('project_id', projectId)
-    .is('deleted_at', null)
     .ilike('description', `%${item}%`)
     .not('quantity_logged', 'is', null)
     .order('created_at', { ascending: false })
@@ -1454,7 +1346,7 @@ async function upsertDailyLog(
   projectId: string,
   data: { worker_count?: number; notes?: string; weather_condition?: string; photo_urls?: string[]; activity_entries?: Array<{ log_time: string; activity_type: string; description: string; amount?: number }> }
 ): Promise<void> {
-  const today = todayInAppTz();
+  const today = new Date().toISOString().split('T')[0];
   const { data: existing } = await supabase
     .from('daily_logs')
     .select('id, notes, photo_urls, activity_entries')
@@ -1468,22 +1360,9 @@ async function upsertDailyLog(
     if (data.notes && existing.notes) {
       updateData.notes = `${existing.notes}\n${data.notes}`;
     }
-    // Append photos — normalize existing entries to plain URL strings first so
-    // the column never accumulates mixed types (strings, objects, JSON-stringified objects).
+    // Append photos
     if (data.photo_urls && existing.photo_urls) {
-      const existingUrls = (Array.isArray(existing.photo_urls) ? existing.photo_urls : [existing.photo_urls])
-        .map((e: any) => {
-          if (typeof e === 'string') {
-            const t = e.trim();
-            if (t.startsWith('{') || t.startsWith('"')) {
-              try { const p = JSON.parse(t); if (p?.url) return p.url; } catch { /* not JSON */ }
-            }
-            return t.startsWith('http') ? t : null;
-          }
-          return (e && typeof e === 'object' && e.url) ? e.url : null;
-        })
-        .filter(Boolean) as string[];
-      updateData.photo_urls = [...existingUrls, ...data.photo_urls];
+      updateData.photo_urls = [...(existing.photo_urls || []), ...data.photo_urls];
     }
     // Append activity_entries
     if (data.activity_entries && data.activity_entries.length > 0) {
@@ -1502,62 +1381,47 @@ async function upsertDailyLog(
 
 // ─── Intent Handlers ──────────────────────────────────────────────────────────
 
-async function handleBudgetQuery(from: string, projectId: string, userId: string, lang?: string): Promise<void> {
-  // Pull the project with its currency so we never reply with "UGX" to a KES/USD project.
+async function handleBudgetQuery(from: string, projectId: string, lang?: string): Promise<void> {
   const { data: project } = await supabase
-    .from('projects').select('budget, name, currency').eq('id', projectId).single();
+    .from('projects').select('budget, name').eq('id', projectId).single();
   const { data: expenses } = await supabase
-    .from('expenses')
-    .select('amount, expense_date, created_at, category, deleted_at')
-    .eq('project_id', projectId)
-    .is('deleted_at', null);
+    .from('expenses').select('amount').eq('project_id', projectId);
 
-  const allExpensesArr = (expenses || []) as any[];
-  const currency = String((project as any)?.currency || 'UGX').toUpperCase();
-  const budget = parseFloat(String((project as any)?.budget || 0));
+  const totalSpent = (expenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
+  const budget = parseFloat(String(project?.budget || 0));
+  const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
+  const remaining = budget > 0 ? Math.max(0, budget - totalSpent) : 0;
 
-  // All math goes through the shared, unit-tested calculators — no inline percent/burn logic.
-  const totalSpent = sumExpenses(allExpensesArr);
-  const health = calcBudgetPercent(totalSpent, budget);
-  const firstExpense = findFirstExpenseDate(allExpensesArr);
-  const burn = calcBurnRate(totalSpent, budget, firstExpense, currency);
-
-  // Human date for projected exhaustion — always includes the year.
-  const projectedDateDisplay = burn.projectedExhaustionDate
-    ? formatProjectionDate(burn.projectedExhaustionDate)
-    : null;
-
-  const disclaimer = burn.disclaimer
-    ? `\nNote: ${burn.disclaimer}.`
-    : '';
-
-  const runoutLine = !Number.isFinite(burn.daysRemaining)
-    ? 'Budget is not being spent yet — runway is effectively unlimited.'
-    : burn.daysRemaining === 0
-      ? `Budget exhausted as of ${projectedDateDisplay ?? fmtDate(new Date())}.`
-      : `At current rate: ~${burn.displayDaysRemaining} of budget left (projected runout: ${projectedDateDisplay}).`;
-
-  const warning = health.isOver
-    ? 'IMPORTANT: Warn them they are OVER budget.'
-    : health.raw > 80
-      ? 'IMPORTANT: Warn them they have used over 80% of budget!'
-      : '';
+  // Unified burn-rate: use actual days elapsed since first expense date
+  const { data: allExpensesForBurn } = await supabase
+    .from('expenses').select('amount, expense_date')
+    .eq('project_id', projectId);
+  let weeklyBurn = 0;
+  if (allExpensesForBurn && allExpensesForBurn.length > 0) {
+    const burnDates = allExpensesForBurn
+      .map((e: any) => (e.expense_date ? new Date(e.expense_date + 'T12:00:00').getTime() : null))
+      .filter((t: any): t is number => t !== null);
+    const firstMs = burnDates.length > 0 ? Math.min(...burnDates) : Date.now();
+    const daysSince = Math.max(1, (Date.now() - firstMs) / (1000 * 60 * 60 * 24));
+    const spent = allExpensesForBurn.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+    weeklyBurn = Math.round((spent / daysSince) * 7);
+  }
+  const weeksLeft = weeklyBurn > 0 ? Math.round(remaining / weeklyBurn) : null;
 
   const msg = await ai(
     `Give the user a natural budget summary for their project:
-    Total spent: ${fmtMoney(totalSpent, currency)}
-    Budget: ${fmtMoney(budget, currency)}
-    Used: ${health.display}
-    Remaining: ${fmtMoney(health.remaining, currency)}
-    ${runoutLine}${disclaimer}
-    ${warning}
-    Only use the figures provided. Do not estimate or invent numbers.
+    Total spent: ${fmt(totalSpent)} UGX
+    Budget: ${fmt(budget)} UGX
+    Used: ${pct}%
+    Remaining: ${fmt(remaining)} UGX
+    ${weeksLeft !== null ? 'At current rate: ~' + weeksLeft + ' weeks of budget left' : ''}
+    ${pct > 80 ? 'IMPORTANT: Warn them they have used over 80% of budget!' : ''}
     Be conversational, not just a list of numbers.`,
-    `Budget summary: Spent: ${fmtMoney(totalSpent, currency)} | Budget: ${fmtMoney(budget, currency)} | Used: ${health.display} | Remaining: ${fmtMoney(health.remaining, currency)}`,
+    `Budget summary: Spent: ${fmt(totalSpent)} UGX | Budget: ${fmt(budget)} UGX | Used: ${pct}% | Remaining: ${fmt(remaining)} UGX`,
     300,
     lang
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
 async function handleGreeting(
@@ -1573,86 +1437,47 @@ async function handleGreeting(
       ? profile.full_name.split(' ')[0]
       : null;
 
-  // ── Build rich project context for greeting intelligence ──────────────────
-  let recentActivity = '';
-  let budgetSummary = '';
-  let alertsSummary = '';
+  // Fetch rich live context for intelligent greeting
+  let recentActivity = '', budgetSummary = '', alertsSummary = '';
 
   if (currentProject) {
-    const [recentExpensesRes, todayLogRes, issuesRes, materialsRes] = await Promise.all([
-      supabase
-        .from('expenses')
-        .select('description, amount, created_at, expense_date')
-        .eq('project_id', currentProject.id)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(5),
-      supabase
-        .from('daily_logs')
-        .select('worker_count, notes, weather_condition')
-        .eq('project_id', currentProject.id)
-        .eq('log_date', todayInAppTz())
-        .maybeSingle(),
-      supabase
-        .from('issues')
-        .select('title, severity, status')
-        .eq('project_id', currentProject.id)
-        .eq('status', 'open')
-        .order('created_at', { ascending: false })
-        .limit(3),
-      supabase
-        .from('materials_inventory')
-        .select('name, quantity, low_stock_threshold')
-        .eq('project_id', currentProject.id)
-        .order('quantity', { ascending: true })
-        .limit(5),
+    const [exRes, logRes, issRes, matRes] = await Promise.all([
+      supabase.from('expenses').select('description,amount,expense_date').eq('project_id', currentProject.id).is('deleted_at', null).order('created_at', { ascending: false }).limit(5),
+      supabase.from('daily_logs').select('worker_count,notes,weather_condition').eq('project_id', currentProject.id).eq('log_date', new Date().toISOString().split('T')[0]).maybeSingle(),
+      supabase.from('issues').select('title,severity,status').eq('project_id', currentProject.id).eq('status', 'open').order('created_at', { ascending: false }).limit(3),
+      supabase.from('materials_inventory').select('name,quantity,low_stock_threshold').eq('project_id', currentProject.id).order('quantity', { ascending: true }).limit(5),
     ]);
+    const recent   = exRes.data || [];
+    const todayLog = logRes.data;
+    const issues   = issRes.data || [];
+    const lowStock = (matRes.data || []).filter((m: any) => m.quantity <= (m.low_stock_threshold ?? 5));
 
-    const recentExpenses = recentExpensesRes.data || [];
-    const todayLog = todayLogRes.data;
-    const openIssues = issuesRes.data || [];
-    const lowStockItems = (materialsRes.data || []).filter(
-      (m: any) => m.quantity <= (m.low_stock_threshold ?? 5)
-    );
-
-    if (recentExpenses.length) {
-      const totalRecent = recentExpenses.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
-      recentActivity += `Recent spend (last ${recentExpenses.length} entries): UGX ${fmt(totalRecent)}. `;
-      recentActivity += `Latest: ${recentExpenses[0].description} (UGX ${fmt(parseFloat(String(recentExpenses[0].amount || 0)))}, ${recentExpenses[0].expense_date || 'today'}). `;
+    if (recent.length) {
+      const tot = recent.reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+      recentActivity = `Recent spend (last ${recent.length} entries): UGX ${fmt(tot)}. Latest: ${recent[0].description} (UGX ${fmt(parseFloat(String(recent[0].amount || 0)))}, ${recent[0].expense_date || 'today'}). `;
     }
     if (todayLog?.worker_count) recentActivity += `Today: ${todayLog.worker_count} workers on site. `;
     if (todayLog?.notes) recentActivity += `Site note: ${todayLog.notes}. `;
     if (todayLog?.weather_condition) recentActivity += `Weather: ${todayLog.weather_condition}. `;
 
-    const budget = parseFloat(String(currentProject.budget || 0));
-    if (budget > 0) {
-      const { data: allEx } = await supabase
-        .from('expenses')
-        .select('amount')
-        .eq('project_id', currentProject.id)
-        .is('deleted_at', null);
+    const budgetV = parseFloat(String(currentProject.budget || 0));
+    if (budgetV > 0) {
+      const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', currentProject.id).is('deleted_at', null);
       const spent = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
-      const pct = Math.min(100, Math.round((spent / budget) * 100));
-      budgetSummary = `Budget: UGX ${fmt(spent)} spent of UGX ${fmt(budget)} (${pct}% used). `;
+      budgetSummary = `Budget: UGX ${fmt(spent)} spent of UGX ${fmt(budgetV)} (${Math.min(100, Math.round(spent / budgetV * 100))}% used). `;
     }
-
-    if (openIssues.length) {
-      alertsSummary = `Open alerts: ${openIssues.map((i: any) => `${i.title} (${i.severity})`).join(', ')}. `;
-    }
-    if (lowStockItems.length) {
-      alertsSummary += `Low stock: ${lowStockItems.map((m: any) => m.name).join(', ')}. `;
-    }
+    if (issues.length) alertsSummary = `Open alerts: ${issues.map((i: any) => `${i.title} (${i.severity})`).join(', ')}. `;
+    if (lowStock.length) alertsSummary += `Low stock: ${lowStock.map((m: any) => m.name).join(', ')}. `;
   }
 
-  const today = new Date().toLocaleDateString('en-UG', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-  });
-
+  const today = new Date().toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const langInstruction = lang && lang !== 'en'
     ? `The user wrote in ${lang}. You MUST respond in ${lang}, not English.`
     : 'Respond in English unless the user wrote in another language.';
 
-  const systemPrompt = `You are JengaTrack, an intelligent WhatsApp construction site assistant — like a knowledgeable, warm site supervisor who also understands finance, engineering, and project management. Today is ${today}. ${langInstruction}
+  const systemPrompt = `You are JengaTrack — an intelligent WhatsApp construction site assistant, like a brilliant site supervisor who also understands finance, engineering, and project management. You behave like Claude AI but specialized for construction.
+
+Today is ${today}. ${langInstruction}
 
 USER: ${firstName || 'Site manager'}
 ACTIVE PROJECT: ${currentProject?.name || 'None set'}
@@ -1661,45 +1486,29 @@ ${recentActivity}
 ${alertsSummary}
 ALL PROJECTS: ${(allProjects || []).map((p: any) => p.name).join(', ') || 'None'}
 
-YOUR PERSONALITY AND CAPABILITIES:
-- Warm, direct, practical, and highly intelligent — like Claude AI but specialized for construction
-- You understand construction deeply: mixing ratios, structural engineering, quantity surveying, Ugandan market prices, East African building codes and best practices
-- You understand English, Luganda, and Swahili construction terms naturally
-- You remember context from this conversation
-- You NEVER say "I cannot help with that", "I am an AI", or "please use the format X"
-- You NEVER show numbered menus unless the user asks for options
-- Plain text only. No markdown asterisks, no ** bold, no * bullets. Use dashes (-) for lists. WhatsApp shows asterisks as raw characters.
-
-WHAT YOU CAN DO:
+YOUR CAPABILITIES:
 1. Log expenses, materials, workers, progress, issues, weather delays — all just by chatting
 2. Answer any question about this project: budget, spending, materials, vendors, daily logs
-3. Answer general construction questions: concrete mixing, reinforcement ratios, material quantities, cost estimation, structural advice, best practices for Uganda/East Africa
-4. Handle voice notes and receipt photos (sent directly)
-5. Help with project management: tasks, scheduling, resource planning
+3. Answer ANY construction question: concrete mixing, reinforcement ratios, material quantities, cost estimation, structural advice, Uganda/East Africa building codes and market prices
+4. Handle voice notes and receipt photos
+5. Manage tasks, issues, milestones
 6. Analyse spending patterns, vendor history, burn rate, budget projections
 
-WHEN USER SENDS A GREETING OR ASKS WHAT YOU CAN DO:
-Give a brief, natural response. Mention the project by name if there is one. If there are open alerts or low stock, mention them naturally. Do not list a long menu — just respond warmly and tell them what you can help with today in 2-3 lines.
-
-WHEN USER ASKS A GENERAL CONSTRUCTION QUESTION (not about their data):
-Answer it fully and helpfully from your construction expertise. You are a construction professional, not just a data entry bot. Examples: "how do I mix concrete?", "how many bags of cement for a 10x10 slab?", "what's the standard rebar spacing?", "how do I waterproof a foundation?", "what are Ugandan building standards?" — answer ALL of these expertly.
-
-WHEN USER ASKS ABOUT THEIR PROJECT DATA:
-Give a direct, specific answer using the context above. Never say "check your dashboard" for data you already have in context.
-
-If user wants to log something: confirm naturally and tell them you're saving it.
-If they ask a question: answer it directly and completely.
-If they send a greeting: respond warmly, mention their project briefly, and offer to help with something specific based on the context above.`;
+RULES:
+- Plain text only. No markdown asterisks, no ** bold, no * bullets. Use dashes (-) for lists.
+- NEVER say "I cannot help with that", "I am an AI", "please use the format X", or "check your dashboard"
+- NEVER show numbered menus unless user explicitly asks
+- For greetings: respond warmly, mention the project by name, mention any open alerts or low stock naturally, offer to help with something specific in 2-3 lines
+- For general construction questions (how to mix concrete, rebar spacing, waterproofing, etc.): answer fully and expertly with specific numbers and ratios
+- For project data questions: give a direct, specific answer using the context above
+- If user wants to log something: confirm naturally and tell them you are saving it`;
 
   let reply: string | null = null;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
+    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
       try {
-        const model = gemini.getGenerativeModel({
-          model: modelName,
-          systemInstruction: systemPrompt,
-        });
+        const model = gemini.getGenerativeModel({ model: modelName, systemInstruction: systemPrompt });
         const result = await model.generateContent(rawMessage || 'Hello');
         reply = result.response.text().trim();
         if (reply) break;
@@ -1735,7 +1544,7 @@ If they send a greeting: respond warmly, mention their project briefly, and offe
   await sendMessage(from, reply, profile?.id, currentProject?.id);
 }
 
-async function handleBudgetUpdate(from: string, projectId: string, userId: string, extracted: Record<string, unknown>): Promise<void> {
+async function handleBudgetUpdate(from: string, projectId: string, extracted: Record<string, unknown>): Promise<void> {
   const { data: project } = await supabase
     .from('projects').select('budget, name').eq('id', projectId).single();
 
@@ -1747,7 +1556,7 @@ async function handleBudgetUpdate(from: string, projectId: string, userId: strin
     await sendMessage(from, await ai(
       'Ask the user what the new budget should be. Give examples: "Set budget to 200M" or "Add 10M to budget".',
       'What should the new budget be? Try: "Set budget to 200M" or "Add 10M to budget"'
-    ), userId, projectId);
+    ));
     return;
   }
 
@@ -1763,7 +1572,7 @@ async function handleBudgetUpdate(from: string, projectId: string, userId: strin
     `Tell the user their budget was updated. Previous: ${fmt(currentBudget)} UGX. ${action === 'add' ? 'Added' : 'New budget'}: ${fmt(amount)} UGX. New total: ${fmt(newBudget)} UGX. Tell them to refresh their dashboard.`,
     `Budget updated! Previous: ${fmt(currentBudget)} UGX. New total: ${fmt(newBudget)} UGX. Refresh your dashboard to see the update.`
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
 async function handleExpenseLog(
@@ -1794,7 +1603,7 @@ async function handleExpenseLog(
         amount: total,
         description: items.map((x) => `${x.quantity} ${x.unit} of ${x.item}`).join(' and '),
       });
-      await sendMessage(from, `✅ Confirm expense:\n${lines}\n\nTotal: UGX ${fmt(total)}\n\n1. Yes — Log it\n2. Edit\n3. Cancel`, userId, projectId);
+      await sendMessage(from, `✅ Confirm expense:\n${lines}\n\nTotal: UGX ${fmt(total)}\n\n1. Yes — Log it\n2. Edit\n3. Cancel`);
       return;
     }
   }
@@ -1813,37 +1622,6 @@ async function handleExpenseLog(
     if (qm) { quantity = parseFloat(qm[1].replace(/,/g, '')); unit = unit || qm[2].toLowerCase(); }
   }
 
-  // ── SANITY CHECK: "amount" looks like a quantity ─────────────────────
-  //
-  // Bug seen in the wild: "Bought 5 bags cement for 500,000" was stored as
-  // amount: 500 (the model grabbed the quantity/unit price). Any amount
-  // < 1,000 UGX is virtually impossible on a Ugandan construction site
-  // (minimum wage is ~10k/day, a single cement bag is ~38k). When we also
-  // have a plausible quantity, this is almost certainly a misparse — ask
-  // the user for the true total instead of silently logging junk data.
-  const messageHasPrice = /\b\d{1,3}(?:[.,]?\d{3}){1,3}\b|\d+\s*[kKmMbB]\b/.test(rawMessage);
-  if (amount > 0 && amount < 1000 && messageHasPrice) {
-    const reExtracted = parseAmount(rawMessage);
-    if (reExtracted >= 1000) {
-      console.warn('[ExpenseLog] Amount looked like a quantity, re-parsed:', amount, '→', reExtracted);
-      // If the extracted amount matches the quantity, it's almost certainly swapped.
-      if (quantity === 0 || amount === quantity) quantity = amount;
-      amount = reExtracted;
-    } else {
-      console.warn('[ExpenseLog] Amount suspiciously small, asking user:', amount);
-      await updateExpenseState(userId, 'awaiting_price', {
-        quantity: quantity || amount, item: item || 'expense',
-        unit: unit || 'units', project_id: projectId, vendor,
-      });
-      await sendMessage(
-        from,
-        `I saw a small number (${amount}) — did you mean that as the total cost in UGX, or was it a quantity? Please reply with the full amount. e.g. 500,000 UGX.`,
-        userId, projectId
-      );
-      return;
-    }
-  }
-
   // If quantity + item but no price → ask for price
   if ((!amount || amount <= 0) && quantity > 0 && item) {
     await updateExpenseState(userId, 'awaiting_price', { quantity, item, unit: unit || 'units', project_id: projectId, vendor });
@@ -1853,7 +1631,7 @@ async function handleExpenseLog(
       200,
       lang
     );
-    await sendMessage(from, msg, userId, projectId);
+    await sendMessage(from, msg);
     return;
   }
 
@@ -1863,7 +1641,7 @@ async function handleExpenseLog(
       'I need the amount. Try: "Bought cement for 200,000 UGX" or "Paid plumber 150k"',
       200,
       lang
-    ), userId, projectId);
+    ));
     return;
   }
 
@@ -1892,7 +1670,7 @@ async function handleExpenseLog(
     lang
   );
   const confirmMsg = anomalyAlert ? `${anomalyAlert}\n\n${msg}` : msg;
-  await sendMessage(from, confirmMsg, userId, projectId);
+  await sendMessage(from, confirmMsg);
 }
 
 async function handleMaterialLog(
@@ -1918,10 +1696,7 @@ async function handleMaterialLog(
     if (!item) item = qm[3].trim();
     if (!unit || unit === 'units') unit = qm[2].toLowerCase();
   }
-  // Only treat as 'used' when the message explicitly contains used/consumed/deducted.
-  // NEVER match on "for " alone — purchase messages like "Received cement for 1,900,000"
-  // contain "for" but are purchases, not usage, and should ADD to inventory.
-  const effectiveAction = /\b(?:used|consumed|use up|deducted?|finished using)\b/i.test(rawMessage) ? 'used' : action;
+  const effectiveAction = /used|consumed|for\s+foundation|for\s+/i.test(rawMessage) ? 'used' : action;
 
   // BUG 8: Alternative extraction for "today we used 4 bricks" / "used 4 bricks, update the inventory"
   if ((!item || item === 'material') && effectiveAction === 'used') {
@@ -1965,20 +1740,20 @@ async function handleMaterialLog(
     (MATERIAL_KEYWORDS.some(k => singleWord === k || singleWord.includes(k)) || ['bricks', 'cement', 'sand', 'gravel', 'timber', 'wood', 'steel', 'iron', 'tiles', 'paint', 'pipes', 'wire', 'blocks', 'poles', 'nails', 'aggregate', 'ballast'].some(k => singleWord === k));
   if (isSingleMaterialName && (!qty || qty <= 0) && !extracted.quantity) {
     const materialLabel = item && item !== 'material' ? item : singleWord;
-    await sendMessage(from, `How many ${materialLabel} were used? e.g. "4 bricks" or "today we used 4 bricks"`, userId, projectId);
+    await sendMessage(from, `How many ${materialLabel} were used? e.g. "4 bricks" or "today we used 4 bricks"`);
     return;
   }
 
   if (!qty || qty <= 0) qty = 1;
 
   // Garbage data prevention
-  const nameNormCheck = normalizeMaterialName(item);
+  const nameNormCheck = item.toLowerCase().trim();
   if (nameNormCheck.length < 2) {
-    await sendMessage(from, 'Please provide a valid material name (at least 2 characters).', userId, projectId);
+    await sendMessage(from, 'Please provide a valid material name (at least 2 characters).');
     return;
   }
   if (GARBAGE_MATERIAL_NAMES.includes(nameNormCheck)) {
-    await sendMessage(from, 'Please specify the actual material name (e.g. cement, bricks, sand).', userId, projectId);
+    await sendMessage(from, 'Please specify the actual material name (e.g. cement, bricks, sand).');
     return;
   }
 
@@ -1988,7 +1763,7 @@ async function handleMaterialLog(
     .select('id, name, quantity, unit, low_stock_threshold')
     .eq('project_id', projectId);
 
-  let materialName = nameNormCheck || 'material';
+  let materialName = item.toLowerCase().trim() || 'material';
 
   if (allMaterials && allMaterials.length > 0 && materialName !== 'material') {
     const fuzzyMatch = allMaterials.find((m: any) =>
@@ -2016,7 +1791,7 @@ async function handleMaterialLog(
       .maybeSingle();
 
     if (!existing) {
-      await sendMessage(from, `No material matching "${materialName}" in inventory. Add it first by logging a purchase.`, userId, projectId);
+      await sendMessage(from, `No material matching "${materialName}" in inventory. Add it first by logging a purchase.`);
       return;
     }
 
@@ -2050,7 +1825,7 @@ async function handleMaterialLog(
     if (newQty <= lowThreshold) {
       reply += ` ⚠️ Low stock (threshold: ${lowThreshold}). Consider restocking.`;
     }
-    await sendMessage(from, reply, userId, projectId);
+    await sendMessage(from, reply);
     return;
   }
 
@@ -2082,6 +1857,7 @@ async function handleMaterialLog(
       .from('materials_inventory')
       .insert({
         project_id: projectId,
+        user_id: userId,
         name: materialName,
         quantity: qty,
         unit: unit || 'units',
@@ -2115,7 +1891,7 @@ async function handleMaterialLog(
       source: 'whatsapp',
     });
     const reply = `✅ Logged! Added ${qty} ${unit} of ${materialName} to your Materials & Supplies. Current stock: ${newTotal} ${unit}.`;
-    await sendMessage(from, reply, userId, projectId);
+    await sendMessage(from, reply);
   }
 
   if (vendor) await upsertVendor(projectId, vendor, 0);
@@ -2124,7 +1900,6 @@ async function handleMaterialLog(
 async function handleLaborLog(
   from: string,
   projectId: string,
-  userId: string,
   extracted: Record<string, unknown>,
   rawMessage: string,
   lang?: string
@@ -2144,7 +1919,7 @@ async function handleLaborLog(
       'How many workers were on site today? e.g. "6 workers on site"',
       200,
       lang
-    ), userId, projectId);
+    ));
     return;
   }
 
@@ -2177,7 +1952,7 @@ async function handleLaborLog(
     200,
     lang
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
 async function handleProgressUpdate(
@@ -2197,7 +1972,7 @@ async function handleProgressUpdate(
     );
 
   const activityEntry = {
-    log_time: nowInAppTzHHmm(),
+    log_time: new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00',
     activity_type: 'Milestone',
     description: rawMessage.trim(),
   };
@@ -2229,7 +2004,7 @@ async function handleProgressUpdate(
       200,
       lang
     );
-    await sendMessage(from, msg, _userId, projectId);
+    await sendMessage(from, msg);
   } else {
     const note = String(extracted.note || rawMessage).trim();
     await upsertDailyLog(projectId, { notes: note, activity_entries: [activityEntry] });
@@ -2256,12 +2031,12 @@ async function handleProgressUpdate(
       200,
       lang
     );
-    await sendMessage(from, msg, _userId, projectId);
+    await sendMessage(from, msg);
   }
 }
 
-async function handleProjectQuery(from: string, projectId: string, userId: string, projectName: string): Promise<void> {
-  await sendMessage(from, `You are currently working on: ${projectName}`, userId, projectId);
+async function handleProjectQuery(from: string, projectId: string, projectName: string): Promise<void> {
+  await sendMessage(from, `You are currently working on: ${projectName}`);
 }
 
 async function handleIssueReport(
@@ -2295,7 +2070,7 @@ async function handleIssueReport(
 
   if (error) {
     console.error('[Issue Report]', error.message);
-    await sendMessage(from, 'Sorry, I had trouble logging that issue. Please try again or report from the dashboard.', userId, projectId);
+    await sendMessage(from, 'Sorry, I had trouble logging that issue. Please try again or report from the dashboard.');
     return;
   }
 
@@ -2305,13 +2080,12 @@ async function handleIssueReport(
     200,
     lang
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
 async function handleWeatherDelay(
   from: string,
   projectId: string,
-  userId: string,
   extracted: Record<string, unknown>,
   rawMessage: string
 ): Promise<void> {
@@ -2321,10 +2095,10 @@ async function handleWeatherDelay(
     `Tell the user their weather delay has been noted: "${reason}". Tell them it has been added to their project timeline. Express brief empathy about the delay.`,
     `Delay noted: "${reason}". Added to your project timeline.`
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
-async function handleMaterialQuery(from: string, projectId: string, userId: string, message: string): Promise<void> {
+async function handleMaterialQuery(from: string, projectId: string, message: string): Promise<void> {
   // Try to extract a specific material name (e.g. "how many bricks do I have" -> "bricks")
   const materialKeyword = message
     .replace(/how (?:much|many)|do (?:i|we) have|in (?:my )?inventory|current stock|stock (?:left|of)|remaining/i, '')
@@ -2350,7 +2124,7 @@ async function handleMaterialQuery(from: string, projectId: string, userId: stri
         ? new Date(m.last_purchased_at).toLocaleDateString(undefined, { dateStyle: 'medium' })
         : 'not recorded';
       const reply = `You have ${qty} ${unit} of ${m.name}. Last purchased: ${lastPurchased}.`;
-      await sendMessage(from, reply, userId, projectId);
+      await sendMessage(from, reply);
       return;
     }
   }
@@ -2367,7 +2141,7 @@ async function handleMaterialQuery(from: string, projectId: string, userId: stri
       'Tell the user there are no materials in inventory yet. Give an example: "Received 50 bags cement from Hima".',
       'No materials in inventory yet. Log received stock like: "Received 50 bags cement from Hima"'
     );
-    await sendMessage(from, msg, userId, projectId);
+    await sendMessage(from, msg);
     return;
   }
 
@@ -2379,12 +2153,12 @@ async function handleMaterialQuery(from: string, projectId: string, userId: stri
     `Show the user their current inventory:\n${lines}\nThen tell them they can send "Used X bags cement" to update stock. Be brief.`,
     `Current inventory:\n\n${lines}\n\nSend "Used X bags cement" to update stock.`
   );
-  await sendMessage(from, msg, userId, projectId);
+  await sendMessage(from, msg);
 }
 
 // ─── SMART_QUERY: free-form questions over historical data ─────────────────────
 
-async function handleSmartQuery(from: string, projectId: string, userId: string, question: string): Promise<void> {
+async function handleSmartQuery(from: string, projectId: string, question: string): Promise<void> {
   // BUG 7: Workers on a specific date — query daily_logs directly
   const workerDateMatch = question.match(/worker|staff|people|men|mason|came|on site/i);
   const dateMatch = question.match(/(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(january|february|march|april|may|june|july|august|september|october|november|december)|(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})|(\d{4})-(\d{2})-(\d{2})/i);
@@ -2419,11 +2193,11 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
         const reply = wc !== 'not recorded'
           ? `On ${dateFormatted}: ${wc} workers on site.${log.notes ? ` Notes: ${log.notes}` : ''}`
           : `On ${dateFormatted}: No worker count recorded.${log.notes ? ` Notes: ${log.notes}` : ''}`;
-        await sendMessage(from, reply, userId, projectId);
+        await sendMessage(from, reply);
         return;
       }
       const dateFormatted = new Date(logDate + 'T12:00:00').toLocaleDateString('en-UG', { day: 'numeric', month: 'long', year: 'numeric' });
-      await sendMessage(from, `I don't have a log for ${dateFormatted}. Check your Daily Accountability page at ${DASHBOARD_URL}/daily`, userId, projectId);
+      await sendMessage(from, `I don't have a log for ${dateFormatted}. Check your Daily Accountability page at ${DASHBOARD_URL}/daily`);
       return;
     }
   }
@@ -2515,7 +2289,6 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
       .from('expenses')
       .select('description, amount, expense_date')
       .eq('project_id', projectId)
-      .is('deleted_at', null)
       .gte('expense_date', periodStart)
       .lte('expense_date', periodEnd)
       .order('expense_date', { ascending: false });
@@ -2523,7 +2296,7 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
     const periodTotal = (periodExpenses || []).reduce((s, e: any) => s + parseFloat(String(e.amount || 0)), 0);
 
     if (!periodExpenses || periodExpenses.length === 0) {
-      await sendMessage(from, `No expenses recorded for ${periodLabel}.`, userId, projectId);
+      await sendMessage(from, `No expenses recorded for ${periodLabel}.`);
       return;
     }
 
@@ -2596,7 +2369,7 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
 
     const reply = replyParts.join('\n');
 
-    await sendMessage(from, reply, userId, projectId);
+    await sendMessage(from, reply);
     return;
   }
 
@@ -2616,7 +2389,6 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
     .from('expenses')
     .select('description, amount, expense_date, created_at')
     .eq('project_id', projectId)
-    .is('deleted_at', null)
     .gte('expense_date', fromDate)
     .order('expense_date', { ascending: false })
     .limit(500);
@@ -2670,17 +2442,17 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
       lastUpdated: m.updated_at || m.last_updated,
     })),
   };
-  const systemPrompt = `You are JengaTrack — an elite AI construction project assistant combining the expertise of a senior quantity surveyor, financial analyst, project manager, and structural engineer. Answer the user's question using the provided project data where relevant.
+  const systemPrompt = `You are JengaTrack — an elite AI construction project assistant combining the expertise of a senior quantity surveyor, financial analyst, project manager, and structural engineer.
 
-KEY RULES:
-- Project-specific facts (amounts, dates, names, stock levels) MUST come only from the JSON data below. If something is not in the data, say clearly that it is not in your records for this project — do not guess or invent figures.
-- General construction knowledge (mix ratios, methods, codes of practice) may come from your expertise.
-- For Uganda/East Africa market prices, give typical ranges only if you know them, and tell the user to verify locally.
-- For data questions: use exact numbers from the JSON (UGX with commas, readable dates).
-- For knowledge questions: be thorough — ratios, quantities, practical tips.
+RULES:
+- Answer project data questions directly and precisely from the data provided. Give actual numbers.
+- Answer ANY general construction question (mixing ratios, quantities, costs, building codes, best practices) comprehensively from your expertise as a construction professional.
+- Answer Uganda/East Africa market price questions from your knowledge (caveat prices may vary locally).
+- NEVER say "I cannot find that", "the data doesn't contain", "I don't have access", "check the dashboard".
 - Plain text only. No markdown asterisks or ** bold. Use dashes (-) for lists.
-- Use UGX for project amounts. Format numbers with commas (e.g. 1,500,000 UGX).
-- Inventory: use materialsInventory; purchases: use expenses in the JSON.`;
+- UGX with commas for all amounts (e.g. 1,500,000 UGX).
+- Dates in human-readable format (March 16, 2026 not 2026-03-16).
+- For construction knowledge: give specific numbers, ratios, practical steps — be the expert.`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
@@ -2688,7 +2460,7 @@ KEY RULES:
 
   if (gemini && process.env.GEMINI_API_KEY) {
     try {
-      const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+      const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
       const result = await model.generateContent([systemPrompt, userMessage]);
       answer = result.response.text()?.trim() || null;
       if (answer) console.log('[SmartQuery] Gemini success');
@@ -2709,19 +2481,19 @@ KEY RULES:
         max_tokens: 600,
       });
       answer = completion.choices[0]?.message?.content?.trim() || null;
-      if (answer) console.log('[SmartQuery] OpenAI gpt-4o success');
+      if (answer) console.log('[SmartQuery] GPT-4o success');
     } catch (err: any) {
       console.error('[SmartQuery] OpenAI failed:', err?.message);
     }
   }
 
   if (answer) {
-    await sendMessage(from, answer, userId, projectId);
+    await sendMessage(from, answer);
   } else {
     await sendMessage(from, await ai(
       'Tell the user you could not generate an answer right now. Suggest they try asking something like: How much did I spend on cement last month? Compare spending this month vs last month. Be brief.',
       'Could not generate an answer right now. Try: "How much did I spend on cement last month?" or "Compare spending this month vs last month"'
-    ), userId, projectId);
+    ));
   }
 }
 
@@ -2757,7 +2529,6 @@ async function handleNaturalLanguageQuery(
         .from('expenses')
         .select('description, amount, expense_date, created_at')
         .eq('project_id', projectId)
-        .is('deleted_at', null)
         .ilike('description', `%${material}%`)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -2794,10 +2565,7 @@ function parseToolCall(text: string): { tool: string; params: any } | null {
   const stripped = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
   try {
     const parsed = JSON.parse(stripped);
-    if (parsed.tool) {
-      if (parsed.params === undefined) parsed.params = {};
-      return parsed;
-    }
+    if (parsed.tool && parsed.params !== undefined) return parsed;
   } catch { /* continue to brace-matching */ }
   const start = stripped.indexOf('{"tool"');
   if (start === -1) return null;
@@ -2810,112 +2578,8 @@ function parseToolCall(text: string): { tool: string; params: any } | null {
   if (end === -1) return null;
   try {
     const parsed = JSON.parse(stripped.substring(start, end));
-    if (parsed.tool) {
-      if (parsed.params === undefined) parsed.params = {};
-      return parsed;
-    }
+    if (parsed.tool && parsed.params !== undefined) return parsed;
   } catch { /* not valid */ }
-  return null;
-}
-
-const NO_ACTIVE_PROJECT_REPLY =
-  "No active project found. Say 'switch to [project name]' to select one.";
-
-/** Guard for tools that require an active project. */
-function requireActiveProject(projectId: string | null | undefined): AgentToolResult | null {
-  if (!projectId || String(projectId).trim() === '') {
-    return { success: false, reply: NO_ACTIVE_PROJECT_REPLY };
-  }
-  return null;
-}
-
-type IssueRowLite = {
-  id: string;
-  title: string;
-  description: string | null;
-  severity: string | null;
-  status: string | null;
-};
-
-/**
- * Multi-step fuzzy match: title → description → significant words → none.
- * When statusScope is set, only issues with those statuses are considered.
- */
-async function findIssuesByKeyword(
-  projectId: string,
-  rawKeyword: string,
-  statusScope: string[] | null
-): Promise<IssueRowLite[]> {
-  const keyword = String(rawKeyword || '')
-    .toLowerCase()
-    .trim();
-  if (!keyword) return [];
-
-  const base = () => {
-    let q = supabase
-      .from('issues')
-      .select('id, title, description, severity, status')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false });
-    if (statusScope && statusScope.length > 0) {
-      q = q.in('status', statusScope);
-    }
-    return q;
-  };
-
-  let { data: issues } = await base().ilike('title', `%${keyword}%`);
-
-  if (!issues || issues.length === 0) {
-    const res = await base().ilike('description', `%${keyword}%`);
-    issues = res.data;
-  }
-
-  if (!issues || issues.length === 0) {
-    const words = keyword.split(/\s+/).filter((w) => w.length > 3);
-    for (const word of words) {
-      const safe = word.replace(/[^a-z0-9]/gi, '');
-      if (safe.length < 3) continue;
-      const res = await base().or(
-        `title.ilike.%${safe}%,description.ilike.%${safe}%`
-      );
-      if (res.data && res.data.length > 0) {
-        issues = res.data;
-        break;
-      }
-    }
-  }
-
-  return (issues || []) as IssueRowLite[];
-}
-
-/** Model output that should never be shown to site managers as-is. */
-function looksLikeModelRefusal(text: string): boolean {
-  return /i (can'?t|cannot)|don'?t have|no tool|context does not|provided context|there is no tool|as an ai|unfortunately|i apologize|not able to access|does not contain information about functionalities|outside (my|the) scope|not within my|i'm not able|i am unable|that'?s beyond|i lack the ability|i don'?t have (access|the ability)|cannot assist with that|not designed to|i'?m afraid|i do not have information|cannot provide (that|this)/i.test(
-    text,
-  );
-}
-
-/** When the model returns plain text, still execute obvious issue intents. */
-async function tryRecoverIntentFromPlainAgentReply(
-  projectId: string,
-  rawMessage: string
-): Promise<string | null> {
-  const m = rawMessage.toLowerCase().trim();
-  if (
-    /delete|remove|clear|dismiss/.test(m) &&
-    /all|every|each/.test(m) &&
-    /alert|issue|problem|risk/.test(m)
-  ) {
-    const r = await toolDeleteAllIssues(projectId);
-    return r.reply;
-  }
-  if (
-    (/clear|delete|remove/.test(m) && /resolved/.test(m) && /alert|issue|problem/.test(m)) ||
-    (/clear\s+resolved/.test(m) && /alert|issue/.test(m))
-  ) {
-    const r = await toolClearResolvedIssues(projectId);
-    return r.reply;
-  }
   return null;
 }
 
@@ -2970,10 +2634,7 @@ async function toolCreateProject(userId: string, params: any): Promise<AgentTool
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).select('id, name').single();
-  if (error || !newProject) {
-    console.error('[toolCreateProject] error:', { error, params });
-    return { success: false, reply: `Failed to create the project. ${error?.message || 'Please try again.'}` };
-  }
+  if (error || !newProject) return { success: false, reply: `Failed to create the project. ${error?.message || 'Please try again.'}` };
   await supabase.from('profiles').update({
     active_project_id: newProject.id,
     active_project_set_at: new Date().toISOString(),
@@ -2988,65 +2649,30 @@ async function toolCreateProject(userId: string, params: any): Promise<AgentTool
 
 // ─── Tool: acknowledge_issue ──────────────────────────────────────────────────
 async function toolAcknowledgeIssue(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword } = params;
-  if (!title_keyword) {
-    return { success: false, reply: 'Which alert should I acknowledge? Say part of its title.' };
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to acknowledge (part of its title).' };
+  const { data: issues } = await supabase.from('issues').select('id, title').eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`).eq('status', 'open').limit(1);
+  if (!issues || issues.length === 0) {
+    return { success: false, reply: `No open issue found matching "${title_keyword}". It may already be acknowledged or resolved.` };
   }
-  try {
-    const matches = await findIssuesByKeyword(projectId, title_keyword, ['open']);
-    if (!matches.length) {
-      const { data: openList } = await supabase
-        .from('issues')
-        .select('title, severity, status')
-        .eq('project_id', projectId)
-        .eq('status', 'open')
-        .order('created_at', { ascending: false });
-      if (!openList?.length) {
-        return { success: true, reply: '✅ No open alerts to acknowledge.' };
-      }
-      const list = openList.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
-      return {
-        success: false,
-        reply: `No alert matched "${title_keyword}". Open alerts:\n${list}\n\nWhich one should I acknowledge?`,
-      };
-    }
-    const issue = matches[0];
-    const { error } = await supabase
-      .from('issues')
-      .update({
-        status: 'acknowledged',
-        acknowledged_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', issue.id);
-    if (error) {
-      console.error('[toolAcknowledgeIssue] error:', { error, params });
-      return { success: false, reply: 'Could not update that alert. Try again.' };
-    }
-    return {
-      success: true,
-      reply: `✅ Noted — "${issue.title}" is acknowledged.`,
-      data: { title: issue.title },
-    };
-  } catch (e: any) {
-    console.error('[toolAcknowledgeIssue] error:', { error: e?.message, params });
-    return { success: false, reply: 'Could not update that alert. Try again.' };
-  }
+  const issue = issues[0];
+  await supabase.from('issues').update({
+    status: 'acknowledged',
+    acknowledged_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('id', issue.id);
+  return { success: true, reply: `✅ Issue acknowledged: "${issue.title}". It will show as acknowledged on the Issues & Risks page.`, data: { title: issue.title } };
 }
 
 // ─── Tool: edit_expense ───────────────────────────────────────────────────────
 async function toolEditExpense(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { description_keyword, new_amount, new_description, date } = params;
   if (!description_keyword) {
     return { success: false, reply: 'Please say which expense to edit (part of the description), e.g. "edit the cement expense".' };
   }
   const query = supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
-    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -3063,10 +2689,7 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
     return { success: false, reply: 'Please specify the new amount, description, or date for this expense.' };
   }
   const { error } = await supabase.from('expenses').update(updates).eq('id', expense.id);
-  if (error) {
-    console.error('[toolEditExpense] error:', { error, params });
-    return { success: false, reply: 'Failed to update that expense. Please try again.' };
-  }
+  if (error) return { success: false, reply: 'Failed to update that expense. Please try again.' };
   const oldAmt = parseFloat(String(expense.amount || 0));
   const newAmt = updates.amount ? parseFloat(updates.amount) : oldAmt;
   const parts: string[] = [];
@@ -3078,15 +2701,12 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
 
 // ─── Tool: delete_expense ─────────────────────────────────────────────────────
 async function toolDeleteExpense(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { description_keyword } = params;
   if (!description_keyword) {
     return { success: false, reply: 'Please specify which expense to delete (part of the description), e.g. "delete the cement expense".' };
   }
   const { data: expenses } = await supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
-    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -3095,31 +2715,16 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
   }
   const expense = expenses[0];
   const amt = parseFloat(String(expense.amount || 0));
-  // Soft-delete only: budget/analytics must be able to exclude this row, and
-  // we must preserve audit history. Never hard-delete money rows.
-  const { error } = await supabase
-    .from('expenses')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', expense.id)
-    .is('deleted_at', null);
-  if (error) {
-    console.error('[toolDeleteExpense] error:', { error, params });
-    return { success: false, reply: 'Failed to delete that expense. Please try again.' };
-  }
-  // Look up the project currency so we don't reply "UGX" to a KES/USD project.
-  const { data: projRow } = await supabase
-    .from('projects').select('currency').eq('id', projectId).maybeSingle();
-  const currency = String((projRow as any)?.currency || 'UGX').toUpperCase();
+  const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+  if (error) return { success: false, reply: 'Failed to delete that expense. Please try again.' };
   return {
     success: true,
-    reply: `🗑️ Removed "${expense.description}" (${fmtMoney(amt, currency)}). Budget updated.`,
+    reply: `✅ Deleted! Expense "${expense.description}" — UGX ${fmt(amt)} has been removed. Your budget and dashboard have been updated.`,
     data: { deleted: expense.description, amount: amt },
   };
 }
 
 async function toolUpdateProject(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { budget, name, description, status } = params;
   const updateData: any = { updated_at: new Date().toISOString() };
   if (budget != null && parseFloat(String(budget)) > 0) updateData.budget = parseFloat(String(budget));
@@ -3129,9 +2734,7 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   if (name && String(name).trim().length > 2) {
     const { data: current } = await supabase.from('projects').select('name').eq('id', projectId).single();
     const newName = String(name).trim();
-    // Reject if name looks AI-constructed from description (e.g. "Construction Project - Kayole")
-    const looksAutoGenerated = /^construction project\s*[-–]/i.test(newName);
-    if (!looksAutoGenerated && current && newName !== current.name) {
+    if (current && newName !== current.name) {
       updateData.name = newName;
     }
   }
@@ -3143,10 +2746,7 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
   }
   if (Object.keys(updateData).length === 1) return { success: false, reply: 'Please specify what to update — budget, name, description, or status.' };
   const { error } = await supabase.from('projects').update(updateData).eq('id', projectId);
-  if (error) {
-    console.error('[toolUpdateProject] error:', { error, params });
-    return { success: false, reply: 'Failed to update project. Please try again.' };
-  }
+  if (error) return { success: false, reply: 'Failed to update project. Please try again.' };
   const parts: string[] = [];
   if (updateData.budget) parts.push(`budget updated to UGX ${fmt(updateData.budget)}`);
   if (updateData.name) parts.push(`name updated to "${updateData.name}"`);
@@ -3156,57 +2756,21 @@ async function toolUpdateProject(projectId: string, params: any): Promise<AgentT
 }
 
 async function toolResolveIssue(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword, resolution_note } = params;
-  if (!title_keyword) {
-    return { success: false, reply: 'Which alert should I resolve? Say part of its title.' };
-  }
-  try {
-    const matches = await findIssuesByKeyword(projectId, title_keyword, ['open', 'acknowledged']);
-    if (!matches.length) {
-      const { data: cand } = await supabase
-        .from('issues')
-        .select('title, severity, status')
-        .eq('project_id', projectId)
-        .in('status', ['open', 'acknowledged'])
-        .order('created_at', { ascending: false });
-      if (!cand?.length) {
-        return { success: true, reply: '✅ No open alerts left to resolve.' };
-      }
-      const list = cand.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
-      return {
-        success: false,
-        reply: `No alert matched "${title_keyword}". Current alerts:\n${list}\n\nWhich one is resolved?`,
-      };
-    }
-    const issue = matches[0];
-    const { error } = await supabase
-      .from('issues')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', issue.id);
-    if (error) {
-      console.error('[toolResolveIssue] error:', { error, params });
-      return { success: false, reply: 'Could not mark that alert resolved. Try again.' };
-    }
-    const note = resolution_note ? ` ${resolution_note}` : '';
-    return {
-      success: true,
-      reply: `✅ Resolved: "${issue.title}".${note}`,
-      data: { title: issue.title },
-    };
-  } catch (e: any) {
-    console.error('[toolResolveIssue] error:', { error: e?.message, params });
-    return { success: false, reply: 'Could not mark that alert resolved. Try again.' };
-  }
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to resolve (part of its title).' };
+  const { data: issues } = await supabase
+    .from('issues').select('id, title').eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`).in('status', ['open', 'acknowledged']).limit(1);
+  if (!issues || issues.length === 0) return { success: false, reply: `No open issue found matching "${title_keyword}". Check the Issues page for the exact title.` };
+  const issue = issues[0];
+  await supabase.from('issues').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', issue.id);
+  return { success: true, reply: `✅ Issue resolved: "${issue.title}".${resolution_note ? ' Note: ' + resolution_note : ''} View on Issues & Risks page.`, data: { title: issue.title } };
 }
 
 async function toolLogWeatherDelay(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { reason, date } = params;
   if (!reason) return { success: false, reply: 'Please describe the weather delay.' };
-  const logDate = date || todayInAppTz();
+  const logDate = date || new Date().toISOString().split('T')[0];
   const delayNote = `Weather delay: ${reason}`;
   const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', logDate).maybeSingle();
   if (existing) {
@@ -3219,8 +2783,6 @@ async function toolLogWeatherDelay(projectId: string, params: any): Promise<Agen
 }
 
 async function toolCreateTask(_actingUserId: string, projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title, status } = params;
   if (!title) return { success: false, reply: 'Please provide a task title.' };
   const taskOwnerId = await projectOwnerProfileId(projectId);
@@ -3242,8 +2804,6 @@ async function toolCreateTask(_actingUserId: string, projectId: string, params: 
 }
 
 async function toolUpdateTask(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword, status, new_title } = params;
   if (!title_keyword) return { success: false, reply: 'Please specify which task to update.' };
   const { data: task } = await supabase
@@ -3273,8 +2833,6 @@ async function toolUpdateTask(projectId: string, params: any): Promise<AgentTool
 }
 
 async function toolDeleteTask(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword } = params;
   if (!title_keyword) return { success: false, reply: 'Please specify which task to delete.' };
   const { data: task } = await supabase
@@ -3296,182 +2854,54 @@ async function toolDeleteTask(projectId: string, params: any): Promise<AgentTool
 }
 
 async function toolUpdateIssue(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword, severity, description } = params;
-  if (!title_keyword) return { success: false, reply: 'Which alert should I update? Say part of its title.' };
-  try {
-    const matches = await findIssuesByKeyword(projectId, title_keyword, null);
-    if (!matches.length) {
-      const { data: allIssues } = await supabase
-        .from('issues')
-        .select('title, severity, status')
-        .eq('project_id', projectId)
-        .not('status', 'eq', 'resolved')
-        .order('created_at', { ascending: false });
-      if (!allIssues?.length) {
-        return { success: true, reply: '✅ No open alerts to update.' };
-      }
-      const list = allIssues.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
-      return {
-        success: false,
-        reply: `No alert matched "${title_keyword}". Open alerts:\n${list}\n\nWhich one should I change?`,
-      };
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to update.' };
+  const { data: issue } = await supabase
+    .from('issues')
+    .select('id, title, severity, description')
+    .eq('project_id', projectId)
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
+  const updates: any = { updated_at: new Date().toISOString() };
+  if (severity) {
+    const s = String(severity).toLowerCase();
+    if (!['low', 'medium', 'high', 'critical'].includes(s)) {
+      return { success: false, reply: 'Severity must be low, medium, high, or critical.' };
     }
-    const issue = matches[0];
-    const updates: any = { updated_at: new Date().toISOString() };
-    if (severity) {
-      const s = String(severity).toLowerCase();
-      if (!['low', 'medium', 'high', 'critical'].includes(s)) {
-        return { success: false, reply: 'Severity must be low, medium, high, or critical.' };
-      }
-      updates.severity = s;
-    }
-    if (description) updates.description = String(description).trim();
-    if (Object.keys(updates).length === 1) {
-      return { success: false, reply: 'Tell me the new severity or description for this alert.' };
-    }
-    const { error } = await supabase.from('issues').update(updates).eq('id', issue.id);
-    if (error) {
-      console.error('[toolUpdateIssue] error:', { error, params });
-      return { success: false, reply: 'Could not update that alert. Try again.' };
-    }
-    const parts: string[] = [];
-    if (updates.severity) parts.push(`severity → ${updates.severity}`);
-    if (updates.description) parts.push('description updated');
-    return { success: true, reply: `✅ Updated "${issue.title}": ${parts.join(', ')}.`, data: { title: issue.title } };
-  } catch (e: any) {
-    console.error('[toolUpdateIssue] error:', { error: e?.message, params });
-    return { success: false, reply: 'Could not update that alert. Try again.' };
+    updates.severity = s;
   }
+  if (description) updates.description = String(description).trim();
+  const { error } = await supabase.from('issues').update(updates).eq('id', issue.id);
+  if (error) return { success: false, reply: 'Failed to update the issue. Please try again.' };
+  const parts: string[] = [];
+  if (updates.severity) parts.push(`severity → *${updates.severity}*`);
+  if (updates.description) parts.push('description updated');
+  return { success: true, reply: `✅ Issue "${issue.title}" updated: ${parts.join(', ')}.`, data: { title: issue.title } };
 }
 
 async function toolDeleteIssue(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title_keyword } = params;
-  if (!title_keyword) {
-    return { success: false, reply: 'Which alert should I delete? Say part of its title.' };
-  }
-  try {
-    const matches = await findIssuesByKeyword(projectId, title_keyword, null);
-    if (!matches.length) {
-      const { data: allIssues } = await supabase
-        .from('issues')
-        .select('title, severity, status')
-        .eq('project_id', projectId)
-        .not('status', 'eq', 'resolved')
-        .order('created_at', { ascending: false });
-      if (!allIssues?.length) {
-        return { success: true, reply: '✅ No open alerts found — your list is already clear.' };
-      }
-      const list = allIssues.map((i: any) => `• ${i.title} (${i.severity}) — ${i.status}`).join('\n');
-      return {
-        success: false,
-        reply: `I couldn't find an alert matching "${title_keyword}". Your open alerts:\n${list}\n\nWhich one should I remove?`,
-      };
-    }
-    const issue = matches[0];
-    const { error } = await supabase.from('issues').delete().eq('id', issue.id);
-    if (error) {
-      console.error('[toolDeleteIssue] error:', { error, params });
-      return { success: false, reply: 'Could not delete that alert. Try again.' };
-    }
-    return {
-      success: true,
-      reply: `🗑️ Removed "${issue.title}" from Issues & Risks.`,
-      data: { title: issue.title },
-    };
-  } catch (e: any) {
-    console.error('[toolDeleteIssue] error:', { error: e?.message, params });
-    return { success: false, reply: 'Could not delete that alert. Try again.' };
-  }
-}
-
-async function toolDeleteAllIssues(projectId: string): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
-  const { data: issues, error: fetchError } = await supabase
-    .from('issues')
-    .select('id, title, severity, status')
-    .eq('project_id', projectId)
-    .not('status', 'eq', 'resolved');
-
-  if (fetchError) {
-    console.error('[toolDeleteAllIssues] fetch error:', fetchError);
-    return { success: false, reply: 'Could not load alerts. Try again.' };
-  }
-
-  if (!issues || issues.length === 0) {
-    return {
-      success: true,
-      reply: '✅ No open alerts to delete — your issues list is already clear.',
-    };
-  }
-
-  const count = issues.length;
-  const titles = issues.map((i) => `• ${i.title}`).join('\n');
-
-  const { error: deleteError } = await supabase
-    .from('issues')
-    .delete()
-    .eq('project_id', projectId)
-    .not('status', 'eq', 'resolved');
-
-  if (deleteError) {
-    console.error('[toolDeleteAllIssues] delete error:', deleteError);
-    return { success: false, reply: 'Could not delete those alerts. Try again.' };
-  }
-
-  return {
-    success: true,
-    reply: `🗑️ Cleared ${count} alert${count > 1 ? 's' : ''}:\n${titles}\n\nIssues & Risks is clean.`,
-    data: { deletedCount: count, deletedTitles: issues.map((i) => i.title) },
-  };
-}
-
-async function toolClearResolvedIssues(projectId: string): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
-  const { data: issues, error: fetchError } = await supabase
+  if (!title_keyword) return { success: false, reply: 'Please specify which issue to delete.' };
+  const { data: issue } = await supabase
     .from('issues')
     .select('id, title')
     .eq('project_id', projectId)
-    .eq('status', 'resolved');
-
-  if (fetchError) {
-    console.error('[toolClearResolvedIssues] fetch error:', fetchError);
-    return { success: false, reply: 'Could not load resolved alerts. Try again.' };
-  }
-
-  if (!issues || issues.length === 0) {
-    return { success: true, reply: '✅ No resolved alerts in history to clear.' };
-  }
-
-  const n = issues.length;
-  const { error: deleteError } = await supabase
-    .from('issues')
-    .delete()
-    .eq('project_id', projectId)
-    .eq('status', 'resolved');
-
-  if (deleteError) {
-    console.error('[toolClearResolvedIssues] delete error:', deleteError);
-    return { success: false, reply: 'Could not clear resolved alerts. Try again.' };
-  }
-
-  return {
-    success: true,
-    reply: `🗑️ Cleared ${n} resolved alert${n > 1 ? 's' : ''} from history.`,
-    data: { deletedCount: n },
-  };
+    .ilike('title', `%${title_keyword}%`)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!issue) return { success: false, reply: `No issue found matching "${title_keyword}".` };
+  const { error } = await supabase.from('issues').delete().eq('id', issue.id);
+  if (error) return { success: false, reply: 'Failed to delete the issue. Please try again.' };
+  return { success: true, reply: `🗑️ Issue "${issue.title}" removed from the project.`, data: { title: issue.title } };
 }
 
 async function toolLogExpense(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { description, amount, items, date, vendor } = params;
-  const expenseDate = date || todayInAppTz();
+  const expenseDate = date || new Date().toISOString().split('T')[0];
 
   if (items && Array.isArray(items) && items.length > 0) {
     for (const item of items) {
@@ -3479,16 +2909,12 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
       const desc = item.item
         ? `${item.quantity || 1} ${item.unit || 'units'} of ${item.item}`
         : description || 'Expense';
-      const { error: rowErr } = await supabase.from('expenses').insert({
+      await supabase.from('expenses').insert({
         user_id: userId, project_id: projectId, description: desc,
         amount: String(amt), quantity_logged: item.quantity ? String(item.quantity) : null,
         currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
       });
-      if (rowErr) {
-        console.error('[toolLogExpense] insert error:', { error: rowErr, params });
-        return { success: false, reply: 'Could not save that expense. Try again.' };
-      }
-      const itemName = normalizeMaterialName(item.item || '');
+      const itemName = String(item.item || '').toLowerCase().trim();
       const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
       if (isMat && item.quantity > 0 && itemName.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
         const now = new Date().toISOString();
@@ -3497,7 +2923,7 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
         if (ex) {
           await supabase.from('materials_inventory').update({ quantity: parseFloat(String(ex.quantity || 0)) + item.quantity, unit_cost: uc, total_cost: parseFloat(String(ex.total_cost || 0)) + amt, last_purchased_at: now, updated_at: now }).eq('id', ex.id);
         } else {
-          await supabase.from('materials_inventory').insert({ project_id: projectId, name: itemName, quantity: item.quantity, unit: item.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
+          await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name: itemName, quantity: item.quantity, unit: item.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
         }
       }
     }
@@ -3514,15 +2940,12 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
     description: description || `Expense: ${fmt(amt)} UGX`,
     amount: String(amt), currency: 'UGX', expense_date: expenseDate, source: 'whatsapp',
   });
-  if (error) {
-    console.error('[toolLogExpense] insert error:', { error, params });
-    return { success: false, reply: 'Could not save that expense. Try again.' };
-  }
+  if (error) return { success: false, reply: 'Failed to save that expense. Please try again.' };
 
   if (vendor) await upsertVendor(projectId, vendor, amt);
 
   if (params.item && params.quantity > 0) {
-    const itemName = normalizeMaterialName(params.item);
+    const itemName = String(params.item).toLowerCase().trim();
     const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
     if (isMat && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
       const now = new Date().toISOString();
@@ -3531,33 +2954,31 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
       if (ex) {
         await supabase.from('materials_inventory').update({ quantity: parseFloat(String(ex.quantity || 0)) + params.quantity, unit_cost: uc, total_cost: parseFloat(String(ex.total_cost || 0)) + amt, last_purchased_at: now, updated_at: now }).eq('id', ex.id);
       } else {
-        await supabase.from('materials_inventory').insert({ project_id: projectId, name: itemName, quantity: params.quantity, unit: params.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
+        await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name: itemName, quantity: params.quantity, unit: params.unit || 'units', unit_cost: uc, total_cost: amt, source: 'whatsapp', last_purchased_at: now, updated_at: now });
       }
     }
   }
 
-  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
+  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId);
   const { data: proj } = await supabase.from('projects').select('budget').eq('id', projectId).single();
   const totalSpentNow = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
   const budgetVal = parseFloat(String(proj?.budget || 0));
-  const pct = budgetVal > 0 ? Math.min(100, Math.round((totalSpentNow / budgetVal) * 100)) : 0;
+  const pct = budgetVal > 0 ? Math.round((totalSpentNow / budgetVal) * 100) : 0;
   let budgetNote = '';
-  if (totalSpentNow >= budgetVal && budgetVal > 0) budgetNote = '\n🚨 Budget exceeded!';
+  if (pct >= 100) budgetNote = '\n🚨 Budget exceeded!';
   else if (pct >= 80) budgetNote = `\n⚠️ Budget at ${pct}% — running low.`;
 
   return { success: true, reply: `✅ Logged! ${description || 'Expense'} — UGX ${fmt(amt)}.${budgetNote}`, data: { amount: amt, description } };
 }
 
 async function toolLogLabor(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { worker_count, amount, description, date } = params;
   const wc = parseInt(String(worker_count || 0), 10) || 0;
   const amt = parseFloat(String(amount || 0));
 
   if (wc > 0) await upsertDailyLog(projectId, { worker_count: wc });
   if (amt > 0) {
-    const expenseDate = date || todayInAppTz();
+    const expenseDate = date || new Date().toISOString().split('T')[0];
     await supabase.from('expenses').insert({
       user_id: userId, project_id: projectId,
       description: description || `Labour — ${wc > 0 ? wc + ' workers' : 'site crew'}`,
@@ -3573,12 +2994,10 @@ async function toolLogLabor(userId: string, projectId: string, params: any): Pro
 }
 
 async function toolUpdateInventory(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { material_name, action, quantity, unit } = params;
   if (!material_name) return { success: false, reply: 'Please specify the material name.' };
   if (!quantity || parseFloat(String(quantity)) <= 0) return { success: false, reply: 'Please specify the quantity.' };
-  const name = normalizeMaterialName(material_name);
+  const name = String(material_name).toLowerCase().trim();
   const qty = parseFloat(String(quantity));
   const now = new Date().toISOString();
   const { data: existing } = await supabase
@@ -3590,23 +3009,8 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
 
   if (action === 'use' || action === 'used') {
     if (!existing) return { success: false, reply: `"${material_name}" is not in your inventory yet. Log a purchase first.` };
-    const currentQty = parseFloat(String(existing.quantity || 0));
-    if (qty > currentQty) {
-      return { success: false, reply: `❌ Cannot use ${qty} ${unit || existing.unit || 'units'} of ${material_name} — only ${currentQty} ${existing.unit || 'units'} in stock.` };
-    }
-    const newQty = Math.max(0, currentQty - qty);
+    const newQty = Math.max(0, parseFloat(String(existing.quantity || 0)) - qty);
     await supabase.from('materials_inventory').update({ quantity: newQty, last_used_at: now, updated_at: now }).eq('id', existing.id);
-    // Log usage transaction
-    await supabase.from('material_transactions').insert({
-      material_id: existing.id,
-      project_id: projectId,
-      transaction_type: 'usage',
-      quantity: -qty,
-      unit_cost: 0,
-      total_cost: 0,
-      description: `Used ${qty} ${unit || existing.unit || 'units'} of ${material_name}`,
-      source: 'whatsapp',
-    });
     const lowWarn = newQty <= 5 ? ' ⚠️ Low stock!' : '';
     return { success: true, reply: `✅ Updated! Used ${qty} ${unit || existing.unit || 'units'} of ${material_name}. Remaining: ${newQty} ${unit || existing.unit || 'units'}.${lowWarn}`, data: { newQty } };
   }
@@ -3614,7 +3018,7 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
     if (existing) {
       await supabase.from('materials_inventory').update({ quantity: qty, unit: unit || existing.unit, updated_at: now }).eq('id', existing.id);
     } else {
-      await supabase.from('materials_inventory').insert({ project_id: projectId, name, quantity: qty, unit: unit || 'units', updated_at: now });
+      await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name, quantity: qty, unit: unit || 'units', updated_at: now });
     }
     return { success: true, reply: `✅ Stock set! ${material_name}: ${qty} ${unit || 'units'}.`, data: { newQty: qty } };
   }
@@ -3624,13 +3028,11 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
     await supabase.from('materials_inventory').update({ quantity: newQty, last_purchased_at: now, updated_at: now }).eq('id', existing.id);
     return { success: true, reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.`, data: { newQty } };
   }
-  await supabase.from('materials_inventory').insert({ project_id: projectId, name, quantity: qty, unit: unit || 'units', source: 'whatsapp', last_purchased_at: now, updated_at: now });
+  await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name, quantity: qty, unit: unit || 'units', source: 'whatsapp', last_purchased_at: now, updated_at: now });
   return { success: true, reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.`, data: { newQty: qty } };
 }
 
 async function toolLogIssue(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { title, description, severity } = params;
   if (!title) return { success: false, reply: 'Please describe the issue so I can log it.' };
   const sev = ['low', 'medium', 'high', 'critical'].includes(String(severity || '').toLowerCase()) ? String(severity).toLowerCase() : 'medium';
@@ -3638,19 +3040,14 @@ async function toolLogIssue(projectId: string, params: any): Promise<AgentToolRe
     project_id: projectId, title: String(title).substring(0, 120),
     description: description || title, severity: sev, status: 'open', type: 'general',
   });
-  if (error) {
-    console.error('[toolLogIssue] error:', { error, params });
-    return { success: false, reply: 'Could not log that alert. Try again or use the dashboard.' };
-  }
+  if (error) return { success: false, reply: 'Failed to log that issue. Please try again or report from the dashboard.' };
   return { success: true, reply: `✅ Issue logged: "${title}" (${sev} severity). View it on the Issues & Risks page.`, data: { title, severity: sev } };
 }
 
 async function toolLogProgress(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { description, worker_count, date } = params;
   if (!description) return { success: false, reply: 'Please describe the progress update.' };
-  const logTime = nowInAppTzHHmm();
+  const logTime = new Date().toISOString().split('T')[1]?.substring(0, 5) || '12:00';
   const entry = { log_time: logTime, activity_type: 'Milestone', description };
   const updateData: any = { notes: description, activity_entries: [entry] };
   const wc = parseInt(String(worker_count || 0), 10);
@@ -3687,8 +3084,6 @@ async function toolSwitchProject(userId: string, params: any, allProjects: any[]
 }
 
 async function toolUpdateDailyLog(projectId: string, params: any): Promise<AgentToolResult> {
-  const bad = requireActiveProject(projectId);
-  if (bad) return bad;
   const { date, worker_count, notes, milestones } = params;
   const wc = worker_count != null ? parseInt(String(worker_count), 10) : null;
   const updateData: any = {};
@@ -3696,7 +3091,7 @@ async function toolUpdateDailyLog(projectId: string, params: any): Promise<Agent
   if (notes) updateData.notes = notes;
   if (milestones) updateData.milestones = milestones;
   if (Object.keys(updateData).length === 0) return { success: false, reply: 'Nothing to update. Specify worker count, notes, or milestones.' };
-  const logDate = date || todayInAppTz();
+  const logDate = date || new Date().toISOString().split('T')[0];
   const { data: existing } = await supabase.from('daily_logs').select('id, notes').eq('project_id', projectId).eq('log_date', logDate).maybeSingle();
   if (existing) {
     if (notes && existing.notes) updateData.notes = `${existing.notes}\n${notes}`;
@@ -3718,7 +3113,7 @@ async function runAgent(
   profile: any,
   allProjects: any[]
 ): Promise<string> {
-  // ── Load DB context + conversation memory in one round trip (memory: last 24 rows, this user, project or unscoped) ──
+  // ── Load comprehensive DB context in parallel (full expense history for analytics) ──
   const [
     projectRes,
     expensesRecentRes,
@@ -3729,11 +3124,10 @@ async function runAgent(
     issuesRes,
     tasksRes,
     materialTxRes,
-    convHistoryRes,
   ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(120),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(2500),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(120),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(5000),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
@@ -3746,28 +3140,23 @@ async function runAgent(
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
-    supabase
-      .from('whatsapp_messages')
-      .select('direction, message_body, created_at')
-      .eq('user_id', userId)
-      .or(`project_id.eq.${projectId},project_id.is.null`)
-      .not('message_body', 'is', null)
-      .neq('message_body', '')
-      .order('created_at', { ascending: false })
-      .limit(24),
   ]);
 
-  const { data: convHistory } = convHistoryRes;
+  // ── Fetch conversation history for memory ─────────────────────────────────
+  const { data: convHistory } = await supabase
+    .from('whatsapp_messages')
+    .select('direction, message_body, created_at')
+    .eq('user_id', userId)
+    .eq('project_id', projectId)
+    .not('message_body', 'is', null)
+    .neq('message_body', '')
+    .order('created_at', { ascending: false })
+    .limit(14);
 
-  // Reverse to chronological order, exclude the current inbound message being processed
-  // by matching message_body exactly — safer than .slice(0,-1) which breaks if the inbound
-  // log failed, a concurrent message arrived, or the query returned fewer rows than expected.
   const formattedHistory = (convHistory || [])
     .reverse()
     .filter((m: any) => {
-      if (m.direction === 'inbound' && m.message_body?.trim() === rawMessage.trim()) {
-        return false;
-      }
+      if (m.direction === 'inbound' && m.message_body?.trim() === rawMessage.trim()) return false;
       return true;
     })
     .map((m: any) => ({
@@ -3776,31 +3165,17 @@ async function runAgent(
     }))
     .filter((m: any) => m.parts[0].text.length > 0);
 
-  let chatHistoryForModel = formattedHistory;
-  const firstUserIdx = chatHistoryForModel.findIndex((m: any) => m.role === 'user');
-  if (firstUserIdx > 0) {
-    chatHistoryForModel = chatHistoryForModel.slice(firstUserIdx);
-  }
-
   const project = projectRes.data;
   const allExpenses = (expensesFullRes.data || []).map((e: any) => ({
     description: e.description,
     amount: parseFloat(String(e.amount || 0)),
     date: e.expense_date as string,
   }));
-  const materials = (materialsRes.data || []).map((m: any) => {
-    const stock = parseFloat(String(m.quantity || 0));
-    const unitCostUgx = parseFloat(String(m.unit_cost || 0));
-    return {
-      name: m.name, stock, unit: m.unit, unitCostUgx,
-      // currentValueUgx = current stock × unit cost (what inventory is worth NOW)
-      currentValueUgx: Math.round(stock * unitCostUgx),
-      // purchaseTotalUgx = accumulated spend (historical, includes consumed stock)
-      purchaseTotalUgx: parseFloat(String(m.total_cost || 0)),
-      lastPurchased: m.last_purchased_at,
-      lastUsed: m.last_used_at, lowStockAt: m.low_stock_threshold,
-    };
-  });
+  const materials = (materialsRes.data || []).map((m: any) => ({
+    name: m.name, stock: m.quantity, unit: m.unit, unitCostUgx: m.unit_cost,
+    totalCostUgx: m.total_cost, lastPurchased: m.last_purchased_at,
+    lastUsed: m.last_used_at, lowStockAt: m.low_stock_threshold,
+  }));
   const vendors = (!vendorsRes.error && vendorsRes.data)
     ? vendorsRes.data.map((v: any) => ({
         name: v.name, totalSpentUgx: parseFloat(String(v.total_spent || 0)), transactions: v.total_transactions,
@@ -3814,11 +3189,7 @@ async function runAgent(
     weatherCondition: l.weather_condition,
   }));
   const allIssues = (issuesRes.data || []).map((i: any) => ({
-    title: i.title,
-    severity: i.severity,
-    status: i.status,
-    date: i.created_at?.split('T')[0],
-    label: `${i.title} (${i.severity}) — ${i.status}`,
+    title: i.title, severity: i.severity, status: i.status, date: i.created_at?.split('T')[0],
   }));
   const tasks = (!tasksRes.error && tasksRes.data)
     ? tasksRes.data.map((t: any) => ({ title: t.title, status: t.status, completedAt: t.completed_at }))
@@ -3903,33 +3274,20 @@ async function runAgent(
   const totalSpent = allExpenses.reduce((s, e) => s + e.amount, 0);
   const budget = parseFloat(String(project?.budget || 0));
   const remaining = Math.max(0, budget - totalSpent);
-  // Cap at 100 to match dashboard display (dashboard uses Math.min(100, ...))
-  const pctUsed = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
+  const pctUsed = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
 
-  // Unified burn-rate: mirrors dashboard's computeWeeklyBurnRate logic exactly.
-  // spannedDays < 4 → use per-active-day avg × 7 (avoids inflating for single-day data)
-  // Otherwise → use total spent / days since first expense × 7
+  // Unified burn-rate: use actual days elapsed since first expense date (avoids inflating when
+  // the project was created weeks ago but spending only started recently).
   let weeklyBurnRate = 0;
-  if (allExpenses.length > 0 && totalSpent > 0) {
+  if (allExpenses.length > 0) {
     const expenseDates = allExpenses
       .map((e) => (e.date ? new Date(e.date + 'T12:00:00').getTime() : null))
       .filter((t): t is number => t !== null);
-    if (expenseDates.length > 0) {
-      const firstExpenseMs = Math.min(...expenseDates);
-      const lastExpenseMs = Math.max(...expenseDates);
-      const spannedDays = Math.max(1, (lastExpenseMs - firstExpenseMs) / 86400000);
-      const daysSinceFirst = Math.max(1, (now.getTime() - firstExpenseMs) / 86400000);
-      const uniqueExpDates = new Set(allExpenses.map((e) => e.date).filter(Boolean));
-      const daysWithSpending = Math.max(1, uniqueExpDates.size);
-      weeklyBurnRate = spannedDays < 4
-        ? Math.round((totalSpent / daysWithSpending) * 7)
-        : Math.round((totalSpent / daysSinceFirst) * 7);
-    }
+    const firstExpenseMs = expenseDates.length > 0 ? Math.min(...expenseDates) : now.getTime();
+    const daysSinceFirst = Math.max(1, (now.getTime() - firstExpenseMs) / (1000 * 60 * 60 * 24));
+    weeklyBurnRate = Math.round((totalSpent / daysSinceFirst) * 7);
   }
   const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
-  const projectedRunoutDate = weeksRemaining !== null
-    ? new Date(now.getTime() + weeksRemaining * 7 * 86400000).toISOString().split('T')[0]
-    : null;
 
   const workerLogs = dailyLogs.filter((l) => l.workers && l.workers > 0);
   const avgWorkersPerDay = workerLogs.length > 0
@@ -3938,8 +3296,7 @@ async function runAgent(
   const peakWorkers = workerLogs.length > 0 ? Math.max(...workerLogs.map((l) => l.workers || 0)) : 0;
   const todayLog = dailyLogs.find((l) => l.date === todayStr);
   const workersToday = todayLog?.workers || 0;
-  // Default low_stock_threshold to 5 when null — same as dashboard
-  const lowStock = materials.filter((m) => m.stock <= (m.lowStockAt ?? 5));
+  const lowStock = materials.filter((m) => m.lowStockAt != null && m.stock <= m.lowStockAt);
 
   const todayFormatted = now.toLocaleDateString('en-UG', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   const userName = profile?.full_name && profile.full_name !== 'WhatsApp User'
@@ -3973,8 +3330,8 @@ async function runAgent(
       monthlyTrend,
       burnRate: {
         weeklyUgx: weeklyBurnRate,
+        weeksElapsed,
         weeksRemaining,
-        projectedRunoutDate,
         projectedOverBudget: remaining <= 0,
       },
       workers: {
@@ -3983,13 +3340,11 @@ async function runAgent(
         peak: peakWorkers,
         totalDaysLogged: workerLogs.length,
       },
-      // totalInventoryValueUgx = Σ(currentStock × unitCost) — what all materials are worth right now
-      totalInventoryValueUgx: Math.round(materials.reduce((s, m) => s + m.currentValueUgx, 0)),
-      lowStockAlerts: lowStock.map((m) => `${m.name}: ${m.stock} ${m.unit} left (threshold: ${m.lowStockAt ?? 5})`),
+      lowStockAlerts: lowStock.map((m) => `${m.name}: ${m.stock} ${m.unit} left (threshold: ${m.lowStockAt})`),
       topVendors: vendors.slice(0, 5),
       totalExpenseRecords: allExpenses.length,
     },
-    recentExpenses: (expensesRecentRes.data || []).slice(0, 20).map((e: any) => ({
+    expenses: (expensesRecentRes.data || []).map((e: any) => ({
       description: e.description,
       amountUgx: Math.round(parseFloat(String(e.amount || 0))),
       date: e.expense_date,
@@ -4016,85 +3371,56 @@ async function runAgent(
   });
 
   // ── System prompt ─────────────────────────────────────────────────────────
-  const systemPrompt = `CRITICAL: Never compute totals or sums yourself from recentExpenses. All financial totals are pre-computed in analytics.spendingPeriods and analytics.spendingByCategory — use those values directly.
+  const systemPrompt = `CRITICAL: Never compute totals or sums yourself from the expenses array. All financial totals are pre-computed in analytics.spendingPeriods and analytics.spendingByCategory — use those values directly.
 
-You are JengaTrack — an elite AI construction project assistant, combining the intelligence of a senior quantity surveyor, financial analyst, project manager, and structural engineer. You work for ${userName} on their construction project in Uganda/East Africa. You have COMPLETE access to the live project database shown below and can take any action or answer any question.
+You are JengaTrack — an elite AI construction project assistant combining the intelligence of a senior quantity surveyor, financial analyst, project manager, and structural engineer. You behave like Claude AI but specialized for construction in Uganda/East Africa. You work for ${userName} and have COMPLETE access to the live project database below.
 
 TODAY: ${todayFormatted}
 USER: ${userName}
 ACTIVE PROJECT: ${project?.name || 'Unknown'}
-MEMORY: You have the recent WhatsApp thread in this chat — use it for follow-ups ("why?", "what about cement?", "same as last time"). Do not ignore the user's last few messages.
 
 ━━━ LIVE PROJECT DATABASE ━━━
 ${contextBlock}
 
 ━━━ YOUR COMPLETE CAPABILITIES ━━━
-1. Finance: log expenses (single/multi-item/labor), edit or delete expenses, update project budget, analyse spending by month/vendor/category/item
-2. Materials: add/use/set inventory, check stock levels, identify low-stock items, log material transactions
-3. Daily logs: record workers, progress notes, milestones, weather delays; query any past date
-4. Issues & Alerts: log new issues, acknowledge/resolve/update/delete issues, delete ALL open issues, clear resolved history, list all open issues
-5. Tasks: create/update/complete/delete tasks, list pending tasks, track milestones
-6. Projects: create new projects, update budget/name/description/status, switch between projects
-7. Profile: update name, WhatsApp number, or language preference
-8. Analytics: budget burn rate, vendor spending, monthly trends, worker patterns, category breakdowns — all pre-computed
-9. Construction expertise: answer ANY construction question — mixing ratios, structural calculations, quantity estimation, Ugandan building costs, material specifications, best practices, building codes, project planning
+1. Finance: log expenses (single/multi-item/labor), edit/delete expenses, update budget, analyse spending
+2. Materials: add/use/set inventory, check stock, identify low-stock items, log transactions
+3. Daily logs: record workers, progress, milestones, weather delays, query any past date
+4. Issues & Alerts: log/acknowledge/resolve/update/delete issues, list open issues
+5. Tasks: create/update/complete/delete tasks, list pending tasks
+6. Projects: create new projects, update budget/name/status, switch between projects
+7. Profile: update name, WhatsApp number, language preference
+8. Analytics: burn rate, vendor history, monthly trends, worker patterns — all pre-computed above
+9. Construction expertise: answer ANY construction question — mixing ratios, structural calculations, quantity estimation, Uganda/East Africa building costs and codes, material specifications, best practices
 
-━━━ WEB APP PARITY — SAME POWER AS THE DASHBOARD ━━━
-The WhatsApp bot is the same product as the web app (sidebar: Home, Budget, Materials, Daily, Trends, Projects, Settings). Map every request to the equivalent action:
-- Home / overview / "how is the project" / KPIs → answer from analytics + project in context (plain text or query_data).
-- Budget & Costs → log_expense, edit_expense, delete_expense; total budget → update_project.
-- Materials & Supplies → update_inventory; stock and value → materialsInventory in context.
-- Daily accountability / site log → get_daily_summary, log_progress, update_daily_log, log_weather_delay.
-- Trends / comparisons → compare_periods + analytics.spendingPeriods (never re-sum raw expenses for totals).
-- Projects → create_project, switch_project, userProjects list in context.
-- Issues & risks → log_issue, acknowledge/resolve/update/delete issues, delete_all_issues, clear_resolved_issues.
-- Tasks → create_task, update_task, delete_task.
-- Profile → update_profile.
+━━━ YOU ARE LIKE CLAUDE AI FOR CONSTRUCTION ━━━
+You behave like a brilliant, helpful AI (similar to Claude or ChatGPT) but specialized for construction:
 
-When the user asks to "list everything", "show all my data", "what's on the project" — give a clear, structured rundown using issues, tasks, materialsInventory, analytics, recentExpenses, and daily logs from context.
+- GENERAL CONSTRUCTION QUESTIONS: answer fully from your expertise:
+  "how do I mix concrete for a slab?", "what is standard rebar spacing?", "how many bags of cement for a 10x10 room?", "Uganda National Building Code?", "how do I prevent waterproofing issues?", "difference between OPC and PPC cement?", "how to cure concrete?", "correct mortar ratio?", "standard column size for 3 floors?"
+  For ALL of these: give a complete, expert answer. Never say "I cannot answer that."
 
-━━━ RESPONSE MODE — LIKE AN LLM, BUT GROUNDED ━━━
-Each reply uses ONE of these (your choice):
-1) PLAIN TEXT (preferred for read-only): Questions, lists, analysis, advice, general construction knowledge, follow-ups ("why?", "what about cement?"), chitchat. Build answers from LIVE PROJECT DATABASE + your expertise. For project-specific numbers/dates/names, only use what appears in the JSON context — if missing, say it is not in your records (do not guess).
-2) JSON TOOL CALL (required for writes): Any create/update/delete/log/switch, plus structured readers get_daily_summary and compare_periods. Use query_data only when you want to return a long answer through the tool pipeline; otherwise plain text is faster and equally valid.
+- PROJECT DATA: use the database above to give precise answers.
 
-Do not wrap simple read-only answers in query_data JSON unless you prefer that pattern — plain text is correct.
+- UGANDA/EAST AFRICA MARKET PRICES: answer from knowledge (cement ~38,000-45,000 UGX/bag in 2025, rebar, labour rates, truck hire). Caveat that prices change and should be verified locally.
 
-━━━ ANSWERING ANY QUESTION — YOU ARE LIKE CLAUDE AI FOR CONSTRUCTION ━━━
-You behave like a brilliant, helpful AI assistant (similar to Claude or ChatGPT) but specialized for construction. This means:
+- PERSONAL/CONVERSATIONAL: respond warmly and helpfully.
 
-- If the user asks a GENERAL CONSTRUCTION QUESTION (not specific to their project data), answer it fully from your expertise:
-  Examples: "how do I mix concrete for a slab?", "what is the standard rebar spacing for a foundation?", "how many bags of cement for a 10x10 room?", "what are Uganda National Building Code requirements?", "how do I prevent waterproofing issues?", "what is the difference between OPC and PPC cement?", "how do I calculate concrete volume?", "what causes foundation cracks?", "how should I cure concrete?", "what is the correct ratio for mortar?"
-  For ALL of these: give a complete, expert answer. Never say "I cannot answer that" or "use the dashboard".
+- NEVER: say "I cannot help with that", "outside my scope", "I don't have access", "please check the dashboard", "I am an AI", "the context does not contain". These are NEVER acceptable responses.
 
-- If the user asks about THEIR PROJECT DATA, use the database above to give a precise answer.
-
-- If the user asks about COSTS, PRICES, or MARKET RATES in Uganda/East Africa, give your best knowledge:
-  Examples: cement bag price (~38,000-45,000 UGX in 2025), rebar per tonne, labour rates per day, truck hire rates. Caveat that prices change and they should verify locally.
-
-- If the user asks a PERSONAL or CONVERSATIONAL question, respond warmly and helpfully.
-
-- NEVER refuse to engage. For general construction theory, give a full expert answer.
-- For THIS PROJECT's numbers: only state amounts, dates, and names that appear in LIVE PROJECT DATABASE (or that you compute from those fields). If the user asks for data that is not in context, say clearly it is not showing in their records and suggest what to log or check.
-
-- If the user asks a PERSONAL or CONVERSATIONAL question, respond warmly and helpfully.
-
-- Do not claim you performed a dashboard action unless you used the matching tool in your JSON response for that turn.
+━━━ ANALYTICS — USE PRE-COMPUTED VALUES ━━━
 All time-period amounts are in analytics.spendingPeriods — USE THEM DIRECTLY, do not re-sum from the expenses array:
-- last 7 days → analytics.spendingPeriods.last7Days (= ${fmt(spendLast7Days)} UGX)
-- this month → analytics.spendingPeriods.thisMonth (= ${fmt(spendThisMonth)} UGX)
-- last month → analytics.spendingPeriods.lastMonth (= ${fmt(spendLastMonth)} UGX)
-- this week → analytics.spendingPeriods.thisWeek (= ${fmt(spendThisWeek)} UGX)
-- last week → analytics.spendingPeriods.lastWeek (= ${fmt(spendLastWeek)} UGX)
-- month vs last month → use thisMonth, lastMonth, and monthOverMonthChangePercent (${momChange !== null ? momChange + '%' : 'N/A'})
-- Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining at this rate (projected runout: ' + projectedRunoutDate + ')' : 'unknown weeks remaining'}
+- last 7 days: ${fmt(spendLast7Days)} UGX
+- this month: ${fmt(spendThisMonth)} UGX
+- last month: ${fmt(spendLastMonth)} UGX
+- this week: ${fmt(spendThisWeek)} UGX
+- last week: ${fmt(spendLastWeek)} UGX
+- month vs last month: ${momChange !== null ? momChange + '%' : 'N/A'}
+- Burn rate: ${fmt(weeklyBurnRate)} UGX/week, ~${weeksRemaining !== null ? weeksRemaining + ' weeks remaining' : 'unknown weeks remaining'}
 - Workers today: ${workersToday}, average: ${avgWorkersPerDay}/day, peak: ${peakWorkers}
+Today is ${todayStr}. For "X days ago" questions, count backward. Never say you do not know the current date.
 
-Today is ${todayStr}. For "X days ago" questions, count backward from this date. Never say you do not know the current date.
-
-Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?", search by date. If no log, say nothing was logged that day.
-
-━━━ TOOLS — when writing data or using get_daily_summary / compare_periods, return ONLY this JSON (no other text). For read-only chat, use plain text instead. ━━━
+━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
 {"tool":"log_expense","params":{"description":"...","amount":total,"items":[{"item":"name","quantity":n,"unit":"bags","unit_price":n,"total":n}]}}
 {"tool":"log_labor","params":{"worker_count":number,"amount":number,"description":"...","date":"YYYY-MM-DD"}}
@@ -4102,152 +3428,125 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"log_issue","params":{"title":"...","description":"...","severity":"low|medium|high|critical"}}
 {"tool":"acknowledge_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"resolve_issue","params":{"title_keyword":"part of issue title","resolution_note":"optional"}}
+{"tool":"update_issue","params":{"title_keyword":"part of issue title","severity":"low|medium|high|critical","description":"optional"}}
+{"tool":"delete_issue","params":{"title_keyword":"part of issue title"}}
+{"tool":"delete_all_issues","params":{}}
+{"tool":"clear_resolved_issues","params":{}}
 {"tool":"edit_expense","params":{"description_keyword":"part of existing expense desc","new_amount":number,"new_description":"optional","date":"YYYY-MM-DD optional"}}
 {"tool":"delete_expense","params":{"description_keyword":"part of existing expense description"}}
 {"tool":"log_progress","params":{"description":"...","worker_count":number,"date":"YYYY-MM-DD"}}
 {"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
 {"tool":"update_project","params":{"budget":number}}
-// CRITICAL: ONLY include "name" if user explicitly asked to rename. NEVER auto-generate or infer a name.
-{"tool":"create_project","params":{"name":"...","budget":number,"description":"optional location or notes"}}
+{"tool":"create_project","params":{"name":"...","budget":number,"description":"optional"}}
 {"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
 {"tool":"create_task","params":{"title":"...","status":"pending|completed"}}
-{"tool":"update_task","params":{"title_keyword":"part of task title","status":"pending|in_progress|completed","new_title":"optional new title"}}
+{"tool":"update_task","params":{"title_keyword":"part of task title","status":"pending|in_progress|completed","new_title":"optional"}}
 {"tool":"delete_task","params":{"title_keyword":"part of task title"}}
-{"tool":"update_issue","params":{"title_keyword":"part of issue title","severity":"low|medium|high|critical","description":"optional updated description"}}
-{"tool":"delete_issue","params":{"title_keyword":"part of issue title or distinctive words"}}
-{"tool":"delete_all_issues","params":{}}
-{"tool":"clear_resolved_issues","params":{}}
 {"tool":"switch_project","params":{"project_name_or_id":"..."}}
 {"tool":"query_data","params":{"answer":"your complete answer to the user's question"}}
 {"tool":"get_daily_summary","params":{"date":"YYYY-MM-DD"}}
 {"tool":"compare_periods","params":{}}
 
 ━━━ DECISION GUIDE ━━━
-- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT any project data → JSON tool only (no plain text).
-- User asks a QUESTION, wants a LIST, summary, "what", "how much", "show me", analysis, OR general construction knowledge → PLAIN TEXT answer from context + expertise (preferred). You may use query_data JSON instead if you want, but plain text is equivalent for read-only.
-- User asks ANYTHING else (weather, advice, personal) → plain text, helpful.
-- "any alerts/issues/problems?" → answer from issues.open in plain text. NEVER call log_issue for a question.
-- "delete all alerts/issues/problems" → delete_all_issues {}
-- "clear resolved alerts" → clear_resolved_issues {}
-- "delete the [X] issue/alert" → delete_issue {title_keyword: "identifying words"}
+- LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return JSON tool call only
+- QUESTION about project data → query_data with full answer
+- GENERAL CONSTRUCTION QUESTION → query_data with comprehensive expert answer
+- ANY other question → query_data and answer helpfully
+- "any alerts/issues?" → list from issues.open. NEVER call log_issue for a question.
+- "delete all alerts/issues" → delete_all_issues {}
+- "clear resolved" → clear_resolved_issues {}
+- "delete [X] issue" → delete_issue {title_keyword}
 - "switch to X project" → switch_project immediately
-- "update my name / change language" → update_profile
-- "create a new project" → create_project
-- "acknowledge/resolve the X issue" → acknowledge_issue or resolve_issue
-- "edit/correct the X expense" → edit_expense; "delete/remove the X expense" → delete_expense
-- "mark task X as done" → update_task with status=completed
-- "what happened on March 20?" → get_daily_summary with date YYYY-MM-DD
-- "compare this week to last" / "this month vs last month" → compare_periods
-- General construction question (mixing ratios, quantities, best practices, costs, codes) → plain text expert answer (or query_data if you prefer)
+- "update name/language" → update_profile
+- "create project" → create_project
+- "acknowledge/resolve [X]" → acknowledge_issue or resolve_issue
+- "edit/correct [X] expense" → edit_expense
+- "delete [X] expense" → delete_expense
+- "mark task [X] done" → update_task with status=completed
+- "what happened on [date]?" → get_daily_summary with YYYY-MM-DD
+- "compare this week vs last" → compare_periods
+- General construction question → query_data with expert answer
 
 ━━━ CRITICAL RULES ━━━
-1. Workers/masons/labourers/staff = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
-2. "any alerts/issues?" = QUESTION. List from issues.open. Never create a new issue for a question.
+1. Workers/masons/labourers = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
+2. "any alerts?" = QUESTION. List from issues.open. Never log_issue for a question.
 3. Amounts: K=1,000 | M=1,000,000 | B=1,000,000,000. "paid 3 workers 25k each" → amount = 75,000. Always multiply.
 4. NEVER expose UUIDs or raw database IDs in replies.
-5. NEVER say "I cannot do that", "I don't have that functionality", "the context does not contain", "there is no tool for", "please use the format X", "check your dashboard for that", "I am an AI", or similar refusals.
+5. NEVER say "I cannot", "I don't have", "context does not contain", "please check dashboard", "I am an AI".
 6. Dates in replies: "March 16, 2026" not "2026-03-16".
-7. Currency: always UGX with commas: 1,500,000 UGX.
-8. If genuinely unsure what the user wants, ask ONE short clarifying question (plain text).
-9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
-10. For multi-part questions, answer ALL parts in one reply.
-11. For delete/create/update/log requests, ALWAYS return ONLY the JSON tool call — never plain text for those actions.
-12. "delete all alerts/issues/problems" → ALWAYS call delete_all_issues with {}. NEVER say you cannot bulk-delete.
-13. "delete/remove the [X] alert/issue" → ALWAYS call delete_issue with title_keyword = the most identifying words.
-14. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate a project name.
-15. When answering construction knowledge questions, be thorough and specific — give actual numbers, ratios, and practical advice, not vague generalities.
-16. If the user switches to Luganda, Swahili, or any other language mid-conversation, respond in that language immediately.
+7. Currency: UGX with commas: 1,500,000 UGX.
+8. If unsure: ask ONE short clarifying question via query_data.
+9. For multi-part questions: answer ALL parts in one reply.
+10. For delete/create/update/log: ALWAYS return ONLY the JSON tool call.
+11. update_project: ONLY include params user explicitly asked to change. NEVER auto-generate a project name.
+12. When answering construction knowledge: give actual numbers, ratios, and practical advice. Be the expert.
+13. If user switches language mid-conversation: respond in that language immediately.
 
 ━━━ FORMATTING ━━━
-- Plain text only. No markdown asterisks, no ** bold, no * bullets.
-- Use dashes (-) for lists. WhatsApp renders asterisks as raw characters.
-- For analytics: show actual numbers with context (vs budget, vs last month, vs average).
-- Be thorough on analysis and knowledge questions. Be concise on simple confirmations.
-- For construction knowledge answers: structure clearly with dashes, give specific numbers and ratios, be the expert.`;
+Plain text only. No markdown asterisks, no ** bold, no * bullets.
+Use dashes (-) for lists. WhatsApp renders asterisks as raw characters.
+Be thorough on analysis and knowledge questions. Be concise on simple confirmations.`;
 
   const userPrompt = rawMessage;
 
-  // ── Call AI (Gemini primary, OpenAI fallback) ──────────────────────────────
+  // ── Call AI (Gemini primary with history, GPT-4o fallback) ────────────────
   let rawResponse: string | null = null;
 
-  try {
-    if (gemini && process.env.GEMINI_API_KEY) {
-      for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
-        try {
-          const model = gemini.getGenerativeModel({
-            model: modelName,
-            systemInstruction: systemPrompt,
-            generationConfig: {
-              temperature: 0.2,
-              maxOutputTokens: 2048,
-            },
-          });
-          const chat = model.startChat({ history: chatHistoryForModel });
-          const result = await chat.sendMessage(userPrompt);
-          rawResponse = result.response.text()?.trim() || null;
-          if (rawResponse) {
-            console.log(`[Agent] Gemini (${modelName}):`, rawResponse.substring(0, 120));
-            break;
-          }
-        } catch (err: any) {
-          console.error(`[Agent] Gemini ${modelName} failed:`, err?.message);
-        }
-      }
-    }
-
-    if (!rawResponse && process.env.OPENAI_API_KEY) {
+  if (gemini && process.env.GEMINI_API_KEY) {
+    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
       try {
-        const historyMessages = chatHistoryForModel.map((m: any) => ({
-          role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
-          content: m.parts[0].text,
-        }));
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...historyMessages,
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.2,
-          max_tokens: 1200,
-        });
-        rawResponse = completion.choices[0]?.message?.content?.trim() || null;
-        if (rawResponse) console.log('[Agent] OpenAI gpt-4o:', rawResponse.substring(0, 120));
+        const model = gemini.getGenerativeModel({ model: modelName, systemInstruction: systemPrompt });
+        const chat  = model.startChat({ history: formattedHistory });
+        const result = await chat.sendMessage(userPrompt);
+        rawResponse = result.response.text()?.trim() || null;
+        if (rawResponse) {
+          console.log(`[Agent] Gemini (${modelName}):`, rawResponse.substring(0, 120));
+          break;
+        }
       } catch (err: any) {
-        console.error('[Agent] OpenAI failed:', err?.message);
+        console.error(`[Agent] Gemini ${modelName} failed:`, err?.message);
       }
     }
-  } catch (aiError: any) {
-    console.error('[Agent] AI call failed:', {
-      error: aiError?.message,
-      stack: aiError?.stack?.split('\n').slice(0, 5).join('\n'),
-      messagePreview: rawMessage.substring(0, 80),
-    });
-    return "I'm having a moment — please try again. Your project data is safe.";
+  }
+
+  if (!rawResponse && process.env.OPENAI_API_KEY) {
+    try {
+      const histMsgs = formattedHistory.map((m: any) => ({
+        role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: m.parts[0].text,
+      }));
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...histMsgs,
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      });
+      rawResponse = completion.choices[0]?.message?.content?.trim() || null;
+      if (rawResponse) console.log('[Agent] GPT-4o:', rawResponse.substring(0, 120));
+    } catch (err: any) {
+      console.error('[Agent] GPT-4o failed:', err?.message);
+    }
   }
 
   if (!rawResponse) {
     return "I'm having trouble connecting right now. Try again in a moment, or check your dashboard directly.";
   }
 
+  // ── Parse tool call or return plain text ───────────────────────────────────
   const toolCall = parseToolCall(rawResponse);
   if (!toolCall) {
-    const recovered = await tryRecoverIntentFromPlainAgentReply(projectId, rawMessage);
-    if (recovered) return recovered;
-    let cleaned = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
-    if (looksLikeModelRefusal(cleaned)) {
-      cleaned =
-        'Say what you want next in one line — e.g. budget check, log an expense, or stock for a material. I work best with short, clear requests.';
-    }
-    return cleaned;
+    return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
   }
 
   console.log('[Agent] Tool:', toolCall.tool, JSON.stringify(toolCall.params).substring(0, 100));
 
   let result: AgentToolResult;
-  try {
-    switch (toolCall.tool) {
+  switch (toolCall.tool) {
     case 'log_expense':
       result = await toolLogExpense(userId, projectId, toolCall.params);
       break;
@@ -4308,20 +3607,12 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     case 'switch_project':
       result = await toolSwitchProject(userId, toolCall.params, allProjects);
       break;
-    case 'query_data': {
-      let ans =
-        String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.';
-      if (looksLikeModelRefusal(ans)) {
-        // Attempt to answer from construction knowledge directly
-        ans = await ai(
-          `The user asked: "${rawMessage}". Answer this question as a senior construction expert for an African/Ugandan building project. Be specific, helpful and comprehensive. If it is a general construction question, give detailed expert advice with specific ratios, quantities and practical guidance. Plain text only.`,
-          'What would you like help with? I can log expenses, answer construction questions, check your budget, or update materials.',
-          500
-        );
-      }
-      result = { success: true, reply: ans };
+    case 'query_data':
+      result = {
+        success: true,
+        reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
+      };
       break;
-    }
     case 'get_daily_summary': {
       const queryDate = String(toolCall.params.date || todayStr);
       const log = dailyLogs.find((l: any) => l.date === queryDate);
@@ -4368,26 +3659,12 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
       };
       break;
     }
-    case 'delete_all_issues':
-      result = await toolDeleteAllIssues(projectId);
-      break;
-    case 'clear_resolved_issues':
-      result = await toolClearResolvedIssues(projectId);
-      break;
     default:
       console.log('[Agent] Unknown tool:', toolCall.tool);
       return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || "Got it! What else can I help with?";
   }
 
   return result.reply;
-  } catch (execErr: any) {
-    console.error('[Agent] Tool execution failed:', {
-      tool: toolCall.tool,
-      message: execErr?.message,
-      stack: execErr?.stack?.split('\n').slice(0, 5).join('\n'),
-    });
-    return "That didn't go through — try again. Your project data is safe.";
-  }
 }
 
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
@@ -4412,7 +3689,7 @@ export async function sendDailyHeartbeat(): Promise<void> {
 
     if (!owner?.whatsapp_number) continue;
 
-    const today = todayInAppTz();
+    const today = new Date().toISOString().split('T')[0];
 
     // Today's log
     const { data: todayLog } = await supabase
@@ -4422,22 +3699,21 @@ export async function sendDailyHeartbeat(): Promise<void> {
       .eq('log_date', today)
       .maybeSingle();
 
-    // Today's expenses (exclude soft-deleted; filter by expense_date for accuracy)
+    // Today's expenses
     const { data: todayExpenses } = await supabase
       .from('expenses')
       .select('amount')
       .eq('project_id', project.id)
-      .is('deleted_at', null)
-      .eq('expense_date', today);
+      .gte('created_at', `${today}T00:00:00`);
 
     const dailySpend = (todayExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
 
-    // Total spend (exclude soft-deleted to match dashboard)
+    // Total spend
     const { data: allExpenses } = await supabase
-      .from('expenses').select('amount').eq('project_id', project.id).is('deleted_at', null);
+      .from('expenses').select('amount').eq('project_id', project.id);
     const totalSpent = (allExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
     const budget = parseFloat(String(project.budget || 0));
-    const pct = budget > 0 ? Math.min(100, Math.round((totalSpent / budget) * 100)) : 0;
+    const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
 
     const hadActivity = todayLog !== null;
 
@@ -4480,87 +3756,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('✅ Webhook called:', { phoneNumber, message: message.substring(0, 80), hasMedia, MediaContentType0 });
 
-    // ── Twilio signature validation ──────────────────────────────────────────
-    // Twilio signs every webhook with HMAC-SHA1 over (url + sorted form params).
-    // Without this check, anyone who knows/guesses the webhook URL can inject
-    // fake messages and log expenses on behalf of real users.
-    //
-    // The check runs only when TWILIO_AUTH_TOKEN is configured and the
-    // WEBHOOK_PUBLIC_URL is known. Set SKIP_TWILIO_SIGNATURE=1 in dev/tunnel
-    // setups where the public URL is awkward to pin down.
-    const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-    const skipSig = process.env.SKIP_TWILIO_SIGNATURE === '1';
-    const signatureHeader = (req.headers['x-twilio-signature'] || req.headers['X-Twilio-Signature']) as string | undefined;
-    if (twilioAuthToken && !skipSig) {
-      const proto = (req.headers['x-forwarded-proto'] as string) || 'https';
-      const host = (req.headers['x-forwarded-host'] || req.headers.host) as string | undefined;
-
-      // Vercel's catch-all rewrite (/api/:path* -> /api/index) injects the
-      // captured segment as a `path` query param on req.url. Twilio signed the
-      // URL configured in its console (which has no such param), so we must
-      // strip rewrite-injected params before re-computing the signature.
-      let reqUrl = req.url || '';
-      if (host) {
-        try {
-          const u = new URL(reqUrl, `${proto}://${host}`);
-          u.searchParams.delete('path');
-          reqUrl = u.pathname + (u.search || '');
-        } catch {
-          // fall back to raw req.url if URL parse fails
-        }
-      }
-
-      const publicUrl = process.env.WEBHOOK_PUBLIC_URL
-        || (host ? `${proto}://${host}${reqUrl}` : '');
-      if (!signatureHeader || !publicUrl) {
-        console.warn('[WhatsApp] Missing Twilio signature or public URL — rejecting.');
-        return res.status(403).json({ error: 'Forbidden: signature required' });
-      }
-      // twilio.validateRequest is synchronous and safe with already-parsed form bodies.
-      let ok = twilio.validateRequest(twilioAuthToken, signatureHeader, publicUrl, body);
-
-      // Fallback: if validation failed and we derived publicUrl from req.url,
-      // retry once with the raw req.url (covers the edge case where Twilio was
-      // actually configured with a `?path=...` query string).
-      if (!ok && !process.env.WEBHOOK_PUBLIC_URL && host && req.url && reqUrl !== req.url) {
-        const rawUrl = `${proto}://${host}${req.url}`;
-        ok = twilio.validateRequest(twilioAuthToken, signatureHeader, rawUrl, body);
-      }
-
-      if (!ok) {
-        console.warn('[WhatsApp] Twilio signature mismatch. url=', publicUrl, 'sid=', MessageSid);
-        return res.status(403).json({ error: 'Forbidden: invalid signature' });
-      }
-    } else if (!twilioAuthToken && process.env.NODE_ENV === 'production') {
-      console.warn('[WhatsApp] TWILIO_AUTH_TOKEN not set in production — webhook is unauthenticated.');
-    }
-
-    // ── MessageSid idempotency ───────────────────────────────────────────────
-    // Twilio retries webhooks (up to 11x over ~4h) on any non-2xx or timeout.
-    // Without idempotency, every retry re-runs the full handler and can insert
-    // duplicate expenses, duplicate daily-log entries, etc.
-    //
-    // Strategy: the `whatsapp_messages` table has a UNIQUE index on
-    // `message_sid` (enforced at the DB level via
-    // `whatsapp_messages_message_sid_key`). On entry, we first check for a
-    // matching row and 200-ack if found. We then log the inbound row after
-    // profile resolution; if a concurrent retry lands on the same instant,
-    // the unique constraint causes the insert to fail, and the SELECT on the
-    // next retry catches it.
-    if (MessageSid) {
-      const { data: seen } = await supabase
-        .from('whatsapp_messages')
-        .select('id')
-        .eq('message_sid', MessageSid)
-        .eq('direction', 'inbound')
-        .maybeSingle();
-      if (seen) {
-        console.log(`[WhatsApp] Duplicate MessageSid ${MessageSid} — acking without re-processing.`);
-        res.setHeader('Content-Type', 'text/xml');
-        return res.status(200).send(twimlOk);
-      }
-    }
-
     // ── STEP 1: User profile ──────────────────────────────────────────────────
     let profile = await getUserProfile(phoneNumber);
 
@@ -4569,45 +3764,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const userId = profile.id;
-
-    // ── Auto-expire stale expense states ────────────────────────────
-    if (profile.expense_state && profile.expense_state_set_at) {
-      const stateAgeMs = Date.now() - new Date(profile.expense_state_set_at).getTime();
-      const THIRTY_MINUTES_MS = 30 * 60 * 1000;
-      if (stateAgeMs > THIRTY_MINUTES_MS) {
-        console.log('[StateExpiry] Clearing stale expense_state:', profile.expense_state,
-          'age:', Math.round(stateAgeMs / 60000), 'min');
-        await supabase.from('profiles').update({
-          expense_state: null,
-          expense_pending_data: {},
-          expense_state_set_at: null,
-          updated_at: new Date().toISOString(),
-        }).eq('id', userId);
-        profile.expense_state = null;
-        profile.expense_pending_data = {};
-      }
-    }
-
-    // Log the inbound message BEFORE any mutations. This is the second half
-    // of the MessageSid idempotency contract above: if this write succeeds,
-    // any concurrent retry will either hit the SELECT guard at the top or
-    // collide with the UNIQUE(message_sid) constraint and bail out. Best
-    // effort — we never fail the webhook on this log insert.
-    if (MessageSid) {
-      try {
-        await supabase.from('whatsapp_messages').insert({
-          user_id: userId,
-          message_sid: MessageSid,
-          phone_number: phoneNumber,
-          direction: 'inbound',
-          message_body: rawMessage.substring(0, 4000),
-          processed: false,
-          project_id: profile.active_project_id ?? null,
-        });
-      } catch (logErr) {
-        console.warn('[WhatsApp] Failed to log inbound message:', (logErr as any)?.message);
-      }
-    }
     const onboardingState = profile.onboarding_state as OnboardingState;
     const needsOnboarding = !profile.onboarding_completed_at;
     console.log('[webhook] userId:', userId, 'projectId:', profile.active_project_id ?? 'none');
@@ -4615,7 +3771,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Duplicate prevention: same message within 30 seconds
     if (rawMessage.trim().length > 5 && !hasMedia) {
       if (checkDuplicateMessage(phoneNumber, rawMessage)) {
-        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?', userId, profile.active_project_id ?? undefined);
+        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?');
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4629,32 +3785,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         onboarding_completed_at: null,
         expense_state: null,
         expense_pending_data: {},
-        expense_state_set_at: null,
         pending_material_update: null,
         updated_at: new Date().toISOString(),
       }).eq('id', userId);
       await sendWelcomeMessage(From, profile.full_name);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
-    }
-
-    // ── Greeting interceptor: clear any stale state ──────────────
-    const isObviousGreeting =
-      /^(hello|hi|hey|good\s*(morning|afternoon|evening|night)|howdy|greetings|sup|hiya|yo\b|ola|jambo|oli\s*otya|hi\s*there|hey\s*there)/i.test(rawMessage.trim()) &&
-      rawMessage.trim().split(/\s+/).length <= 5;
-
-    if (isObviousGreeting && (profile.expense_state || profile.pending_material_update)) {
-      console.log('[GreetingInterceptor] Clearing stale state for greeting:', rawMessage.trim());
-      await supabase.from('profiles').update({
-        expense_state: null,
-        expense_pending_data: {},
-        expense_state_set_at: null,
-        pending_material_update: null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', userId);
-      profile.expense_state = null;
-      profile.expense_pending_data = {};
-      profile.pending_material_update = null;
     }
 
     // ── STEP 2: Onboarding flow ───────────────────────────────────────────────
@@ -4683,39 +3819,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (message.includes('1') || /yes|create|confirm/i.test(message)) {
             try {
               const projectId = await createProjectFromOnboarding(userId);
-              await sendPostCreationMessage(From, projectId, userId);
+              await sendPostCreationMessage(From, projectId);
             } catch (err: any) {
               console.error('[Onboarding] Project creation failed:', err);
               await sendMessage(From, await ai(
                 `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
                 `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-              ), userId);
+              ));
             }
           } else if (message.includes('2') || /edit/i.test(message)) {
             await updateOnboardingState(userId, 'welcome_sent', {});
             await sendWelcomeMessage(From, profile.full_name);
           } else {
-            // User declined to create the project at the confirmation step.
-            // Previously we set onboarding_state='completed' here, which also
-            // sets onboarding_completed_at. That left the profile in a broken
-            // state: "onboarded" but with zero projects — so every later
-            // message hit `needsSelection=false` + `project=null` and the
-            // agent had nowhere to write to.
-            //
-            // Fix: reset onboarding back to the welcome gate and leave
-            // onboarding_completed_at NULL. Next inbound message re-enters the
-            // onboarding flow cleanly, and if they really want to skip they
-            // can create a project from the dashboard.
-            await supabase.from('profiles').update({
-              onboarding_state: null,
-              onboarding_data: {},
-              onboarding_completed_at: null,
-              updated_at: new Date().toISOString(),
-            }).eq('id', userId);
+            await updateOnboardingState(userId, 'completed');
             await sendMessage(From, await ai(
-              `Tell the user no problem. Say they can create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. Until then you cannot log updates because there is no project to attach them to.`,
-              `No problem! Create a project from the dashboard at ${DASHBOARD_URL}, or type "start" to set one up here. I can't log updates until a project exists.`
-            ), userId);
+              'Tell the user no problem — they can create a project from the dashboard anytime. Say they can still send you updates and you will log them.',
+              'No problem! Create a project from the dashboard anytime. You can still send me updates and I will log them.'
+            ));
           }
           break;
         default:
@@ -4738,7 +3858,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isYes || isNo) {
         if (isYes) {
           try {
-            const pendingNameNorm = normalizeMaterialName(String(pendingMaterial.material_name || ''));
+            const pendingNameNorm = String(pendingMaterial.material_name || '')
+              .toLowerCase()
+              .trim();
             const { data: existing } = await supabase
               .from('materials_inventory')
               .select('id, quantity, unit')
@@ -4775,6 +3897,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('materials_inventory')
                 .insert({
                   project_id: pendingMaterial.project_id,
+                  user_id: userId,
                   name: pendingNameNorm,
                   quantity: pendingMaterial.quantity,
                   unit: pendingMaterial.unit || 'units',
@@ -4801,22 +3924,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await sendMessage(From, await ai(
               `Tell the user you added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to their Materials & Supplies inventory. Be brief.`,
               `Added ${pendingMaterial.quantity} ${pendingMaterial.unit || 'units'} of ${pendingMaterial.material_name} to Materials & Supplies.`
-            ), userId, pendingMaterial.project_id);
+            ));
           } catch (err: any) {
             console.error('[Materials] Insert/update failed:', err?.message);
-            await sendMessage(From, 'Could not add to inventory. Please try again from the dashboard.', userId, pendingMaterial.project_id);
+            await sendMessage(From, 'Could not add to inventory. Please try again from the dashboard.');
           }
         } else {
           await sendMessage(From, await ai(
             'Tell the user you skipped adding to materials. Be brief.',
             'Skipped. Send another update anytime.'
-          ), userId, pendingMaterial.project_id);
+          ));
         }
         await clearPendingMaterialUpdate(userId);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
-        await sendMessage(From, 'Please reply YES to add to Materials & Supplies, or NO to skip.', userId, pendingMaterial.project_id);
+        await sendMessage(From, 'Please reply YES to add to Materials & Supplies, or NO to skip.');
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4833,7 +3956,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fall through to agent (STEP 9) below
       } else {
       const caption = rawMessage.trim();
-      const today = todayInAppTz();
+      const today = new Date().toISOString().split('T')[0];
 
       // Append caption to today's daily log notes
       const { data: todayLog } = await supabase
@@ -4872,7 +3995,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendMessage(From, await ai(
         `Tell the user their photo caption was saved: "${caption}". It has been added to today's Daily Accountability log. Be brief.`,
         `Caption saved! "${caption}" added to today's Daily Accountability.`
-      ), userId, pendingData.project_id);
+      ));
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
       } // end else (not looksLikeIntent)
@@ -4908,8 +4031,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             active_project_set_at: new Date().toISOString(),
             expense_state: null,
             expense_pending_data: {},
-            expense_state_set_at: null,
-            updated_at: new Date().toISOString(),
           })
           .eq('id', userId);
 
@@ -4917,22 +4038,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Tell the user you are now tracking updates for their project called "${selectedProject.name}". Be brief and encouraging. Tell them to send their first update.`,
           `Got it! Tracking updates for ${selectedProject.name}. Send your first update anytime.`
         );
-        await sendMessage(From, msg, userId, selectedProject.id);
+        await sendMessage(From, msg);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       } else {
-        // No number/name match — do NOT silently pick the first project.
-        // Silently writing to project[0] has caused real users to log expenses
-        // against the wrong project. Instead, ask again with the menu so the
-        // user makes an explicit choice.
-        const menuLines = options
-          .map((p: any, i: number) => `${i + 1}. ${p.name}`)
-          .join('\n');
-        await sendMessage(
-          From,
-          `I didn't catch which project you meant. Reply with the number or the project name:\n\n${menuLines}\n\nOr type "list projects" to see details.`,
-          userId
-        );
+        // No number/name match — auto-select the first project so the user isn't stuck,
+        // then run the agent with their original message.
+        const defaultProject = options[0];
+        if (defaultProject) {
+          await supabase.from('profiles').update({
+            active_project_id: defaultProject.id,
+            active_project_set_at: new Date().toISOString(),
+            expense_state: null,
+            expense_pending_data: {},
+          }).eq('id', userId);
+          const agentReply = await runAgent(userId, defaultProject.id, rawMessage, profile, options || []);
+          await sendMessage(From, `📌 Active project set to *${defaultProject.name}*.\n\n${agentReply}`);
+        } else {
+          await sendProjectSelectionMenu(From, userId, options);
+        }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -4956,7 +4080,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           `Tell the user they only have one active project: ${projects[0]?.name}. They cannot switch because there is nothing to switch to.`,
           `You only have one active project: ${projects[0]?.name}`
-        ), userId, project?.id);
+        ));
       } else {
         await supabase
           .from('profiles')
@@ -4986,19 +4110,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isOwner && isDispute) {
         const { data: lastExpense } = await supabase.from('expenses')
           .select('id, description, amount').eq('project_id', project.id)
-          .is('deleted_at', null)
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastExpense) {
           await supabase.from('expenses').update({ disputed: true }).eq('id', lastExpense.id);
           await sendMessage(From, await ai(
             `Tell the user that the expense "${lastExpense.description}" for ${fmt(parseFloat(lastExpense.amount))} UGX has been flagged as disputed on the dashboard.`,
             `Flagged "${lastExpense.description}" as disputed on the dashboard.`
-          ), userId, project.id);
+          ));
         } else {
           await sendMessage(From, await ai(
             'Tell the user there is no recent expense to dispute.',
             'No recent expense to dispute.'
-          ), userId, project.id);
+          ));
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -5007,7 +4130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           'Tell the user politely that only the project manager can log updates in this group.',
           'Only the project manager can log updates in this group.'
-        ), userId, project.id);
+        ));
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
@@ -5025,13 +4148,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             actionReply = await runAgent(userId, project.id, transcribed, profile, projects || []);
           }
           const summary = transcribed.length > 60 ? transcribed.substring(0, 57) + '...' : transcribed;
-          const voiceReply = `Transcribed ✅ "${summary}"\n\n${actionReply}`;
-          await sendMessage(From, voiceReply, userId, project?.id);
+          await sendMessage(From, `Transcribed ✅ "${summary}"\n\n${actionReply}`);
         } else {
           await sendMessage(From, await ai(
             'Tell the user you could not transcribe their voice note clearly. Ask them to try again with clearer audio or type their update instead.',
             'Could not transcribe that voice note clearly. Try again or type your update.'
-          ), userId, project?.id);
+          ));
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -5083,7 +4205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           if (inlineCaption) {
-            const today = todayInAppTz();
+            const today = new Date().toISOString().split('T')[0];
             const { data: todayLog } = await supabase
               .from('daily_logs')
               .select('id, notes')
@@ -5111,12 +4233,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch (err: any) {
               console.log('[Photo Caption] site_photos insert skipped:', err?.message);
             }
-            await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`, userId, project.id);
+            await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`);
           } else {
             await sendMessage(From, await ai(
               'Tell the user their photo was saved. Ask them to add a caption by replying with a description.',
               'Photo saved! What caption would you like to add?'
-            ), userId, project.id);
+            ));
             await updateExpenseState(userId, 'awaiting_photo_caption', {
               photo_url: permanentUrl,
               project_id: project.id,
@@ -5128,7 +4250,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             'Tell the user their photo was saved. Tell them to view it on their dashboard.',
             'Photo saved! View it on your dashboard.'
-          ), userId, project.id);
+          ));
         }
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
@@ -5140,7 +4262,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sendMessage(From, await ai(
           'Tell the user their photo or video was saved to their progress feed on the dashboard. One short line.',
           'Photo/video saved to your progress feed on the dashboard!'
-        ), userId, project.id);
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -5163,13 +4285,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isConfirmingProject) {
       try {
         const projectId = await createProjectFromOnboarding(userId);
-        await sendPostCreationMessage(From, projectId, userId);
+        await sendPostCreationMessage(From, projectId);
       } catch (err: any) {
         console.error('[Onboarding] Project creation failed (from re-check):', err);
         await sendMessage(From, await ai(
           `Tell the user the project could not be created. Error: ${err.message}. Tell them to type "start over" to try again.`,
           `Could not create the project. Error: ${err.message}. Type "start over" to try again.`
-        ), userId);
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -5177,21 +4299,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
-      const trimmed = rawMessage.trim();
       const isConfirmationResponse =
-        /^[123]$/.test(trimmed) ||
-        (trimmed.length <= 10 &&
-          /^(yes|yep|yea|yeah|ok|okay|no|nope|save|confirm|cancel|edit|log it|log|✅|❌|✏️)$/i.test(trimmed));
+        /^[123]$/.test(rawMessage.trim()) ||
+        /^(yes|ok|no|log it|confirm|edit|cancel|save)$/i.test(rawMessage.trim());
 
-      const looksLikeNewMessage =
-        /^(hello|hi|hey|good|morning|evening|afternoon|howdy|greetings|sup|hiya|yo\b)/i.test(trimmed) ||
-        trimmed.length > 60 ||
-        trimmed.split(/\s+/).length > 8;
-
-      const shouldProcessAsConfirmation = isConfirmationResponse && !looksLikeNewMessage;
-
-      if (!shouldProcessAsConfirmation) {
-        console.log('[AutoClear] Clearing stale expense_state — message does not look like confirmation:', trimmed.substring(0, 50));
+      if (!isConfirmationResponse) {
+        // Any non-confirmation message clears stale state and goes straight to the agent
+        console.log('[AutoClear] Non-confirmation message, clearing state and routing to agent');
         await updateExpenseState(userId, null, {});
         // Fall through to STEP 9 (runAgent) below
       } else {
@@ -5230,7 +4344,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               amount: String(amt),
               quantity_logged: entry.quantity ? String(entry.quantity) : null,
               currency: 'UGX',
-              expense_date: todayInAppTz(),
+              expense_date: new Date().toISOString().split('T')[0],
               source: 'whatsapp',
             })
             .select()
@@ -5247,7 +4361,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             `Tell the user there was an error saving their expense and ask them to try again. Error details: ${insertError.message}`,
             `Could not save that expense. Please try again.`
-          ), userId, pendingData.project_id);
+          ));
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
@@ -5257,7 +4371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           await sendMessage(From, await ai(
             'Tell the user the expense failed to save and ask them to try again.',
             'Failed to save expense. Please try again.'
-          ), userId, pendingData.project_id);
+          ));
           res.setHeader('Content-Type', 'text/xml');
           return res.status(200).send(twimlOk);
         }
@@ -5302,7 +4416,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               MATERIAL_KEYWORDS.some((k) => matLower.includes(k)));
 
         if (isMaterial && ent.materialName && ent.quantity > 0) {
-          const nameNorm = normalizeMaterialName(ent.materialName);
+          const nameNorm = ent.materialName.toLowerCase().trim();
           if (nameNorm.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(nameNorm)) {
             const now = new Date().toISOString();
             const unitCost = ent.amount && ent.quantity > 0 ? ent.amount / ent.quantity : 0;
@@ -5316,16 +4430,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (existing) {
               const newQty = parseFloat(String(existing.quantity || 0)) + ent.quantity;
               const newTotalCost = parseFloat(String(existing.total_cost || 0)) + totalCost;
-              const { error: invUpdateErr } = await supabase.from('materials_inventory').update({
+              await supabase.from('materials_inventory').update({
                 quantity: newQty,
                 unit_cost: unitCost || parseFloat(String(existing.unit_cost || 0)),
                 total_cost: newTotalCost,
                 last_purchased_at: now,
                 updated_at: now,
               }).eq('id', existing.id);
-              if (invUpdateErr) {
-                console.error('[Expense Confirm] Inventory update failed for', ent.materialName, ':', invUpdateErr.message);
-              }
               await supabase.from('material_transactions').insert({
                 material_id: existing.id,
                 project_id: pendingData.project_id!,
@@ -5339,9 +4450,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               });
               materialLines.push(`📦 ${ent.quantity} ${ent.unit} of ${ent.materialName} added. Total stock: ${newQty} ${ent.unit}.`);
             } else {
-              const { data: inserted, error: invInsertErr } = await supabase.from('materials_inventory').insert({
+              const { data: inserted } = await supabase.from('materials_inventory').insert({
                 project_id: pendingData.project_id!,
-                // user_id intentionally omitted — profiles.id ≠ auth.users.id for WhatsApp-only users
+                user_id: userId,
                 name: nameNorm,
                 quantity: ent.quantity,
                 unit: ent.unit,
@@ -5351,9 +4462,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 last_purchased_at: now,
                 updated_at: now,
               }).select('id').single();
-              if (invInsertErr) {
-                console.error('[Expense Confirm] Inventory insert failed for', ent.materialName, ':', invInsertErr.message, invInsertErr.code, invInsertErr.details);
-              }
               if (inserted?.id) {
                 await supabase.from('material_transactions').insert({
                   material_id: inserted.id,
@@ -5382,7 +4490,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Budget alert: proactive warning when >= 80% or exceeded
         const { data: proj } = await supabase.from('projects').select('budget, name').eq('id', pendingData.project_id!).single();
         const budgetTotal = parseFloat(String(proj?.budget || 0));
-        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!).is('deleted_at', null);
+        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!);
         const totalSpentNow = (allEx || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
         const pctNow = budgetTotal > 0 ? (totalSpentNow / budgetTotal) * 100 : 0;
         let budgetAlert = '';
@@ -5399,25 +4507,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Tell the user their expense was saved successfully: ${pendingData.description} — ${fmt(pendingData.amount!)} UGX. Tell them their dashboard and budget have been updated. Keep it short and friendly. Tell them to check Budgets & Costs page.`,
           `Saved! ${pendingData.description} — ${fmt(pendingData.amount!)} UGX logged. Check Budgets & Costs to see the update.`
         );
-        await sendMessage(From, msg, userId, pendingData.project_id);
+        await sendMessage(From, msg);
       } else if (message.includes('2') || /edit|✏️/i.test(message)) {
         await updateExpenseState(userId, null, {});
         await sendMessage(From, await ai(
           'Tell the user to send the corrected expense details.',
           'No problem! Send the corrected details.'
-        ), userId, pendingData.project_id);
+        ));
       } else if (message.includes('3') || /cancel|❌/i.test(message)) {
         await updateExpenseState(userId, null, {});
         await sendMessage(From, await ai(
           'Tell the user the expense was cancelled. Keep it very brief.',
           'Cancelled. Send a new update anytime.'
-        ), userId, pendingData.project_id);
+        ));
       } else {
         const stillMsg = await ai(
           `Tell the user you are still waiting for their reply on this pending expense: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX. Ask them to reply 1 to save, 2 to edit, or 3 to cancel.`,
           `Still waiting: ${pendingData.description} — ${fmt(pendingData.amount || 0)} UGX\n\n1. Save\n2. Edit\n3. Cancel`
         );
-        await sendOptions(From, stillMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel'], userId, pendingData.project_id);
+        await sendOptions(From, stillMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -5450,12 +4558,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `${description} — ${fmt(price)} UGX${vendor ? ' from ' + vendor : ''}. Save it?\n\n1. Yes\n2. Edit\n3. Cancel`
         );
         const finalMsg = anomalyAlert ? `${anomalyAlert}\n\n${confirmMsg}` : confirmMsg;
-        await sendOptions(From, finalMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel'], userId, pendingData.project_id);
+        await sendOptions(From, finalMsg, ['1. Yes – Log it', '2. Edit', '3. Cancel']);
       } else {
         await sendMessage(From, await ai(
           'Tell the user to send the total cost as a number. Give examples: 1,900,000 or 1.9M.',
           'Send the total cost as a number (e.g. 1,900,000 or 1.9M).'
-        ), userId, pendingData.project_id);
+        ));
       }
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
@@ -5466,70 +4574,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await sendMessage(From, await ai(
         'Tell the user they need to create a project first before logging updates. Tell them to say "hey jenga" or "start" to create one.',
         'You need a project first. Say "hey jenga" or "start" to create one!'
-      ), userId);
+      ));
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
 
-    // ── STEP 9: Intent routing (regex + AI) OR same paths via routeIntent → runAgent ──
-    console.log('[webhook] STEP9 intent pipeline:', rawMessage.substring(0, 80));
+    // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
+    console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
     if (!checkRateLimit(phoneNumber)) {
-      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.", userId, project.id);
+      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.");
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
-
-    const lang = detectLanguage(rawMessage);
-    const translatedForIntent = await translateToEnglish(rawMessage);
-    const mForPre = translatedForIntent.trim() || rawMessage;
-
-    const isComplex =
-      mForPre.split(/\s+/).length > 12 ||
-      mForPre.includes('?') ||
-      mForPre.toLowerCase().includes(' and ');
-
-    let intentResult: IntentResult;
-    if (!isComplex) {
-      const pre = preClassifyIntent(mForPre);
-      if (pre) {
-        intentResult = pre;
-        console.log('[Intent] preClassify:', pre.intent);
-      } else {
-        intentResult = await classifyIntent(rawMessage, phoneNumber);
-      }
-    } else {
-      console.log('[Intent] Complex message — AI classifier');
-      intentResult = await classifyIntent(rawMessage, phoneNumber);
-    }
-
-    await routeIntent(
-      intentResult.intent,
-      intentResult.extracted,
-      rawMessage,
-      From,
-      userId,
-      project,
-      profile,
-      projects || [],
-      lang
-    );
+    const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
+    await sendMessage(From, agentReply);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
 
   } catch (error: any) {
-    const b = (req as any).body;
-    const fromRaw = typeof b === 'object' && b?.From ? String(b.From) : '';
-    const bodyRaw = typeof b === 'object' && b?.Body ? String(b.Body) : '';
-    console.error('❌ Webhook fatal error:', {
-      message: error?.message,
-      stack: error?.stack?.split('\n').slice(0, 5).join('\n'),
-      phone: fromRaw ? fromRaw.slice(-4) : 'unknown',
-      bodyPreview: bodyRaw.substring(0, 100),
-    });
+    console.error('❌ Webhook error:', error.message, error.stack);
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?>
-<Response><Message>Something went wrong on our end. Your message was received — please try again in a moment.</Message></Response>`);
+<Response><Message>Sorry, something went wrong. Please try again.</Message></Response>`);
   }
 }
 
@@ -5555,7 +4622,7 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
     await sendMessage(from, await ai(
       'Tell the user they have no projects yet. Tell them to type "start" to create their first project.',
       'You do not have any projects yet. Type "start" to create your first project.'
-    ), userId);
+    ));
     return;
   }
 
@@ -5569,143 +4636,7 @@ async function handleListProjects(from: string, userId: string): Promise<void> {
     `List the user's projects and tell them they can say "switch project" to change their active project. Here are the projects:\n${lines}`,
     `Your projects (${all.length}):\n\n${lines}\n\nSay "switch project" to change your active project.`
   );
-  await sendMessage(from, msg, userId);
-}
-
-async function handleAddPurchasesToInventory(
-  from: string,
-  userId: string,
-  projectId: string,
-  lang?: string
-): Promise<void> {
-  // Fetch recent material-like expenses (last 60 days, up to 30 rows)
-  const since = new Date();
-  since.setDate(since.getDate() - 60);
-  const { data: recentExpenses } = await supabase
-    .from('expenses')
-    .select('description, amount, quantity_logged, expense_date')
-    .eq('project_id', projectId)
-    .is('deleted_at', null)
-    .gte('expense_date', since.toISOString().split('T')[0])
-    .order('expense_date', { ascending: false })
-    .limit(30);
-
-  if (!recentExpenses || recentExpenses.length === 0) {
-    await sendMessage(from, await ai(
-      'Tell the user there are no recent expenses found to sync to inventory.',
-      'No recent expenses found to add to inventory.',
-      150, lang
-    ), userId, projectId);
-    return;
-  }
-
-  const added: string[] = [];
-  const alreadyPresent: string[] = [];
-  const descPattern = /^(\d+(?:\.\d+)?)\s*(bags?|kg|kgs?|tonnes?|pieces?|pcs?|rods?|bars?|sheets?|poles?|litres?|rolls?|units?)?\s+(?:of\s+)?(.+)$/i;
-
-  for (const exp of recentExpenses) {
-    const desc = (exp.description || '').trim();
-    const descLower = desc.toLowerCase();
-
-    const isMaterialExp =
-      MATERIAL_KEYWORDS.some((k) => descLower.includes(k)) &&
-      !SKIP_KEYWORDS.some((k) => descLower.includes(k));
-    if (!isMaterialExp) continue;
-
-    // Parse quantity, unit and material name from stored description
-    let qty = exp.quantity_logged ? parseFloat(String(exp.quantity_logged)) : 0;
-    let unit = 'units';
-    let materialName = '';
-
-    const mDesc = desc.match(descPattern);
-    if (mDesc) {
-      if (!qty || qty <= 0) qty = parseFloat(mDesc[1]);
-      if (mDesc[2]) unit = mDesc[2].toLowerCase();
-      materialName = mDesc[3].trim();
-    } else {
-      // Fallback: use the keyword as the material name
-      const kw = MATERIAL_KEYWORDS.find((k) => descLower.includes(k));
-      if (kw) materialName = kw;
-    }
-
-    if (!materialName || qty <= 0) continue;
-
-    const nameNorm = normalizeMaterialName(materialName);
-    if (nameNorm.length < 2 || GARBAGE_MATERIAL_NAMES.includes(nameNorm)) continue;
-
-    const amount = exp.amount ? parseFloat(String(exp.amount)) : 0;
-    const unitCost = qty > 0 && amount > 0 ? amount / qty : 0;
-    const now = new Date().toISOString();
-
-    const { data: existing } = await supabase
-      .from('materials_inventory')
-      .select('id, quantity')
-      .eq('project_id', projectId)
-      .eq('name', nameNorm)
-      .maybeSingle();
-
-    if (existing) {
-      // Already in inventory — skip to avoid double-counting
-      alreadyPresent.push(`${materialName} (${existing.quantity} ${unit} already tracked)`);
-      continue;
-    }
-
-    // Not yet in inventory — insert it
-    const { data: inserted, error: insertErr } = await supabase
-      .from('materials_inventory')
-      .insert({
-        project_id: projectId,
-        name: nameNorm,
-        quantity: qty,
-        unit,
-        unit_cost: unitCost,
-        total_cost: amount,
-        source: 'whatsapp',
-        last_purchased_at: now,
-        updated_at: now,
-      })
-      .select('id')
-      .single();
-
-    if (insertErr) {
-      console.error('[AddPurchasesToInventory] Insert error for', materialName, ':', insertErr.message, insertErr.code);
-      continue;
-    }
-
-    if (inserted?.id) {
-      await supabase.from('material_transactions').insert({
-        material_id: inserted.id,
-        project_id: projectId,
-        user_id: userId,
-        transaction_type: 'purchase',
-        quantity: qty,
-        unit_cost: unitCost,
-        total_cost: amount,
-        description: `${qty} ${unit} added via inventory sync from expenses`,
-        source: 'whatsapp',
-      });
-      added.push(`${qty} ${unit} of ${materialName}`);
-    }
-  }
-
-  if (added.length === 0 && alreadyPresent.length === 0) {
-    await sendMessage(from, await ai(
-      'Tell the user no material purchases were found in their recent expenses. Labor, transport, and service expenses are not added to inventory.',
-      'No material purchases found in recent expenses. Labor and service costs are not tracked as inventory.',
-      200, lang
-    ), userId, projectId);
-    return;
-  }
-
-  const addedLines = added.length ? `Added to inventory:\n${added.map((a) => `- ${a}`).join('\n')}` : '';
-  const presentLines = alreadyPresent.length ? `Already tracked:\n${alreadyPresent.map((a) => `- ${a}`).join('\n')}` : '';
-  const summary = [addedLines, presentLines].filter(Boolean).join('\n\n');
-
-  await sendMessage(from, await ai(
-    `Tell the user their recent purchases have been synced to inventory. Summary:\n${summary}\nBe brief and friendly.`,
-    `Done! Here is your inventory update:\n\n${summary}`,
-    300, lang
-  ), userId, projectId);
+  await sendMessage(from, msg);
 }
 
 async function routeIntent(
@@ -5724,10 +4655,10 @@ async function routeIntent(
 
   switch (intent) {
     case 'BUDGET_QUERY':
-      await handleBudgetQuery(from, project.id, userId, lang);
+      await handleBudgetQuery(from, project.id, lang);
       break;
     case 'BUDGET_UPDATE':
-      await handleBudgetUpdate(from, project.id, userId, extracted);
+      await handleBudgetUpdate(from, project.id, extracted);
       break;
     case 'EXPENSE_LOG':
       await handleExpenseLog(from, userId, project.id, extracted, rawMessage, lang);
@@ -5735,27 +4666,21 @@ async function routeIntent(
     case 'MATERIAL_LOG':
       await handleMaterialLog(from, userId, project.id, extracted, rawMessage, lang);
       break;
-    case 'ADD_PURCHASES_TO_INVENTORY':
-      await handleAddPurchasesToInventory(from, userId, project.id, lang);
-      break;
     case 'LABOR_LOG':
-      await handleLaborLog(from, project.id, userId, extracted, rawMessage, lang);
+      await handleLaborLog(from, project.id, extracted, rawMessage, lang);
       break;
     case 'PROGRESS_UPDATE':
       await handleProgressUpdate(from, userId, project.id, extracted, rawMessage, lang);
       break;
     case 'WEATHER_DELAY':
-      await handleWeatherDelay(from, project.id, userId, extracted, rawMessage);
+      await handleWeatherDelay(from, project.id, extracted, rawMessage);
       break;
     case 'MATERIAL_QUERY':
-      await handleMaterialQuery(from, project.id, userId, rawMessage);
+      await handleMaterialQuery(from, project.id, rawMessage);
       break;
-    case 'SMART_QUERY': {
-      // Full tool-agent (same as main chat path) — not the legacy handleSmartQuery LLM
-      const reply = await handleNaturalLanguageQuery(from, userId, project.id, rawMessage);
-      await sendMessage(from, reply, userId, project.id);
+    case 'SMART_QUERY':
+      await handleSmartQuery(from, project.id, rawMessage);
       break;
-    }
     case 'SWITCH_PROJECT': {
       const mentionedName = extracted.project_name as string | null;
       if (mentionedName && projects.length > 0) {
@@ -5768,7 +4693,7 @@ async function routeIntent(
             active_project_id: match.id,
             active_project_set_at: new Date().toISOString(),
           }).eq('id', userId);
-          await sendMessage(from, `Switched to ${match.name}! What would you like to update?`, userId, match.id);
+          await sendMessage(from, `Switched to ${match.name}! What would you like to update?`);
           break;
         }
       }
@@ -5776,7 +4701,7 @@ async function routeIntent(
       if (projects.length > 0) {
         await sendProjectSelectionMenu(from, userId, projects);
       } else {
-        await sendMessage(from, 'You only have one project. Say "list projects" to see it.', userId, project?.id);
+        await sendMessage(from, 'You only have one project. Say "list projects" to see it.');
       }
       break;
     }
@@ -5784,7 +4709,7 @@ async function routeIntent(
       await handleListProjects(from, userId);
       break;
     case 'PROJECT_QUERY':
-      await handleProjectQuery(from, project?.id ?? '', userId, project?.name ?? 'Unknown');
+      await handleProjectQuery(from, project?.id ?? '', project?.name ?? 'Unknown');
       break;
     case 'ISSUE_REPORT':
       await handleIssueReport(from, userId, project.id, extracted, rawMessage, lang);
@@ -5793,7 +4718,7 @@ async function routeIntent(
     default: {
       // Route unrecognized messages to AI with project context (no rigid menu)
       const aiResponse = await handleNaturalLanguageQuery(from, userId, project?.id ?? null, rawMessage);
-      await sendMessage(from, aiResponse, userId, project?.id);
+      await sendMessage(from, aiResponse);
       break;
     }
   }
