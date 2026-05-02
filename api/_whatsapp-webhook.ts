@@ -302,10 +302,10 @@ async function ai(prompt: string, fallback: string, maxTokens = 200, lang?: stri
   const langInstruction = lang && lang !== 'en'
     ? `The user wrote in ${lang}. You MUST respond in ${lang}, not English.`
     : 'Respond in English unless the user wrote in another language.';
-  const systemContent = `You are JengaTrack, a senior WhatsApp construction assistant for African building projects. You are warm, knowledgeable, direct, and practical — like a trusted site supervisor who also understands finance and project management. Plain text only. No markdown asterisks or bold. No ** or * characters. No bullet symbols (*). Use dashes (-) for lists if needed. Keep replies under 5 lines unless the question genuinely needs more detail. Never say "I am an AI" or "I cannot help with that". ${langInstruction}`;
+  const systemContent = `You are JengaTrack, a senior WhatsApp construction assistant for African building projects. You are warm, knowledgeable, direct, and practical — like a trusted site supervisor who also understands finance and project management. Plain text only. No markdown asterisks or bold. No ** or * characters. No bullet symbols (*). Use dashes (-) for lists if needed. Keep replies under 5 lines unless the question genuinely needs more detail. Do not invent project-specific costs or dates — if you lack site-specific data, say what you need from the user. ${langInstruction}`;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+    for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
       try {
         const model = gemini.getGenerativeModel({
           model: modelName,
@@ -327,7 +327,7 @@ async function ai(prompt: string, fallback: string, maxTokens = 200, lang?: stri
           { role: 'system', content: systemContent },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.7,
+        temperature: 0.25,
         max_tokens: maxTokens,
       });
       const text = completion.choices[0]?.message?.content?.trim();
@@ -1694,7 +1694,7 @@ If they send a greeting: respond warmly, mention their project briefly, and offe
   let reply: string | null = null;
 
   if (gemini && process.env.GEMINI_API_KEY) {
-    for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+    for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
       try {
         const model = gemini.getGenerativeModel({
           model: modelName,
@@ -2673,16 +2673,14 @@ async function handleSmartQuery(from: string, projectId: string, userId: string,
   const systemPrompt = `You are JengaTrack — an elite AI construction project assistant combining the expertise of a senior quantity surveyor, financial analyst, project manager, and structural engineer. Answer the user's question using the provided project data where relevant.
 
 KEY RULES:
-- If the question is about project data (expenses, spending, vendors, workers, materials), answer directly and precisely from the data provided. Give actual numbers.
-- If the question is about general construction knowledge, techniques, materials, quantities, costs, building codes, or best practices, answer comprehensively from your expertise as a construction professional.
-- If the question is about market prices in Uganda/East Africa, give your best knowledge with a note to verify locally.
-- NEVER say "I cannot find that", "the data doesn't contain", "I don't have access", or "please check the dashboard". Always give the best possible answer.
-- For data questions: be precise with numbers (UGX with commas, dates in readable format).
-- For knowledge questions: be thorough — give ratios, quantities, specific advice, practical tips.
+- Project-specific facts (amounts, dates, names, stock levels) MUST come only from the JSON data below. If something is not in the data, say clearly that it is not in your records for this project — do not guess or invent figures.
+- General construction knowledge (mix ratios, methods, codes of practice) may come from your expertise.
+- For Uganda/East Africa market prices, give typical ranges only if you know them, and tell the user to verify locally.
+- For data questions: use exact numbers from the JSON (UGX with commas, readable dates).
+- For knowledge questions: be thorough — ratios, quantities, practical tips.
 - Plain text only. No markdown asterisks or ** bold. Use dashes (-) for lists.
-- Use UGX for all amounts. Format numbers with commas (e.g. 1,500,000 UGX).
-- For inventory questions use materialsInventory.currentStock. For purchase history check expenses.
-- Never make up specific project numbers. Never say you cannot find information if it is in the data.`;
+- Use UGX for project amounts. Format numbers with commas (e.g. 1,500,000 UGX).
+- Inventory: use materialsInventory; purchases: use expenses in the JSON.`;
 
   const userMessage = `Project data (JSON):\n${JSON.stringify(dataContext)}\n\nUser question: "${question}"\n\nProvide a direct, helpful answer based on the data above.`;
 
@@ -3720,7 +3718,7 @@ async function runAgent(
   profile: any,
   allProjects: any[]
 ): Promise<string> {
-  // ── Load comprehensive DB context in parallel (full expense history for analytics) ──
+  // ── Load DB context + conversation memory in one round trip (memory: last 24 rows, this user, project or unscoped) ──
   const [
     projectRes,
     expensesRecentRes,
@@ -3731,10 +3729,11 @@ async function runAgent(
     issuesRes,
     tasksRes,
     materialTxRes,
+    convHistoryRes,
   ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
     supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(120),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(5000),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(2500),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
@@ -3747,18 +3746,18 @@ async function runAgent(
       .order('created_at', { ascending: false })
       .limit(50),
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
+    supabase
+      .from('whatsapp_messages')
+      .select('direction, message_body, created_at')
+      .eq('user_id', userId)
+      .or(`project_id.eq.${projectId},project_id.is.null`)
+      .not('message_body', 'is', null)
+      .neq('message_body', '')
+      .order('created_at', { ascending: false })
+      .limit(24),
   ]);
 
-  // ── Fetch conversation history for memory (last 12 messages, this project only) ──
-  const { data: convHistory } = await supabase
-    .from('whatsapp_messages')
-    .select('direction, message_body, created_at')
-    .eq('user_id', userId)
-    .eq('project_id', projectId)
-    .not('message_body', 'is', null)
-    .neq('message_body', '')
-    .order('created_at', { ascending: false })
-    .limit(12);
+  const { data: convHistory } = convHistoryRes;
 
   // Reverse to chronological order, exclude the current inbound message being processed
   // by matching message_body exactly — safer than .slice(0,-1) which breaks if the inbound
@@ -3776,6 +3775,12 @@ async function runAgent(
       parts: [{ text: (m.message_body || '').trim() }],
     }))
     .filter((m: any) => m.parts[0].text.length > 0);
+
+  let chatHistoryForModel = formattedHistory;
+  const firstUserIdx = chatHistoryForModel.findIndex((m: any) => m.role === 'user');
+  if (firstUserIdx > 0) {
+    chatHistoryForModel = chatHistoryForModel.slice(firstUserIdx);
+  }
 
   const project = projectRes.data;
   const allExpenses = (expensesFullRes.data || []).map((e: any) => ({
@@ -4018,6 +4023,7 @@ You are JengaTrack — an elite AI construction project assistant, combining the
 TODAY: ${todayFormatted}
 USER: ${userName}
 ACTIVE PROJECT: ${project?.name || 'Unknown'}
+MEMORY: You have the recent WhatsApp thread in this chat — use it for follow-ups ("why?", "what about cement?", "same as last time"). Do not ignore the user's last few messages.
 
 ━━━ LIVE PROJECT DATABASE ━━━
 ${contextBlock}
@@ -4144,13 +4150,17 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 
   try {
     if (gemini && process.env.GEMINI_API_KEY) {
-      for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
+      for (const modelName of ['gemini-2.5-flash-lite', 'gemini-2.0-flash']) {
         try {
           const model = gemini.getGenerativeModel({
             model: modelName,
             systemInstruction: systemPrompt,
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 1024,
+            },
           });
-          const chat = model.startChat({ history: formattedHistory });
+          const chat = model.startChat({ history: chatHistoryForModel });
           const result = await chat.sendMessage(userPrompt);
           rawResponse = result.response.text()?.trim() || null;
           if (rawResponse) {
@@ -4165,7 +4175,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 
     if (!rawResponse && process.env.OPENAI_API_KEY) {
       try {
-        const historyMessages = formattedHistory.map((m: any) => ({
+        const historyMessages = chatHistoryForModel.map((m: any) => ({
           role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
           content: m.parts[0].text,
         }));
@@ -4176,8 +4186,8 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
             ...historyMessages,
             { role: 'user', content: userPrompt },
           ],
-          temperature: 0.3,
-          max_tokens: 1000,
+          temperature: 0.2,
+          max_tokens: 900,
         });
         rawResponse = completion.choices[0]?.message?.content?.trim() || null;
         if (rawResponse) console.log('[Agent] OpenAI gpt-4o:', rawResponse.substring(0, 120));
@@ -4204,33 +4214,8 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     if (recovered) return recovered;
     let cleaned = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
     if (looksLikeModelRefusal(cleaned)) {
-      // Instead of a dead-end message, try to answer the question directly
-      // by routing through the smart query handler which has a broader knowledge base
-      try {
-        const { data: proj } = await supabase.from('projects').select('name, budget').eq('id', projectId).single();
-        const { data: exps } = await supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(100);
-        const dataContext = { project: proj, recentExpenses: (exps || []).slice(0, 50) };
-        const rescuePrompt = `You are JengaTrack, an expert construction assistant. The user asked: "${rawMessage}". Answer this question helpfully and completely. If it is about construction knowledge, give expert advice. If it is about project data, use this context: ${JSON.stringify(dataContext)}. Plain text only, no markdown.`;
-        let rescueAnswer: string | null = null;
-        if (gemini && process.env.GEMINI_API_KEY) {
-          const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
-          const result = await model.generateContent(rescuePrompt);
-          rescueAnswer = result.response.text()?.trim() || null;
-        }
-        if (!rescueAnswer && process.env.OPENAI_API_KEY) {
-          const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [{ role: 'user', content: rescuePrompt }],
-            temperature: 0.5,
-            max_tokens: 500,
-          });
-          rescueAnswer = completion.choices[0]?.message?.content?.trim() || null;
-        }
-        if (rescueAnswer && !looksLikeModelRefusal(rescueAnswer)) return rescueAnswer;
-      } catch (rescueErr: any) {
-        console.error('[Agent] Rescue attempt failed:', rescueErr?.message);
-      }
-      cleaned = 'What would you like help with? I can log expenses, check your budget, answer construction questions, update materials, or anything else for your project.';
+      cleaned =
+        'Say what you want next in one line — e.g. budget check, log an expense, or stock for a material. I work best with short, clear requests.';
     }
     return cleaned;
   }
@@ -4607,7 +4592,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Duplicate prevention: same message within 30 seconds
     if (rawMessage.trim().length > 5 && !hasMedia) {
       if (checkDuplicateMessage(phoneNumber, rawMessage)) {
-        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?', userId);
+        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?', userId, profile.active_project_id ?? undefined);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
