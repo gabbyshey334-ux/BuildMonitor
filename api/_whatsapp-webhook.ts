@@ -3279,6 +3279,7 @@ async function runAgent(
   // Unified burn-rate: use actual days elapsed since first expense date (avoids inflating when
   // the project was created weeks ago but spending only started recently).
   let weeklyBurnRate = 0;
+  let weeksElapsed: number | null = null;
   if (allExpenses.length > 0) {
     const expenseDates = allExpenses
       .map((e) => (e.date ? new Date(e.date + 'T12:00:00').getTime() : null))
@@ -3286,6 +3287,7 @@ async function runAgent(
     const firstExpenseMs = expenseDates.length > 0 ? Math.min(...expenseDates) : now.getTime();
     const daysSinceFirst = Math.max(1, (now.getTime() - firstExpenseMs) / (1000 * 60 * 60 * 24));
     weeklyBurnRate = Math.round((totalSpent / daysSinceFirst) * 7);
+    weeksElapsed = Math.max(1, Math.round(daysSinceFirst / 7));
   }
   const weeksRemaining = weeklyBurnRate > 0 ? Math.floor(remaining / weeklyBurnRate) : null;
 
