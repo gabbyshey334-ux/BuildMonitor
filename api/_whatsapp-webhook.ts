@@ -3606,15 +3606,45 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
     case 'delete_issue':
       result = await toolDeleteIssue(projectId, toolCall.params);
       break;
+    case 'delete_all_issues': {
+      const { data: allOpen } = await supabase.from('issues').select('id, title').eq('project_id', projectId).not('status', 'eq', 'resolved');
+      if (!allOpen?.length) {
+        result = { success: true, reply: '✅ No open alerts to delete — your issues list is already clear.' };
+      } else {
+        const titles = allOpen.map((i: any) => `- ${i.title}`).join('\n');
+        const { error: de } = await supabase.from('issues').delete().eq('project_id', projectId).not('status', 'eq', 'resolved');
+        if (de) result = { success: false, reply: 'Could not delete those alerts. Try again.' };
+        else result = { success: true, reply: `🗑️ Cleared ${allOpen.length} alert${allOpen.length > 1 ? 's' : ''}:\n${titles}\n\nIssues & Risks is now clean.` };
+      }
+      break;
+    }
+    case 'clear_resolved_issues': {
+      const { data: resolved } = await supabase.from('issues').select('id').eq('project_id', projectId).eq('status', 'resolved');
+      if (!resolved?.length) {
+        result = { success: true, reply: '✅ No resolved alerts in history to clear.' };
+      } else {
+        const { error: de } = await supabase.from('issues').delete().eq('project_id', projectId).eq('status', 'resolved');
+        if (de) result = { success: false, reply: 'Could not clear resolved alerts. Try again.' };
+        else result = { success: true, reply: `🗑️ Cleared ${resolved.length} resolved alert${resolved.length > 1 ? 's' : ''} from history.` };
+      }
+      break;
+    }
     case 'switch_project':
       result = await toolSwitchProject(userId, toolCall.params, allProjects);
       break;
-    case 'query_data':
-      result = {
-        success: true,
-        reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
-      };
+    case 'query_data': {
+      let ans = String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.';
+      // If the AI returned a refusal, rescue with a direct expert answer
+      if (/i (can't|cannot)|don't have|outside my scope|i am an ai|not able to/i.test(ans)) {
+        ans = await ai(
+          `The user asked: "${rawMessage}". Answer this question as a senior construction expert for Uganda/East Africa. Be specific and helpful. If it is a general construction question, give expert advice with numbers and ratios. Plain text only.`,
+          'What would you like help with? I can log expenses, answer construction questions, check your budget, or update materials.',
+          400
+        );
+      }
+      result = { success: true, reply: ans };
       break;
+    }
     case 'get_daily_summary': {
       const queryDate = String(toolCall.params.date || todayStr);
       const log = dailyLogs.find((l: any) => l.date === queryDate);
@@ -3770,16 +3800,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const needsOnboarding = !profile.onboarding_completed_at;
     console.log('[webhook] userId:', userId, 'projectId:', profile.active_project_id ?? 'none');
 
+    // ── Auto-expire stale expense state (30 min timeout) ─────────────────────
+    // If expense_state was set more than 30 minutes ago, the user abandoned it.
+    // Clear it so a fresh message like "Hello" is never treated as a confirmation.
+    if (profile.expense_state && profile.expense_state_set_at) {
+      const stateAgeMs = Date.now() - new Date(profile.expense_state_set_at).getTime();
+      if (stateAgeMs > 30 * 60 * 1000) {
+        console.log('[StateExpiry] Clearing stale expense_state:', profile.expense_state, 'age:', Math.round(stateAgeMs / 60000), 'min');
+        await supabase.from('profiles').update({
+          expense_state: null,
+          expense_pending_data: {},
+          expense_state_set_at: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', userId);
+        profile.expense_state = null;
+        profile.expense_pending_data = {};
+      }
+    }
+
     // Duplicate prevention: same message within 30 seconds
     if (rawMessage.trim().length > 5 && !hasMedia) {
       if (checkDuplicateMessage(phoneNumber, rawMessage)) {
-        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?');
+        await sendMessage(From, 'This looks like a duplicate — did you mean to send this again?', userId);
         res.setHeader('Content-Type', 'text/xml');
         return res.status(200).send(twimlOk);
       }
     }
 
-    // "Start over" — reset onboarding cleanly without creating duplicate profile
+    // \"Start over\" — reset onboarding cleanly without creating duplicate profile
     if (/start\s*over|startover/i.test(rawMessage.trim())) {
       await supabase.from('profiles').update({
         onboarding_state: null,
@@ -3787,12 +3835,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         onboarding_completed_at: null,
         expense_state: null,
         expense_pending_data: {},
+        expense_state_set_at: null,
         pending_material_update: null,
         updated_at: new Date().toISOString(),
       }).eq('id', userId);
       await sendWelcomeMessage(From, profile.full_name);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
+    }
+
+    // ── Greeting interceptor: clear stale state ───────────────────────────────
+    // If the message is clearly a greeting, clear ALL pending states immediately.
+    // This prevents "Hello" from triggering a stale awaiting_confirmation state.
+    const isObviousGreeting =
+      /^(hello|hi|hey|good\s*(morning|afternoon|evening|night)|howdy|greetings|sup|hiya|yo\b|ola|jambo|oli\s*otya|hi\s*there|hey\s*there)/i.test(rawMessage.trim()) &&
+      rawMessage.trim().split(/\s+/).length <= 5;
+    if (isObviousGreeting && (profile.expense_state || profile.pending_material_update)) {
+      console.log('[GreetingInterceptor] Clearing stale state for greeting:', rawMessage.trim());
+      await supabase.from('profiles').update({
+        expense_state: null,
+        expense_pending_data: {},
+        expense_state_set_at: null,
+        pending_material_update: null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId);
+      profile.expense_state = null;
+      profile.expense_pending_data = {};
+      profile.pending_material_update = null;
+    }
+
+    // ── Log inbound message (with project_id for memory) ─────────────────────
+    if (MessageSid) {
+      try {
+        // Check for duplicate MessageSid first
+        const { data: seen } = await supabase
+          .from('whatsapp_messages')
+          .select('id')
+          .eq('message_sid', MessageSid)
+          .eq('direction', 'inbound')
+          .maybeSingle();
+        if (seen) {
+          console.log(`[WhatsApp] Duplicate MessageSid ${MessageSid} — skipping`);
+          res.setHeader('Content-Type', 'text/xml');
+          return res.status(200).send(twimlOk);
+        }
+        await supabase.from('whatsapp_messages').insert({
+          user_id:      userId,
+          message_sid:  MessageSid,
+          phone_number: phoneNumber,
+          direction:    'inbound',
+          message_body: rawMessage.substring(0, 4000),
+          processed:    false,
+          project_id:   profile.active_project_id ?? null,
+        });
+      } catch (e: any) {
+        console.warn('[WhatsApp] Failed to log inbound message:', e?.message);
+      }
     }
 
     // ── STEP 2: Onboarding flow ───────────────────────────────────────────────
@@ -4301,13 +4399,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── STEP 6: Handle awaiting_confirmation ──────────────────────────────────
     if (expenseState === 'awaiting_confirmation' && pendingData.project_id) {
-      const isConfirmationResponse =
-        /^[123]$/.test(rawMessage.trim()) ||
-        /^(yes|ok|no|log it|confirm|edit|cancel|save)$/i.test(rawMessage.trim());
+      const trimmed = rawMessage.trim();
 
-      if (!isConfirmationResponse) {
-        // Any non-confirmation message clears stale state and goes straight to the agent
-        console.log('[AutoClear] Non-confirmation message, clearing state and routing to agent');
+      // Strict confirmation check: must be short AND explicitly a confirmation word
+      const isConfirmationResponse =
+        /^[123]$/.test(trimmed) ||
+        (trimmed.length <= 10 && /^(yes|yep|yea|yeah|ok|okay|no|nope|save|confirm|cancel|edit|log it|log|✅|❌|✏️)$/i.test(trimmed));
+
+      // Reject anything that looks like a new message
+      const looksLikeNewMessage =
+        /^(hello|hi|hey|good|morning|evening|afternoon|howdy|greetings|sup|hiya|yo\b)/i.test(trimmed) ||
+        trimmed.length > 60 ||
+        trimmed.split(/\s+/).length > 8;
+
+      const shouldProcessAsConfirmation = isConfirmationResponse && !looksLikeNewMessage;
+
+      if (!shouldProcessAsConfirmation) {
+        // Clear stale state and route to agent
+        console.log('[AutoClear] Clearing stale expense_state — message does not look like confirmation:', trimmed.substring(0, 50));
         await updateExpenseState(userId, null, {});
         // Fall through to STEP 9 (runAgent) below
       } else {
@@ -4584,12 +4693,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
     console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
     if (!checkRateLimit(phoneNumber)) {
-      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.");
+      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.", userId, project?.id);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
     const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
-    await sendMessage(From, agentReply);
+    await sendMessage(From, agentReply, userId, project.id);
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
