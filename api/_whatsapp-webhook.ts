@@ -1287,6 +1287,7 @@ async function checkPriceAnomaly(
     .from('expenses')
     .select('amount, quantity_logged')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${item}%`)
     .not('quantity_logged', 'is', null)
     .order('created_at', { ascending: false })
@@ -1385,7 +1386,7 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
   const { data: project } = await supabase
     .from('projects').select('budget, name').eq('id', projectId).single();
   const { data: expenses } = await supabase
-    .from('expenses').select('amount').eq('project_id', projectId);
+    .from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
 
   const totalSpent = (expenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
   const budget = parseFloat(String(project?.budget || 0));
@@ -1395,7 +1396,8 @@ async function handleBudgetQuery(from: string, projectId: string, lang?: string)
   // Unified burn-rate: use actual days elapsed since first expense date
   const { data: allExpensesForBurn } = await supabase
     .from('expenses').select('amount, expense_date')
-    .eq('project_id', projectId);
+    .eq('project_id', projectId)
+    .is('deleted_at', null);
   let weeklyBurn = 0;
   if (allExpensesForBurn && allExpensesForBurn.length > 0) {
     const burnDates = allExpensesForBurn
@@ -2289,6 +2291,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
       .from('expenses')
       .select('description, amount, expense_date')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .gte('expense_date', periodStart)
       .lte('expense_date', periodEnd)
       .order('expense_date', { ascending: false });
@@ -2389,6 +2392,7 @@ async function handleSmartQuery(from: string, projectId: string, question: strin
     .from('expenses')
     .select('description, amount, expense_date, created_at')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .gte('expense_date', fromDate)
     .order('expense_date', { ascending: false })
     .limit(500);
@@ -2529,6 +2533,7 @@ async function handleNaturalLanguageQuery(
         .from('expenses')
         .select('description, amount, expense_date, created_at')
         .eq('project_id', projectId)
+        .is('deleted_at', null)
         .ilike('description', `%${material}%`)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -2673,6 +2678,7 @@ async function toolEditExpense(projectId: string, params: any): Promise<AgentToo
   }
   const query = supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -2707,6 +2713,7 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
   }
   const { data: expenses } = await supabase.from('expenses').select('id, description, amount, expense_date')
     .eq('project_id', projectId)
+    .is('deleted_at', null)
     .ilike('description', `%${description_keyword}%`)
     .order('expense_date', { ascending: false })
     .limit(1);
@@ -2715,11 +2722,15 @@ async function toolDeleteExpense(projectId: string, params: any): Promise<AgentT
   }
   const expense = expenses[0];
   const amt = parseFloat(String(expense.amount || 0));
-  const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase.from('expenses').update({
+    deleted_at: nowIso,
+    updated_at: nowIso,
+  }).eq('id', expense.id);
   if (error) return { success: false, reply: 'Failed to delete that expense. Please try again.' };
   return {
     success: true,
-    reply: `✅ Deleted! Expense "${expense.description}" — UGX ${fmt(amt)} has been removed. Your budget and dashboard have been updated.`,
+    reply: `✅ Removed! Expense "${expense.description}" — UGX ${fmt(amt)} (same soft-delete as the web app). Budget & Costs on the dashboard will match.`,
     data: { deleted: expense.description, amount: amt },
   };
 }
@@ -2959,7 +2970,7 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
     }
   }
 
-  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId);
+  const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
   const { data: proj } = await supabase.from('projects').select('budget').eq('id', projectId).single();
   const totalSpentNow = (allEx || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
   const budgetVal = parseFloat(String(proj?.budget || 0));
@@ -3030,6 +3041,33 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
   }
   await supabase.from('materials_inventory').insert({ project_id: projectId, user_id: userId, name, quantity: qty, unit: unit || 'units', source: 'whatsapp', last_purchased_at: now, updated_at: now });
   return { success: true, reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.`, data: { newQty: qty } };
+}
+
+/** Remove a materials_inventory row (same as dashboard Materials delete). */
+async function toolDeleteMaterial(projectId: string, params: any): Promise<AgentToolResult> {
+  const raw = params.material_name || params.name || params.title_keyword;
+  if (!raw || String(raw).trim().length < 1) {
+    return { success: false, reply: 'Say which material to remove from inventory (part of its name, e.g. "cement").' };
+  }
+  const needle = String(raw).trim().toLowerCase();
+  const { data: rows } = await supabase
+    .from('materials_inventory')
+    .select('id, name, quantity, unit, updated_at')
+    .eq('project_id', projectId)
+    .ilike('name', `%${needle}%`)
+    .order('updated_at', { ascending: false })
+    .limit(3);
+  if (!rows?.length) {
+    return { success: false, reply: `No material in inventory matched "${raw}". Check the Materials page on the dashboard for the exact name.` };
+  }
+  const row = rows[0];
+  const { error } = await supabase.from('materials_inventory').delete().eq('id', row.id).eq('project_id', projectId);
+  if (error) return { success: false, reply: 'Could not remove that line. Try again or delete it from the dashboard.' };
+  return {
+    success: true,
+    reply: `🗑️ Removed "${row.name}" (${row.quantity} ${row.unit || 'units'}) from Materials. The dashboard Materials list is updated.`,
+    data: { id: row.id, name: row.name },
+  };
 }
 
 async function toolLogIssue(projectId: string, params: any): Promise<AgentToolResult> {
@@ -3126,8 +3164,8 @@ async function runAgent(
     materialTxRes,
   ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(120),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(5000),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(120),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).is('deleted_at', null).order('expense_date', { ascending: false }).limit(5000),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
@@ -3384,9 +3422,14 @@ ACTIVE PROJECT: ${project?.name || 'Unknown'}
 ━━━ LIVE PROJECT DATABASE ━━━
 ${contextBlock}
 
+━━━ WEB APP / DASHBOARD PARITY ━━━
+You read and write the SAME Supabase data as the web app (${DASHBOARD_URL}). Budgets & Costs, Materials, Tasks, Issues & Risks, Daily accountability, and Projects all stay in sync — no separate "WhatsApp-only" copy.
+- Creating or editing expenses, tasks, issues, daily logs, materials, projects, or profile updates MUST use the JSON tools below so changes appear on the dashboard immediately (user may refresh the page).
+- Deleting an expense uses soft-delete (deleted_at), identical to the dashboard — project spent totals update automatically.
+
 ━━━ YOUR COMPLETE CAPABILITIES ━━━
 1. Finance: log expenses (single/multi-item/labor), edit/delete expenses, update budget, analyse spending
-2. Materials: add/use/set inventory, check stock, identify low-stock items, log transactions
+2. Materials: add, use, set, or delete inventory lines (same Materials table as the web app)
 3. Daily logs: record workers, progress, milestones, weather delays, query any past date
 4. Issues & Alerts: log/acknowledge/resolve/update/delete issues, list open issues
 5. Tasks: create/update/complete/delete tasks, list pending tasks
@@ -3427,6 +3470,7 @@ Today is ${todayStr}. For "X days ago" questions, count backward. Never say you 
 {"tool":"log_expense","params":{"description":"...","amount":total,"items":[{"item":"name","quantity":n,"unit":"bags","unit_price":n,"total":n}]}}
 {"tool":"log_labor","params":{"worker_count":number,"amount":number,"description":"...","date":"YYYY-MM-DD"}}
 {"tool":"update_inventory","params":{"material_name":"...","action":"add|use|set","quantity":number,"unit":"..."}}
+{"tool":"delete_material","params":{"material_name":"part of inventory line name"}}
 {"tool":"log_issue","params":{"title":"...","description":"...","severity":"low|medium|high|critical"}}
 {"tool":"acknowledge_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"resolve_issue","params":{"title_keyword":"part of issue title","resolution_note":"optional"}}
@@ -3438,7 +3482,7 @@ Today is ${todayStr}. For "X days ago" questions, count backward. Never say you 
 {"tool":"delete_expense","params":{"description_keyword":"part of existing expense description"}}
 {"tool":"log_progress","params":{"description":"...","worker_count":number,"date":"YYYY-MM-DD"}}
 {"tool":"update_daily_log","params":{"worker_count":number,"notes":"...","milestones":"...","date":"YYYY-MM-DD"}}
-{"tool":"update_project","params":{"budget":number}}
+{"tool":"update_project","params":{"budget":number,"name":"optional","description":"optional","status":"active|completed|paused|on_hold"}}
 {"tool":"create_project","params":{"name":"...","budget":number,"description":"optional"}}
 {"tool":"update_profile","params":{"full_name":"...","whatsapp_number":"+256...","preferred_language":"en|lg|sw"}}
 {"tool":"log_weather_delay","params":{"reason":"...","date":"YYYY-MM-DD"}}
@@ -3464,6 +3508,7 @@ Today is ${todayStr}. For "X days ago" questions, count backward. Never say you 
 - "create project" → create_project
 - "acknowledge/resolve [X]" → acknowledge_issue or resolve_issue
 - "edit/correct [X] expense" → edit_expense
+- "delete/remove material [X] from inventory" → delete_material {material_name}
 - "delete [X] expense" → delete_expense
 - "mark task [X] done" → update_task with status=completed
 - "what happened on [date]?" → get_daily_summary with YYYY-MM-DD
@@ -3557,6 +3602,9 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
       break;
     case 'update_inventory':
       result = await toolUpdateInventory(userId, projectId, toolCall.params);
+      break;
+    case 'delete_material':
+      result = await toolDeleteMaterial(projectId, toolCall.params);
       break;
     case 'log_issue':
       result = await toolLogIssue(projectId, toolCall.params);
@@ -3736,13 +3784,14 @@ export async function sendDailyHeartbeat(): Promise<void> {
       .from('expenses')
       .select('amount')
       .eq('project_id', project.id)
+      .is('deleted_at', null)
       .gte('created_at', `${today}T00:00:00`);
 
     const dailySpend = (todayExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
 
     // Total spend
     const { data: allExpenses } = await supabase
-      .from('expenses').select('amount').eq('project_id', project.id);
+      .from('expenses').select('amount').eq('project_id', project.id).is('deleted_at', null);
     const totalSpent = (allExpenses || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
     const budget = parseFloat(String(project.budget || 0));
     const pct = budget > 0 ? Math.round((totalSpent / budget) * 100) : 0;
@@ -4210,6 +4259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (isOwner && isDispute) {
         const { data: lastExpense } = await supabase.from('expenses')
           .select('id, description, amount').eq('project_id', project.id)
+          .is('deleted_at', null)
           .order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastExpense) {
           await supabase.from('expenses').update({ disputed: true }).eq('id', lastExpense.id);
@@ -4601,7 +4651,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Budget alert: proactive warning when >= 80% or exceeded
         const { data: proj } = await supabase.from('projects').select('budget, name').eq('id', pendingData.project_id!).single();
         const budgetTotal = parseFloat(String(proj?.budget || 0));
-        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!);
+        const { data: allEx } = await supabase.from('expenses').select('amount').eq('project_id', pendingData.project_id!).is('deleted_at', null);
         const totalSpentNow = (allEx || []).reduce((s, e) => s + parseFloat(String(e.amount || 0)), 0);
         const pctNow = budgetTotal > 0 ? (totalSpentNow / budgetTotal) * 100 : 0;
         let budgetAlert = '';
