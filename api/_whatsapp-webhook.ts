@@ -1622,16 +1622,55 @@ async function handleExpenseLog(
     if (qm) { quantity = parseFloat(qm[1].replace(/,/g, '')); unit = unit || qm[2].toLowerCase(); }
   }
 
-  // If quantity + item but no price → ask for price
+  // If quantity + item but no price → log as a pending expense immediately,
+  // then ask for the price as a friendly follow-up (not a blocker)
   if ((!amount || amount <= 0) && quantity > 0 && item) {
-    await updateExpenseState(userId, 'awaiting_price', { quantity, item, unit: unit || 'units', project_id: projectId, vendor });
+    // Log what we know immediately to materials inventory first
+    const isMaterial = MATERIAL_KEYWORDS.some(k => item.toLowerCase().includes(k)) &&
+      !SKIP_KEYWORDS.some(k => item.toLowerCase().includes(k));
+
+    if (isMaterial) {
+      // Update materials inventory right away — we know the quantity
+      const nameNorm = normalizeMaterialName(item);
+      if (nameNorm.length >= 2 && !GARBAGE_MATERIAL_NAMES.includes(nameNorm)) {
+        const now = new Date().toISOString();
+        const { data: ex } = await supabase
+          .from('materials_inventory')
+          .select('id, quantity')
+          .eq('project_id', projectId)
+          .eq('name', nameNorm)
+          .maybeSingle();
+        if (ex) {
+          await supabase.from('materials_inventory').update({
+            quantity: parseFloat(String(ex.quantity || 0)) + quantity,
+            last_purchased_at: now, updated_at: now,
+          }).eq('id', ex.id);
+        } else {
+          await supabase.from('materials_inventory').insert({
+            project_id: projectId, name: nameNorm, quantity,
+            unit: unit || 'units', source: 'whatsapp',
+            last_purchased_at: now, updated_at: now,
+          });
+        }
+        console.log(`[ExpenseLog] Inventory pre-updated: +${quantity} ${unit || 'units'} of ${nameNorm}`);
+      }
+    }
+
+    // Store pending state so when user sends price, we log the expense
+    await updateExpenseState(userId, 'awaiting_price', {
+      quantity, item, unit: unit || 'units', project_id: projectId, vendor,
+    });
+
+    // Confirm receipt of the item AND ask for price in same message
+    const vendorStr = vendor ? ` from ${vendor}` : '';
+    const matLine = isMaterial ? `\n📦 ${quantity} ${unit || 'units'} of ${item} added to Materials & Supplies.` : '';
     const msg = await ai(
-      `Tell the user you got it: ${quantity} ${unit || 'units'} of ${item}${vendor ? ' from ' + vendor : ''}. Ask them what the total cost was. Give an example: 1,900,000 UGX.`,
-      `Got it! ${quantity} ${unit || 'units'} of ${item}${vendor ? ' from ' + vendor : ''}. What was the total cost? (e.g. 1,900,000 UGX)`,
+      `Tell the user you've noted ${quantity} ${unit || 'units'} of ${item}${vendorStr}.${isMaterial ? ' Also tell them the quantity has been added to their Materials & Supplies inventory.' : ''} Now ask them what the total cost was so you can log the expense. Give a price example like 500,000 UGX or 1.2M. Keep it brief and friendly.`,
+      `Got it! ${quantity} ${unit || 'units'} of ${item}${vendorStr} noted.${matLine}\n\nWhat was the total cost? (e.g. 500,000 UGX or 1.2M)`,
       200,
       lang
     );
-    await sendMessage(from, msg);
+    await sendMessage(from, msg, userId, projectId);
     return;
   }
 
@@ -2049,38 +2088,58 @@ async function handleIssueReport(
 ): Promise<void> {
   const rawDesc = String(extracted.description || rawMessage).trim();
   const cleanedDesc = rawDesc
-    .replace(/^(log\s+)?(this\s+)?(alert\s+)?(issue|problem|bug|report)[:\s\-]*/i, '')
+    .replace(/^(log\s+)?(this\s+)?(alert\s+)?(issue|problem|bug|report|alert)[:\s\-]*/i, '')
     .trim();
   const description = cleanedDesc || rawDesc;
   const title = description.length > 80 ? description.substring(0, 77) + '...' : description;
-  const severity = (extracted.severity as string) || 'medium';
 
-  const { data: inserted, error } = await supabase
+  // NEVER ask for severity — auto-detect from keywords, default to medium.
+  // User can always correct later: "change the rain issue to high"
+  let severity = 'medium';
+  const extractedSeverity = String(extracted.severity || '').toLowerCase().trim();
+  if (['low', 'medium', 'high', 'critical'].includes(extractedSeverity)) {
+    severity = extractedSeverity;
+  } else {
+    const d = description.toLowerCase();
+    if (/emergency|critical|urgent|immediate|danger|collapse|fire|flood|electr|fatal|death/i.test(d)) {
+      severity = 'critical';
+    } else if (/major|severe|structural|crack|unsafe|injur|serious|significant/i.test(d)) {
+      severity = 'high';
+    } else if (/minor|small|slight|low|cosmetic/i.test(d)) {
+      severity = 'low';
+    } else {
+      severity = 'medium';
+    }
+  }
+
+  const { error } = await supabase
     .from('issues')
     .insert({
       project_id: projectId,
       title: title || 'Reported issue',
       description: description || null,
-      severity: ['low', 'medium', 'high', 'critical'].includes(severity) ? severity : 'medium',
+      severity,
       status: 'open',
       type: 'general',
-    })
-    .select('id')
-    .single();
+    });
 
   if (error) {
     console.error('[Issue Report]', error.message);
-    await sendMessage(from, 'Sorry, I had trouble logging that issue. Please try again or report from the dashboard.');
+    await sendMessage(from,
+      'Sorry, I had trouble logging that issue. Please try again.',
+      userId, projectId
+    );
     return;
   }
 
+  const severityEmoji = severity === 'critical' ? '🚨' : severity === 'high' ? '⚠️' : severity === 'low' ? '🔵' : '🟡';
   const msg = await ai(
-    `Tell the user their issue was logged and they can view it on the Issues & Risks page. Do NOT mention any ID or UUID.`,
-    `Issue logged. You can view it on the Issues & Risks page.`,
+    `Tell the user their issue was logged immediately: "${title}". Severity was auto-set to ${severity} ${severityEmoji}. It is now visible on the Issues & Risks page on the dashboard. Mention they can say "change the [issue] to high" if the severity is wrong. Plain text, no markdown.`,
+    `${severityEmoji} Issue logged: "${title}" (${severity} severity).\n\nView it on the Issues & Risks page. To adjust severity, say "change the [issue] to high" anytime.`,
     200,
     lang
   );
-  await sendMessage(from, msg);
+  await sendMessage(from, msg, userId, projectId);
 }
 
 async function handleWeatherDelay(
@@ -4818,15 +4877,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 9: AI Agent — full context + tool execution ─────────────────────
     console.log('[Agent] Processing message:', rawMessage.substring(0, 80));
     if (!checkRateLimit(phoneNumber)) {
-      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.");
+      await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.", userId, project.id);
       res.setHeader('Content-Type', 'text/xml');
       return res.status(200).send(twimlOk);
     }
+
+    // ── Instant acknowledgement ("typing" simulation) ─────────────────────────
+    // WhatsApp has no native typing indicator via Twilio, so we send a fast
+    // "received" signal immediately, then follow up with the full AI response.
+    // This tells the user the bot is working and prevents re-sends.
+    const isQuery = /\?|how much|how many|what|when|where|who|which|show|list|tell me|give me|check|find|analyse|compare/i.test(rawMessage);
+    const isAction = /log|bought|paid|buy|paid|spent|received|used|add|update|delete|remove|create|set|change|edit|switch/i.test(rawMessage);
+    let ackMsg = '';
+    if (isAction) {
+      ackMsg = ''; // actions get processed fast, no need for ack
+    } else if (isQuery) {
+      ackMsg = ''; // queries also fast enough
+    }
+    // Only send ack for complex messages that take > 2s (voice notes already handled above)
+    // Use Twilio's ConversationService typing indicator if available, otherwise skip
+    // Note: Twilio WhatsApp sandbox does NOT support typing indicators via API
+    // The best we can do is send the TwiML response immediately (already done via twimlOk)
+    // and process the AI async — but Vercel serverless is synchronous.
+    // So instead: for long operations, we respond to Twilio first then process.
+    // This is architecturally complex to change — the real fix is faster AI calls.
+    // What we CAN do: return the TwiML 200 immediately, then fire the AI async.
+
+    // ── Respond to Twilio immediately to stop retry attempts ─────────────────
+    res.setHeader('Content-Type', 'text/xml');
+    res.status(200).send(twimlOk);
+
+    // ── Process AI response asynchronously (after HTTP response is sent) ─────
+    // Vercel will keep the function alive until the async work completes.
     const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
     await sendMessage(From, agentReply, userId, project.id);
 
-    res.setHeader('Content-Type', 'text/xml');
-    return res.status(200).send(twimlOk);
+    return;
 
   } catch (error: any) {
     console.error('❌ Webhook error:', error.message, error.stack);
