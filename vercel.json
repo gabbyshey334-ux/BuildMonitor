@@ -5,6 +5,11 @@
   "installCommand": "npm install",
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
+  "functions": {
+    "api/whatsapp-webhook.js": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     { "path": "/api/daily-heartbeat", "schedule": "0 17 * * *" }
   ],

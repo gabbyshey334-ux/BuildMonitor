@@ -149,6 +149,21 @@ const SKIP_KEYWORDS = [
 
 const GARBAGE_MATERIAL_NAMES = ['material', 'item', 'thing', 'stuff', 'goods', 'product', 'units'];
 
+/** Canonical material name for inventory rows (lowercase, trimmed, light singularization). */
+function normalizeMaterialName(raw: string): string {
+  const s = String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return '';
+  return s
+    .split(/\s+/)
+    .map((w) => {
+      if (w.length < 2) return w;
+      if (w.endsWith('ies') && w.length > 4) return w.slice(0, -3) + 'y';
+      if (w.endsWith('s') && !w.endsWith('ss') && w.length >= 4) return w.slice(0, -1);
+      return w;
+    })
+    .join(' ');
+}
+
 function parseQuantityFromDescription(desc: string): { quantity: number; unit?: string } | null {
   const m = desc.match(/(\d+)\s*(bags?|tonnes?|pieces?|bars?|sheets?|litres?|rolls?)?/i);
   if (!m) return null;
@@ -4907,15 +4922,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Content-Type', 'text/xml');
     res.status(200).send(twimlOk);
 
-    // ── Process AI response asynchronously (after HTTP response is sent) ─────
-    // Vercel will keep the function alive until the async work completes.
-    const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
-    await sendMessage(From, agentReply, userId, project.id);
+    // runAgent + sendMessage after res.send: outer catch cannot use res again.
+    try {
+      const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
+      await sendMessage(From, agentReply, userId, project.id);
+    } catch (postResponseErr: any) {
+      console.error('❌ Post-response (runAgent/sendMessage) error:', postResponseErr?.message, postResponseErr?.stack);
+      try {
+        await sendMessage(
+          From,
+          "Sorry, something went wrong. Please try again in a moment.",
+          userId,
+          project.id
+        );
+      } catch (sendErr: any) {
+        console.error('❌ Failed to send error fallback to user:', sendErr?.message);
+      }
+    }
 
     return;
 
   } catch (error: any) {
     console.error('❌ Webhook error:', error.message, error.stack);
+    if (res.headersSent) {
+      console.error('❌ Response already sent; cannot return TwiML (error was likely after early 200).');
+      return;
+    }
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?>
 <Response><Message>Sorry, something went wrong. Please try again.</Message></Response>`);
