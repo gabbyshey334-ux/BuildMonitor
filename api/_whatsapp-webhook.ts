@@ -3248,6 +3248,53 @@ async function toolUpdateDailyLog(projectId: string, params: any): Promise<Agent
   return { success: true, reply: `✅ Daily log updated! ${parts.join(', ')}.`, data: updateData };
 }
 
+/** Wall-clock cap so STEP 9 can still call sendMessage + return HTTP before Vercel/Twilio give up. */
+const STEP9_AGENT_BUDGET_MS = 20_000;
+
+async function runAgentWithTimeBudget(
+  userId: string,
+  projectId: string,
+  rawMessage: string,
+  profile: any,
+  allProjects: any[]
+): Promise<string> {
+  let settled = false;
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      console.warn(`[Agent] ${STEP9_AGENT_BUDGET_MS}ms budget — short fallback reply`);
+      void (async () => {
+        try {
+          resolve(
+            await ai(
+              `User: "${rawMessage.substring(0, 240)}". Reply in two short friendly lines as JengaTrack (construction assistant). Plain text.`,
+              'Hi — JengaTrack here. What would you like to know about your project?',
+              220
+            )
+          );
+        } catch {
+          resolve('Hi! JengaTrack here — how can I help with your project today?');
+        }
+      })();
+    }, STEP9_AGENT_BUDGET_MS);
+
+    runAgent(userId, projectId, rawMessage, profile, allProjects)
+      .then((r) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(t);
+        resolve(r);
+      })
+      .catch((e) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(t);
+        reject(e);
+      });
+  });
+}
+
 async function runAgent(
   userId: string,
   projectId: string,
@@ -3269,7 +3316,7 @@ async function runAgent(
   ] = await Promise.all([
     supabase.from('projects').select('id, name, budget, status, description, start_date').eq('id', projectId).single(),
     supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(120),
-    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(5000),
+    supabase.from('expenses').select('description, amount, expense_date').eq('project_id', projectId).order('expense_date', { ascending: false }).limit(1500),
     supabase.from('materials_inventory').select('name, quantity, unit, unit_cost, total_cost, last_purchased_at, last_used_at, low_stock_threshold').eq('project_id', projectId).order('name'),
     supabase.from('vendors').select('name, total_spent, total_transactions').eq('project_id', projectId).order('total_spent', { ascending: false }).limit(20),
     supabase.from('daily_logs').select('log_date, worker_count, notes, milestones, activity_entries, weather_condition').eq('project_id', projectId).order('log_date', { ascending: false }).limit(90),
@@ -4897,50 +4944,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).send(twimlOk);
     }
 
-    // ── Instant acknowledgement ("typing" simulation) ─────────────────────────
-    // WhatsApp has no native typing indicator via Twilio, so we send a fast
-    // "received" signal immediately, then follow up with the full AI response.
-    // This tells the user the bot is working and prevents re-sends.
-    const isQuery = /\?|how much|how many|what|when|where|who|which|show|list|tell me|give me|check|find|analyse|compare/i.test(rawMessage);
-    const isAction = /log|bought|paid|buy|paid|spent|received|used|add|update|delete|remove|create|set|change|edit|switch/i.test(rawMessage);
-    let ackMsg = '';
-    if (isAction) {
-      ackMsg = ''; // actions get processed fast, no need for ack
-    } else if (isQuery) {
-      ackMsg = ''; // queries also fast enough
-    }
-    // Only send ack for complex messages that take > 2s (voice notes already handled above)
-    // Use Twilio's ConversationService typing indicator if available, otherwise skip
-    // Note: Twilio WhatsApp sandbox does NOT support typing indicators via API
-    // The best we can do is send the TwiML response immediately (already done via twimlOk)
-    // and process the AI async — but Vercel serverless is synchronous.
-    // So instead: for long operations, we respond to Twilio first then process.
-    // This is architecturally complex to change — the real fix is faster AI calls.
-    // What we CAN do: return the TwiML 200 immediately, then fire the AI async.
-
-    // ── Respond to Twilio immediately to stop retry attempts ─────────────────
-    res.setHeader('Content-Type', 'text/xml');
-    res.status(200).send(twimlOk);
-
-    // runAgent + sendMessage after res.send: outer catch cannot use res again.
+    let agentReply: string;
     try {
-      const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
-      await sendMessage(From, agentReply, userId, project.id);
-    } catch (postResponseErr: any) {
-      console.error('❌ Post-response (runAgent/sendMessage) error:', postResponseErr?.message, postResponseErr?.stack);
-      try {
-        await sendMessage(
-          From,
-          "Sorry, something went wrong. Please try again in a moment.",
-          userId,
-          project.id
-        );
-      } catch (sendErr: any) {
-        console.error('❌ Failed to send error fallback to user:', sendErr?.message);
-      }
+      agentReply = await runAgentWithTimeBudget(userId, project.id, rawMessage, profile, projects || []);
+    } catch (agentErr: any) {
+      console.error('❌ runAgent failed:', agentErr?.message, agentErr?.stack);
+      agentReply =
+        "Sorry — I couldn't finish that just now. Please try again in a few seconds.";
     }
 
-    return;
+    await sendMessage(From, agentReply, userId, project.id);
+    console.log('[Webhook] STEP9: WhatsApp reply sent OK');
+
+    res.setHeader('Content-Type', 'text/xml');
+    return res.status(200).send(twimlOk);
 
   } catch (error: any) {
     console.error('❌ Webhook error:', error.message, error.stack);
