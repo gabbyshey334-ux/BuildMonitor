@@ -225,11 +225,15 @@ async function logOutbound(userId: string, messageBody: string, projectId?: stri
 async function sendMessage(to: string, message: string, userId?: string, projectId?: string): Promise<void> {
   try {
     const toNumber = to.startsWith('whatsapp:') ? to : `whatsapp:${to}`;
-    await twilioClient.messages.create({
-      from: TWILIO_WHATSAPP_NUMBER,
-      to: toNumber,
-      body: message,
-    });
+    await withDeadline(
+      twilioClient.messages.create({
+        from: TWILIO_WHATSAPP_NUMBER,
+        to: toNumber,
+        body: message,
+      }),
+      TWILIO_SEND_DEADLINE_MS,
+      'twilio.messages.create'
+    );
     // Auto-log every outbound message for conversation memory
     if (userId) await logOutbound(userId, message, projectId);
   } catch (error: any) {
@@ -254,6 +258,28 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
+
+/** Prevent hung Gemini/OpenAI/Twilio HTTP calls from blocking the webhook indefinitely */
+function withDeadline<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      reject(Object.assign(new Error(`${label} timed out after ${ms}ms`), { code: 'DEADLINE_EXCEEDED' }));
+    }, ms);
+    promise
+      .then((v) => {
+        clearTimeout(t);
+        resolve(v);
+      })
+      .catch((e) => {
+        clearTimeout(t);
+        reject(e);
+      });
+  });
+}
+
+const GEMINI_CALL_DEADLINE_MS = 14_000;
+const OPENAI_AGENT_DEADLINE_MS = 14_000;
+const TWILIO_SEND_DEADLINE_MS = 12_000;
 
 /** Parse amount from text: handles 150K, 1.5M, 2B, and plain numbers. K=×1000, M=×1e6, B=×1e9. */
 function parseAmount(text: string): number {
@@ -291,7 +317,11 @@ ${langInstruction}`;
     for (const modelName of ['gemini-2.0-flash', 'gemini-2.5-flash-lite']) {
       try {
         const model = gemini.getGenerativeModel({ model: modelName, systemInstruction: systemContent });
-        const result = await model.generateContent(prompt);
+        const result = await withDeadline(
+          model.generateContent(prompt),
+          GEMINI_CALL_DEADLINE_MS,
+          `[AI Helper] Gemini ${modelName}`
+        );
         const text = result.response.text().trim();
         if (text) return text;
       } catch (err: any) {
@@ -301,15 +331,19 @@ ${langInstruction}`;
   }
   if (process.env.OPENAI_API_KEY) {
     try {
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemContent },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.7,
-        max_tokens: maxTokens,
-      });
+      const completion = await withDeadline(
+        openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemContent },
+            { role: 'user', content: prompt },
+          ],
+          temperature: 0.7,
+          max_tokens: maxTokens,
+        }),
+        OPENAI_AGENT_DEADLINE_MS,
+        '[AI Helper] OpenAI gpt-4o-mini'
+      );
       const text = completion.choices[0]?.message?.content?.trim();
       if (text) return text;
     } catch (err: any) {
@@ -3258,7 +3292,7 @@ async function toolUpdateDailyLog(projectId: string, params: any): Promise<Agent
 }
 
 /** Wall-clock cap — MUST resolve synchronously on timeout (never await ai() here or the Promise can hang forever). */
-const STEP9_AGENT_BUDGET_MS = 20_000;
+const STEP9_AGENT_BUDGET_MS = 45_000;
 const STEP9_TIMEOUT_REPLY =
   'Hi! JengaTrack here — how can I help with your project today? Ask about spending, materials, or tell me what you bought.';
 
@@ -3301,6 +3335,7 @@ async function runAgent(
   profile: any,
   allProjects: any[]
 ): Promise<string> {
+  console.log('[Agent] Loading DB context…');
   // ── Load comprehensive DB context in parallel (full expense history for analytics) ──
   const [
     projectRes,
@@ -3329,6 +3364,8 @@ async function runAgent(
       .limit(50),
     supabase.from('material_transactions').select('material_id, transaction_type, quantity, unit_cost, total_cost, description, created_at').eq('project_id', projectId).order('created_at', { ascending: false }).limit(100),
   ]);
+
+  console.log('[Agent] DB context loaded');
 
   // ── Fetch conversation history for memory ─────────────────────────────────
   const { data: convHistory } = await supabase
@@ -3713,6 +3750,8 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
 
   const userPrompt = rawMessage;
 
+  console.log('[Agent] Context ready — calling LLM (Gemini → OpenAI fallback)');
+
   // ── Call AI (Gemini primary with history, GPT-4o fallback) ────────────────
   let rawResponse: string | null = null;
 
@@ -3723,14 +3762,22 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
         // Try with history first, fall back to no history if it fails
         try {
           const chat = model.startChat({ history: formattedHistory });
-          const result = await chat.sendMessage(userPrompt);
+          const result = await withDeadline(
+            chat.sendMessage(userPrompt),
+            GEMINI_CALL_DEADLINE_MS,
+            `Gemini ${modelName} sendMessage`
+          );
           rawResponse = result.response.text()?.trim() || null;
         } catch (histErr: any) {
           console.warn(`[Agent] Gemini ${modelName} with history failed, retrying without history:`, histErr?.message);
-          const result = await model.generateContent([
-            { text: systemPrompt },
-            { text: userPrompt },
-          ]);
+          const result = await withDeadline(
+            model.generateContent([
+              { text: systemPrompt },
+              { text: userPrompt },
+            ]),
+            GEMINI_CALL_DEADLINE_MS,
+            `Gemini ${modelName} generateContent`
+          );
           rawResponse = result.response.text()?.trim() || null;
         }
         if (rawResponse) {
@@ -3749,16 +3796,20 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
         role: (m.role === 'model' ? 'assistant' : 'user') as 'user' | 'assistant',
         content: m.parts[0].text,
       }));
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...histMsgs,
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 800,
-      });
+      const completion = await withDeadline(
+        openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...histMsgs,
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.3,
+          max_tokens: 800,
+        }),
+        OPENAI_AGENT_DEADLINE_MS,
+        'OpenAI gpt-4o chat'
+      );
       rawResponse = completion.choices[0]?.message?.content?.trim() || null;
       if (rawResponse) console.log('[Agent] GPT-4o:', rawResponse.substring(0, 120));
     } catch (err: any) {
@@ -3772,7 +3823,11 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
       try {
         const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
         const simplePrompt = `You are JengaTrack, a construction assistant. The user says: "${rawMessage}". Answer helpfully in plain text. No markdown.`;
-        const result = await model.generateContent(simplePrompt);
+        const result = await withDeadline(
+          model.generateContent(simplePrompt),
+          GEMINI_CALL_DEADLINE_MS,
+          'Gemini simple fallback generateContent'
+        );
         rawResponse = result.response.text()?.trim() || null;
         if (rawResponse) console.log('[Agent] Gemini fallback succeeded');
       } catch (err: any) {
@@ -3782,10 +3837,14 @@ Be thorough on analysis and knowledge questions. Be concise on simple confirmati
   }
 
   if (!rawResponse) {
-    return await ai(
-      `The user said: "${rawMessage}". Respond helpfully as JengaTrack construction assistant.`,
-      "I didn't catch that — could you try again? You can say things like 'how much did I spend this month?' or 'log 50 bags cement for 2M'.",
-      300
+    return await withDeadline(
+      ai(
+        `The user said: "${rawMessage}". Respond helpfully as JengaTrack construction assistant.`,
+        "I didn't catch that — could you try again? You can say things like 'how much did I spend this month?' or 'log 50 bags cement for 2M'.",
+        300
+      ),
+      OPENAI_AGENT_DEADLINE_MS,
+      'ai() helper fallback'
     );
   }
 
@@ -4960,6 +5019,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       agentReply =
         "Sorry — I couldn't finish that just now. Please try again in a few seconds.";
     }
+
+    console.log('[Webhook] STEP9: reply ready, sending via Twilio (chars=', String(agentReply || '').length, ')');
 
     try {
       await sendMessage(From, agentReply, userId, project.id);
