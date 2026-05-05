@@ -246,6 +246,15 @@ async function sendOptions(to: string, message: string, options: string[], userI
 
 const fmt = (n: number) => new Intl.NumberFormat('en-UG').format(Math.round(n));
 
+/** Escape text for Twilio TwiML &lt;Message&gt; bodies */
+function escapeXml(text: string): string {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /** Parse amount from text: handles 150K, 1.5M, 2B, and plain numbers. K=×1000, M=×1e6, B=×1e9. */
 function parseAmount(text: string): number {
   const clean = text.replace(/,/g, '').trim();
@@ -3248,8 +3257,10 @@ async function toolUpdateDailyLog(projectId: string, params: any): Promise<Agent
   return { success: true, reply: `✅ Daily log updated! ${parts.join(', ')}.`, data: updateData };
 }
 
-/** Wall-clock cap so STEP 9 can still call sendMessage + return HTTP before Vercel/Twilio give up. */
+/** Wall-clock cap — MUST resolve synchronously on timeout (never await ai() here or the Promise can hang forever). */
 const STEP9_AGENT_BUDGET_MS = 20_000;
+const STEP9_TIMEOUT_REPLY =
+  'Hi! JengaTrack here — how can I help with your project today? Ask about spending, materials, or tell me what you bought.';
 
 async function runAgentWithTimeBudget(
   userId: string,
@@ -3263,20 +3274,8 @@ async function runAgentWithTimeBudget(
     const t = setTimeout(() => {
       if (settled) return;
       settled = true;
-      console.warn(`[Agent] ${STEP9_AGENT_BUDGET_MS}ms budget — short fallback reply`);
-      void (async () => {
-        try {
-          resolve(
-            await ai(
-              `User: "${rawMessage.substring(0, 240)}". Reply in two short friendly lines as JengaTrack (construction assistant). Plain text.`,
-              'Hi — JengaTrack here. What would you like to know about your project?',
-              220
-            )
-          );
-        } catch {
-          resolve('Hi! JengaTrack here — how can I help with your project today?');
-        }
-      })();
+      console.warn(`[Agent] ${STEP9_AGENT_BUDGET_MS}ms budget — sync fallback (no ai() on timeout path)`);
+      resolve(STEP9_TIMEOUT_REPLY);
     }, STEP9_AGENT_BUDGET_MS);
 
     runAgent(userId, projectId, rawMessage, profile, allProjects)
@@ -3372,6 +3371,16 @@ async function runAgent(
   }
 
   const project = projectRes.data;
+  if (!project || projectRes.error) {
+    console.error('[Agent] Project missing or error:', projectId, projectRes.error?.message);
+    return (
+      (await ai(
+        `User said: "${rawMessage}". Briefly ask them to say "list projects" or switch project.`,
+        'Could not load this project. Say "list projects" to choose one.',
+        220
+      )) || 'Say "list projects" to pick which project to use.'
+    );
+  }
   const allExpenses = (expensesFullRes.data || []).map((e: any) => ({
     description: e.description,
     amount: parseFloat(String(e.amount || 0)),
@@ -4081,19 +4090,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('direction', 'inbound')
           .maybeSingle();
         if (alreadySeen) {
-          console.log(`[WhatsApp] Duplicate MessageSid ${MessageSid} — skipping`);
-          res.setHeader('Content-Type', 'text/xml');
-          return res.status(200).send(twimlOk);
+          console.log(`[WhatsApp] Duplicate MessageSid ${MessageSid} — already logged; still processing (Twilio retry)`);
+        } else {
+          await supabase.from('whatsapp_messages').insert({
+            user_id:      userId,
+            message_sid:  MessageSid,
+            phone_number: phoneNumber,
+            direction:    'inbound',
+            message_body: rawMessage.substring(0, 4000),
+            processed:    false,
+            project_id:   profile.active_project_id ?? null,
+          });
         }
-        await supabase.from('whatsapp_messages').insert({
-          user_id:      userId,
-          message_sid:  MessageSid,
-          phone_number: phoneNumber,
-          direction:    'inbound',
-          message_body: rawMessage.substring(0, 4000),
-          processed:    false,
-          project_id:   profile.active_project_id ?? null,
-        });
       } catch (e: any) {
         console.warn('[WhatsApp] Failed to log inbound:', e?.message);
       }
@@ -4953,8 +4961,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "Sorry — I couldn't finish that just now. Please try again in a few seconds.";
     }
 
-    await sendMessage(From, agentReply, userId, project.id);
-    console.log('[Webhook] STEP9: WhatsApp reply sent OK');
+    try {
+      await sendMessage(From, agentReply, userId, project.id);
+      console.log('[Webhook] STEP9: WhatsApp reply sent OK (Twilio REST)');
+    } catch (sendErr: any) {
+      console.error('[Webhook] STEP9 Twilio REST failed, falling back to TwiML &lt;Message&gt;:', sendErr?.message, sendErr?.code);
+      const body = (agentReply || 'JengaTrack could not reach WhatsApp — please try again.').substring(0, 1600);
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(`<?xml version="1.0" encoding="UTF-8"?>
+<Response><Message>${escapeXml(body)}</Message></Response>`);
+    }
 
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twimlOk);
