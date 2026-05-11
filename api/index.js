@@ -15,23 +15,6 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
-import {
-  calcBudgetPercent,
-  calcBurnRate,
-  calcInventoryTotal,
-  findFirstExpenseDate,
-  normalizeCategory,
-  sumByCategory,
-  sumExpenses,
-  isNonDeleted,
-  dateKey,
-} from '../shared/calculations.js';
-import {
-  formatCurrency,
-  formatDate,
-  formatDaysRemaining,
-  formatProjectionDate,
-} from '../shared/formatting.js';
 
 /** Linked WhatsApp profile IDs + auth user id — mirrors GET /api/projects. */
 async function getLinkedUserIdsForAuth(supabase, userId) {
@@ -257,8 +240,6 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       let materialsRows = [];
       let openIssuesCount = 0;
       let criticalIssuesCount = 0;
-      let totalTasksCount = 0;
-      let completedTasksCount = 0;
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -273,7 +254,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         }
         const { data: projectData, error: projectError } = await supabase
           .from('projects')
-          .select('id, name, budget, currency, status, created_at')
+          .select('id, name, budget, status, created_at')
           .eq('id', projectId)
           .maybeSingle();
         if (projectError || !projectData) {
@@ -283,30 +264,23 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         projectRow = projectData;
 
         let expenseRowCount = 0;
-        // DO NOT redeclare `expenseRowsForCumulative` with `let` here — the
-        // outer binding at the top of this handler holds the rows every
-        // downstream derivation (firstExpenseDate, calcBurnRate,
-        // sumByCategory, cumulativeCosts) reads from. A block-scoped shadow
-        // previously lived here and silently zeroed the summary payload:
-        // totalSpent worked (outer scope) but categoryTotals / burn /
-        // firstExpenseDate all read `[]`. See Debug Panel diff 2026-04-20.
+        let expenseRowsForCumulative = [];
         if (projectRow) {
           const { data: expenseRows, error: expenseError } = await supabase
             .from('expenses')
-            .select('id, amount, expense_date, created_at, category, deleted_at')
+            .select('amount, expense_date')
             .eq('project_id', projectId)
             .is('deleted_at', null);
           if (expenseError) console.error('[Summary] Supabase expenses error:', expenseError);
           expenseRowCount = (expenseRows || []).length;
-          // Use shared sumExpenses() for float-safe (integer-cents) arithmetic.
-          totalSpent = sumExpenses(expenseRows || []);
+          totalSpent = (expenseRows || []).reduce((sum, row) => sum + parseFloat(String(row.amount || 0)), 0);
           expenseRowsForCumulative = expenseRows || [];
         }
 
         if (projectRow) {
           const { data: materialsData, error: materialsError } = await supabase
             .from('materials_inventory')
-            .select('id, name, quantity, unit, unit_cost, low_stock_threshold')
+            .select('id, name, quantity, unit')
             .eq('project_id', projectId);
           if (materialsError) console.error('[Summary] Supabase materials_inventory error:', materialsError);
           materialsRows = materialsData || [];
@@ -332,38 +306,6 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           criticalIssuesCount = 0;
         }
 
-        // Task-based progress: completed tasks ÷ total tasks.
-        //
-        // This is the ONLY honest progress number the system can produce today.
-        // We previously returned a hardcoded 0, and earlier than that returned
-        // `min(100, spent/budget)` which conflated money with schedule and
-        // misled owners whose projects were "67% done" purely because they
-        // had overspent. Until phases/milestones land, task completion is the
-        // correct proxy.
-        //
-        // Soft-deleted tasks are excluded so cancelled work can't game the
-        // percentage. Tasks with status 'done' are treated as completed
-        // alongside 'completed' because the WhatsApp agent writes either.
-        try {
-          const { count: totalCount } = await supabase
-            .from('tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('project_id', projectId)
-            .is('deleted_at', null);
-          const { count: doneCount } = await supabase
-            .from('tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('project_id', projectId)
-            .is('deleted_at', null)
-            .in('status', ['completed', 'done']);
-          totalTasksCount = totalCount ?? 0;
-          completedTasksCount = doneCount ?? 0;
-        } catch (taskErr) {
-          console.warn('[Summary] Tasks count failed:', taskErr?.message);
-          totalTasksCount = 0;
-          completedTasksCount = 0;
-        }
-
         console.log('[Summary Debug]', {
           projectId,
           source: 'supabase',
@@ -379,7 +321,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       if (!projectRow && initializeDatabase()) {
         const dbConnection = initializeDatabase();
         const projectResult = await dbConnection.execute(sql`
-          SELECT id, name, budget, currency, status, created_at
+          SELECT id, name, budget, status, created_at
           FROM projects
           WHERE id = ${projectId} AND user_id = ${userId}
           LIMIT 1
@@ -387,24 +329,20 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         projectRow = Array.isArray(projectResult) ? projectResult[0] : (projectResult?.rows?.[0] ?? projectResult);
 
         if (projectRow) {
-          // CRITICAL: exclude soft-deleted expenses from every aggregate.
-          // Missing this filter caused silent inflation of totals when the
-          // Supabase client path was unavailable.
           const expenseResult = await dbConnection.execute(sql`
-            SELECT amount, expense_date, created_at, category, deleted_at
+            SELECT amount, expense_date
             FROM expenses
             WHERE project_id = ${projectId}
-              AND deleted_at IS NULL
           `);
           const rows = Array.isArray(expenseResult) ? expenseResult : (expenseResult?.rows || []);
-          totalSpent = sumExpenses(rows);
+          totalSpent = rows.reduce((sum, row) => sum + parseFloat(String(row?.amount || 0)), 0);
           expenseRowsForCumulative = rows;
         }
 
         if (projectRow) {
           try {
             const matResult = await dbConnection.execute(sql`
-              SELECT id, name, quantity, unit, unit_cost, low_stock_threshold
+              SELECT id, name, quantity, unit
               FROM materials_inventory
               WHERE project_id = ${projectId}
             `);
@@ -427,32 +365,13 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
-      const projectCurrency = String(projectRow.currency || 'UGX').toUpperCase();
       const budgetAmount = parseFloat(String(projectRow.budget ?? '0'));
-      // Shared calculators — one source of truth across dashboard, API, and bot.
-      const budgetHealth = calcBudgetPercent(totalSpent, budgetAmount);
-      const firstExpense = findFirstExpenseDate(expenseRowsForCumulative);
-      const burn = calcBurnRate(totalSpent, budgetAmount, firstExpense, projectCurrency);
-      if (process.env.NODE_ENV !== 'production') {
-        console.log('[summary]', {
-          projectId,
-          currency: projectCurrency,
-          budget: budgetAmount,
-          totalSpent,
-          firstExpenseDate: firstExpense ? firstExpense.toISOString().slice(0, 10) : null,
-          dailyRate: burn.dailyRate,
-          daysRemaining: burn.daysRemaining,
-          display: burn.displayDaysRemaining,
-        });
-      }
       const remaining = Math.max(0, budgetAmount - totalSpent);
-      const percentage = budgetHealth.visual;
-      const weeklyBurnRate = burn.weeklyRate;
-      const dailyBurnRate = burn.dailyRate;
-      const weeksRemaining =
-        Number.isFinite(burn.daysRemaining) && weeklyBurnRate > 0
-          ? burn.daysRemaining / 7
-          : null;
+      const percentage = budgetAmount > 0 ? Math.min(100, (totalSpent / budgetAmount) * 100) : 0;
+      // Use unified burn rate formula (same as Budget & Costs and Trends pages)
+      const weeklyBurnRate = computeWeeklyBurnRate(expenseRowsForCumulative, totalSpent);
+      const dailyBurnRate = weeklyBurnRate / 7;
+      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
 
       // Build cumulative costs by date (for Budget & Costs section)
       const byDate = {};
@@ -503,8 +422,6 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           id: row.id,
           name: row.name || 'Material',
           unit: row.unit || 'units',
-          unit_cost: row.unit_cost != null ? parseFloat(String(row.unit_cost)) : null,
-          low_stock_threshold: row.low_stock_threshold ?? null,
           currentStock: qty,
           totalStock: qty,
           stockPercent: qty > 0 ? 100 : 0,
@@ -516,16 +433,7 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
         used: 0,
         remaining: parseFloat(String(row.quantity || 0)),
       }));
-      const inventoryTotalValue = calcInventoryTotal(materialsRows);
-      const inventorySection = { items, usage, totalValue: inventoryTotalValue };
-
-      // Authoritative category totals — case-folded, soft-delete aware.
-      const categoryTotals = sumByCategory(expenseRowsForCumulative);
-
-      // Projected exhaustion ISO date (YYYY-MM-DD for machine consumers).
-      const budgetRunoutIso = burn.projectedExhaustionDate
-        ? dateKey(burn.projectedExhaustionDate)
-        : null;
+      const inventorySection = { items, usage };
 
       return res.json({
         success: true,
@@ -533,46 +441,23 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           id: projectRow.id,
           name: projectRow.name,
           budget_amount: projectRow.budget,
-          currency: projectCurrency,
           status: projectRow.status,
           created_at: projectRow.created_at,
         },
-        currency: projectCurrency,
         budget: {
           total: budgetAmount,
           spent: totalSpent,
           remaining,
           percentage: Math.round(percentage * 10) / 10,
-          rawPercent: Math.round(budgetHealth.raw * 10) / 10,
-          status: budgetHealth.status,
-          isOver: budgetHealth.isOver,
-          display: budgetHealth.display,
           dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
           weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
           weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
-          daysRemaining: Number.isFinite(burn.daysRemaining) ? burn.daysRemaining : null,
-          daysRemainingDisplay: burn.displayDaysRemaining,
-          isEarlyEstimate: burn.isEarlyEstimate,
-          disclaimer: burn.disclaimer,
-          firstExpenseDate: firstExpense ? dateKey(firstExpense) : null,
-          budgetRunout: budgetRunoutIso,
-          budgetRunoutDisplay: burn.projectedExhaustionDate
-            ? formatProjectionDate(burn.projectedExhaustionDate)
+          budgetRunout: weeksRemaining != null && weeksRemaining < 9999
+            ? new Date(Date.now() + Math.floor(weeksRemaining) * 7 * 86400000).toISOString().split('T')[0]
             : null,
         },
-        categoryTotals,
-        inventory: {
-          totalValue: inventoryTotalValue,
-          itemCount: materialsRows.length,
-        },
         progress: {
-          // Integer 0..100 so the UI can render {progressPct}% directly without
-          // floating noise or an unbounded value if data is missing.
-          overallPercentage: totalTasksCount > 0
-            ? Math.min(100, Math.max(0, Math.round((completedTasksCount / totalTasksCount) * 100)))
-            : 0,
-          completedTasks: completedTasksCount,
-          totalTasks: totalTasksCount,
+          overallPercentage: 0,
           phases: [],
           milestones: [],
         },
@@ -623,7 +508,7 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
       const { data: projectRow } = await supabase
         .from('projects')
-        .select('id, name, budget, currency')
+        .select('id, name, budget')
         .eq('id', projectId)
         .maybeSingle();
       if (!projectRow) {
@@ -631,7 +516,6 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
 
       const budgetTotal = parseFloat(String(projectRow.budget || 0));
-      const projectCurrency = String(projectRow.currency || 'UGX').toUpperCase();
 
       let expenseRows;
       let expError;
@@ -661,48 +545,36 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
 
       const expenses = expenseRows || [];
-      // Shared, float-safe totals + unified burn-rate formula.
-      const spent = sumExpenses(expenses);
+      const spent = expenses.reduce((sum, e) => sum + parseFloat(String(e.amount || 0)), 0);
       const remaining = Math.max(0, budgetTotal - spent);
-      const budgetHealth = calcBudgetPercent(spent, budgetTotal);
-      const firstExpenseDate = findFirstExpenseDate(expenses);
-      const burn = calcBurnRate(spent, budgetTotal, firstExpenseDate, projectCurrency);
-      const percentage = budgetHealth.visual;
-      const weeklyBurnRate = burn.weeklyRate;
-      const dailyBurnRate = burn.dailyRate;
-      const weeksRemaining =
-        Number.isFinite(burn.daysRemaining) && weeklyBurnRate > 0
-          ? burn.daysRemaining / 7
-          : null;
+      const percentage = budgetTotal > 0 ? Math.min(100, (spent / budgetTotal) * 100) : 0;
+      const weeklyBurnRate = computeWeeklyBurnRate(expenses, spent);
+      const dailyBurnRate = weeklyBurnRate / 7;
+      const weeksRemaining = weeklyBurnRate > 0 ? remaining / weeklyBurnRate : null;
 
       const summary = {
         total: budgetTotal,
         spent,
         remaining,
         percentage: Math.round(percentage * 10) / 10,
-        rawPercent: Math.round(budgetHealth.raw * 10) / 10,
-        status: budgetHealth.status,
-        isOver: budgetHealth.isOver,
-        display: budgetHealth.display,
         dailyBurnRate: Math.round(dailyBurnRate * 100) / 100,
         weeklyBurnRate: Math.round(weeklyBurnRate * 100) / 100,
         weeksRemaining: weeksRemaining != null ? Math.round(weeksRemaining * 10) / 10 : null,
-        daysRemaining: Number.isFinite(burn.daysRemaining) ? burn.daysRemaining : null,
-        daysRemainingDisplay: burn.displayDaysRemaining,
-        isEarlyEstimate: burn.isEarlyEstimate,
-        disclaimer: burn.disclaimer,
-        currency: projectCurrency,
       };
 
-      // Case-folded, soft-delete aware category totals via shared helper.
-      // Prevents "Materials"/"materials"/"MATERIALS" from splitting into three
-      // buckets where each shows <100% of the true category share.
-      const byCategory = sumByCategory(expenses).map((c) => ({
-        category: c.name,
-        total: c.amount,
-        count: c.count,
-        percentage: c.percent,
-      }));
+      const byCategoryMap = {};
+      for (const e of expenses) {
+        const cat = (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General';
+        if (!byCategoryMap[cat]) byCategoryMap[cat] = { total: 0, count: 0 };
+        byCategoryMap[cat].total += parseFloat(String(e.amount || 0));
+        byCategoryMap[cat].count += 1;
+      }
+      const byCategory = Object.entries(byCategoryMap).map(([category, v]) => ({
+        category,
+        total: v.total,
+        count: v.count,
+        percentage: spent > 0 ? Math.round((v.total / spent) * 1000) / 10 : 0,
+      })).sort((a, b) => b.total - a.total);
 
       // This week / last week totals for spending spike alert
       const now = new Date();
@@ -742,21 +614,29 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
       }
       const byMonth = Object.values(byMonthMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey)).map(({ month, amount }) => ({ month, amount }));
 
-      const toClientExpense = (e) => ({
+      const recent = expenses.slice(0, 20).map((e) => ({
         id: e.id,
         description: e.description || '',
         amount: parseFloat(String(e.amount || 0)),
-        // Normalize: "materials"/"MATERIALS"/"  Labour  " → canonical title case;
-        // null/empty → "Uncategorized".
-        category: normalizeCategory(e.category),
+        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
         expense_date: e.expense_date,
         vendor: null,
         source: e.source || null,
         created_at: e.created_at,
         disputed: !!e.disputed,
-      });
-      const recent = expenses.slice(0, 20).map(toClientExpense);
-      const expensesForClient = expenses.map(toClientExpense);
+      }));
+
+      const expensesForClient = expenses.map((e) => ({
+        id: e.id,
+        description: e.description || '',
+        amount: parseFloat(String(e.amount || 0)),
+        category: (e.category && String(e.category).trim()) ? String(e.category).trim() : 'General',
+        expense_date: e.expense_date,
+        vendor: null,
+        source: e.source || null,
+        created_at: e.created_at,
+        disputed: !!e.disputed,
+      }));
 
       let vendors = [];
       try {
@@ -775,7 +655,6 @@ app.get('/api/projects/:projectId/expenses', (req, res, next) => {
 
       return res.json({
         success: true,
-        currency: projectCurrency,
         summary,
         byCategory,
         byMonth,
@@ -834,12 +713,7 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase
-      .from('projects')
-      .select('id, currency')
-      .eq('id', projectId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
     if (!projectRow) {
       console.error('[POST expenses] Project not found:', projectId);
       return res.status(404).json({ success: false, error: 'Project not found' });
@@ -854,17 +728,16 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
     const today = (expense_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
-    // Inherit currency from the project — never hardcode UGX.
     const insertPayload = {
       project_id: projectId,
       user_id: userId,
       description: (description && String(description).trim()) ? String(description).trim() : 'Expense',
       amount,
       expense_date: today,
-      currency: String(projectRow.currency || 'UGX').toUpperCase(),
+      currency: 'UGX',
       source: body.source || 'dashboard',
     };
-    if (category !== undefined) insertPayload.category = normalizeCategory(category);
+    if (category !== undefined) insertPayload.category = category || 'Other';
     if (vendor !== undefined) insertPayload.vendor = vendor && String(vendor).trim() ? String(vendor).trim() : null;
 
     const { data: expense, error } = await supabase
@@ -987,13 +860,10 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    // Only operate on non-deleted rows — prevents re-running delete on a
-    // already-soft-deleted expense from re-triggering cache invalidations.
     const { data: expenseRow, error: fetchErr } = await supabase
       .from('expenses')
       .select('id, project_id')
       .eq('id', expenseId)
-      .is('deleted_at', null)
       .maybeSingle();
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
@@ -1007,12 +877,10 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     if (!projectRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    // Soft delete — preserves audit trail and matches the rest of the product.
     const { error: deleteErr } = await supabase
       .from('expenses')
-      .update({ deleted_at: new Date().toISOString() })
-      .eq('id', expenseId)
-      .is('deleted_at', null);
+      .delete()
+      .eq('id', expenseId);
     if (deleteErr) {
       console.error('[DELETE expense]', deleteErr.message);
       return res.status(500).json({ success: false, error: deleteErr.message || 'Failed to delete' });
@@ -1040,12 +908,10 @@ app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-    // Only permit edits on non-soft-deleted rows — matches DELETE behaviour.
     const { data: expenseRow, error: fetchErr } = await supabase
       .from('expenses')
       .select('id, project_id')
       .eq('id', expenseId)
-      .is('deleted_at', null)
       .maybeSingle();
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
@@ -1069,13 +935,11 @@ app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
     const updates = { updated_at: new Date().toISOString() };
     if (description !== undefined) updates.description = description;
     if (amount !== undefined) updates.amount = amount;
-    if (body.category !== undefined) updates.category = normalizeCategory(body.category);
 
     const { data: updated, error: updateErr } = await supabase
       .from('expenses')
       .update(updates)
       .eq('id', expenseId)
-      .is('deleted_at', null)
       .select()
       .single();
     if (updateErr) {
@@ -1620,7 +1484,7 @@ function utcDateKeyFromIso(iso) {
   return new Date(iso).toISOString().split('T')[0];
 }
 
-/** Keep in sync with shared/materialNames.ts */
+/** Same rules as shared/materialNames.ts (duplicated here for Vercel runtime). */
 // Words that must never be singularized (would produce wrong stems)
 const _MAT_KEEP = new Set([
   'glass', 'grass', 'brass', 'gas', 'canvas', 'status', 'access', 'rebar',
@@ -2563,13 +2427,8 @@ app.get('/api/projects/:projectId/trends', (req, res, next) => {
 // TEST ENDPOINTS (available even when server app is loaded)
 // ============================================================================
 
-// Debug Auth Endpoint (JWT only — no session).
-// SECURITY: Disabled in production to avoid leaking JWT_SECRET_SET / NODE_ENV
-// and the decoded userId of whoever can forge tokens.
+// Debug Auth Endpoint (JWT only — no session)
 app.get('/api/debug/session', async (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-    return res.status(404).json({ success: false, error: 'Not found' });
-  }
   try {
     const token = extractToken(req);
     const decoded = token ? verifyToken(token) : null;
@@ -2591,12 +2450,8 @@ app.get('/api/debug/session', async (req, res) => {
   }
 });
 
-// WhatsApp Debug Endpoint (always available - BEFORE server app mounts).
-// SECURITY: Disabled in production to avoid exposing webhook/inbound logs.
+// WhatsApp Debug Endpoint (always available - BEFORE server app mounts)
 app.get('/webhook/debug', async (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-    return res.status(404).json({ success: false, error: 'Not found' });
-  }
   try {
     const limit = parseInt(req.query.limit) || 50;
     
@@ -3349,9 +3204,6 @@ app.get('/api/projects', requireAuth, async (req, res) => {
     }
 
     // Fetch projects: owned by user (or linked profiles) OR managed by user
-    // NOTE: we intentionally do NOT select the stale `projects.spent` column —
-    // spent is always computed live from expenses below so the list can never
-    // disagree with reality. See Investigation 1, RC #2.
     const { data: projectsOwned, error: errOwned } = await supabase
       .from('projects')
       .select(`
@@ -3360,6 +3212,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
         name,
         description,
         budget,
+        spent,
         currency,
         status,
         created_at,
@@ -3385,6 +3238,7 @@ app.get('/api/projects', requireAuth, async (req, res) => {
         name,
         description,
         budget,
+        spent,
         currency,
         status,
         created_at,
@@ -3414,32 +3268,21 @@ app.get('/api/projects', requireAuth, async (req, res) => {
     let dailyLogMax = {}; // project_id -> lastLogDate
 
     if (projectIds.length > 0) {
-      // All monetary values are in the project's base currency unit (e.g. UGX
-      // shillings). NEVER multiply / divide by 1000 or 1_000_000 here — only
-      // for display formatting at the edge.
       const { data: expenseRows } = await supabase
         .from('expenses')
-        .select('project_id, amount, created_at, deleted_at')
+        .select('project_id, amount, created_at')
         .in('project_id', projectIds)
         .is('deleted_at', null);
       if (expenseRows && Array.isArray(expenseRows)) {
-        // Accumulate in integer cents to avoid float drift on big totals.
-        const centsSums = {};
         for (const row of expenseRows) {
           const pid = row.project_id;
           if (!pid) continue;
           if (!expenseSums[pid]) expenseSums[pid] = { totalSpent: 0, lastActivity: null };
-          const amt = parseFloat(row.amount);
-          if (Number.isFinite(amt) && amt > 0) {
-            centsSums[pid] = (centsSums[pid] || 0) + Math.round(amt * 100);
-          }
+          expenseSums[pid].totalSpent += parseFloat(row.amount || 0);
           const at = row.created_at;
           if (at && (!expenseSums[pid].lastActivity || new Date(at) > new Date(expenseSums[pid].lastActivity))) {
             expenseSums[pid].lastActivity = at;
           }
-        }
-        for (const pid of Object.keys(centsSums)) {
-          expenseSums[pid].totalSpent = centsSums[pid] / 100;
         }
       }
       const { data: logRows } = await supabase
@@ -3456,25 +3299,12 @@ app.get('/api/projects', requireAuth, async (req, res) => {
       }
     }
 
-    // Transform to match frontend expectations.
-    //
-    //   ▸ `spent` is ALWAYS the live sum of non-deleted expense rows. The
-    //     stored `projects.spent` column is explicitly ignored because it has
-    //     no writer keeping it fresh (see Investigation 1, RC #2).
-    //   ▸ `progress` is NOT returned. Previously this field held
-    //     `Math.min(100, spent/budget)` masquerading as construction progress
-    //     and contradicted the dashboard's `progress.overallPercentage`. Until
-    //     the product has a real milestone/tasks-based progress source, the
-    //     list endpoint should not invent one.
+    // Transform to match frontend expectations — use real spent & last activity from DB
     const transformedProjects = (projects || []).map(project => {
       const pid = project.id;
-      const fromExpenses = expenseSums[pid];
-      // Zero (not the stale stored column) when no non-deleted expenses exist.
-      const realSpent =
-        fromExpenses && Number.isFinite(fromExpenses.totalSpent)
-          ? fromExpenses.totalSpent
-          : 0;
-      const lastExpenseAt = fromExpenses ? fromExpenses.lastActivity : null;
+      const fromExpenses = expenseSums[pid] || {};
+      const realSpent = fromExpenses.totalSpent != null ? fromExpenses.totalSpent : parseFloat(project.spent || 0);
+      const lastExpenseAt = fromExpenses.lastActivity || null;
       const lastLogDate = dailyLogMax[pid] || null;
       const projectUpdated = project.updated_at || project.created_at || null;
       const lastActivity = [lastExpenseAt, lastLogDate, projectUpdated]
@@ -3484,24 +3314,24 @@ app.get('/api/projects', requireAuth, async (req, res) => {
           const t = new Date(d).getTime();
           return !latest || t > new Date(latest).getTime() ? d : latest;
         }, null);
-      const budgetRaw = parseFloat(project.budget);
-      const budget = Number.isFinite(budgetRaw) && budgetRaw > 0 ? budgetRaw : 0;
+      const budget = parseFloat(project.budget || 0);
+      const progress = budget > 0 ? Math.min(100, Math.round((realSpent / budget) * 100)) : 0;
 
       return {
-        id: project.id,
-        userId: project.user_id,
-        name: project.name,
-        description: project.description,
+      id: project.id,
+      userId: project.user_id,
+      name: project.name,
+      description: project.description,
         budget,
         budgetAmount: budget,
         spent: realSpent,
         totalSpent: realSpent,
-        currency: project.currency || 'UGX',
-        status: project.status || 'active',
-        hasBudget: budget > 0,
+      currency: project.currency || 'UGX',
+      status: project.status || 'active',
+        progress,
         lastActivity: lastActivity || project.updated_at || project.created_at,
-        createdAt: project.created_at,
-        updatedAt: project.updated_at,
+      createdAt: project.created_at,
+      updatedAt: project.updated_at,
       };
     });
 
@@ -3984,37 +3814,26 @@ app.get('/api/dashboard/summary', requireAuth, async (req, res) => {
     const projectResult = await dbConnection.execute(sql`
       SELECT id, name, budget
       FROM projects
-      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
+      WHERE id = ${activeProjectId} AND user_id = ${userId}
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
-
-    // SECURITY: If the project doesn't belong to this user, do NOT fall through
-    // to aggregate their expenses/tasks — that would leak cross-tenant data.
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        error: 'Project not found',
-      });
-    }
 
     // Get expenses
     const expensesResult = await dbConnection.execute(sql`
       SELECT COALESCE(SUM(CAST(amount AS DECIMAL)), 0) as total
       FROM expenses
       WHERE project_id = ${activeProjectId}
-        AND deleted_at IS NULL
     `);
     const totalSpent = parseFloat(Array.isArray(expensesResult) ? expensesResult[0]?.total : (expensesResult.rows ? expensesResult.rows[0]?.total : expensesResult?.total) || '0');
 
-    // Get tasks (non-deleted only)
+    // Get tasks
     const tasksResult = await dbConnection.execute(sql`
       SELECT COUNT(*) as total,
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress')) as open,
              COUNT(*) FILTER (WHERE status IN ('pending', 'in_progress') AND priority = 'high') as critical
       FROM tasks
       WHERE project_id = ${activeProjectId}
-        AND deleted_at IS NULL
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult[0] : (tasksResult.rows ? tasksResult.rows[0] : tasksResult);
     const totalTasks = parseInt(tasks?.total || '0');
@@ -4090,25 +3909,11 @@ app.get('/api/dashboard/progress', requireAuth, async (req, res) => {
       });
     }
 
-    // SECURITY: Check ownership before returning tasks for this project.
-    const progressOwnerCheck = await dbConnection.execute(sql`
-      SELECT 1 FROM projects
-      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
-      LIMIT 1
-    `);
-    const progressOwnerRow = Array.isArray(progressOwnerCheck)
-      ? progressOwnerCheck[0]
-      : (progressOwnerCheck.rows ? progressOwnerCheck.rows[0] : progressOwnerCheck);
-    if (!progressOwnerRow) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
-    }
-
-    // Get tasks for milestones (non-deleted only)
+    // Get tasks for milestones
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, due_date as "dueDate", priority, status
       FROM tasks
       WHERE project_id = ${activeProjectId}
-        AND deleted_at IS NULL
       ORDER BY due_date ASC
       LIMIT 10
     `);
@@ -4202,24 +4007,13 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
     const projectResult = await dbConnection.execute(sql`
       SELECT budget
       FROM projects
-      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
+      WHERE id = ${activeProjectId} AND user_id = ${userId}
       LIMIT 1
     `);
     const project = Array.isArray(projectResult) ? projectResult[0] : (projectResult.rows ? projectResult.rows[0] : projectResult);
-
-    // SECURITY: Refuse to aggregate another user's expenses if they don't own
-    // this project. Previously a stray projectId would return `project=null`
-    // but still execute the SUM() below, leaking cross-tenant spend data.
-    if (!project) {
-      return res.status(404).json({
-        success: false,
-        error: 'Project not found',
-      });
-    }
-
     const totalBudget = parseFloat(project?.budget || '0');
 
-    // Get expenses by category (non-deleted only)
+    // Get expenses by category
     let expensesResult;
     try {
       expensesResult = await dbConnection.execute(sql`
@@ -4230,7 +4024,6 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
         FROM expenses e
         LEFT JOIN expense_categories ec ON e.category_id = ec.id
         WHERE e.project_id = ${activeProjectId}
-          AND e.deleted_at IS NULL
         GROUP BY ec.name, ec.color
         ORDER BY total DESC
       `);
@@ -4257,7 +4050,7 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
       variance: 20,
     }));
 
-    // Get cumulative costs over time (non-deleted only)
+    // Get cumulative costs over time
     let dailyExpensesResult;
     try {
       dailyExpensesResult = await dbConnection.execute(sql`
@@ -4266,7 +4059,6 @@ app.get('/api/dashboard/budget', requireAuth, async (req, res) => {
           SUM(CAST(amount AS DECIMAL)) as daily_total
         FROM expenses
         WHERE project_id = ${activeProjectId}
-          AND deleted_at IS NULL
         GROUP BY DATE(expense_date)
         ORDER BY DATE(expense_date) ASC
       `);
@@ -4382,27 +4174,11 @@ app.get('/api/dashboard/issues', requireAuth, async (req, res) => {
       });
     }
 
-    // SECURITY: Verify the caller owns this project before pulling tasks.
-    // Otherwise any authenticated user could read another user's issues by
-    // passing a guessed projectId.
-    const ownerCheckResult = await dbConnection.execute(sql`
-      SELECT 1 FROM projects
-      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
-      LIMIT 1
-    `);
-    const ownerRow = Array.isArray(ownerCheckResult)
-      ? ownerCheckResult[0]
-      : (ownerCheckResult.rows ? ownerCheckResult.rows[0] : ownerCheckResult);
-    if (!ownerRow) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
-    }
-
-    // Get tasks as issues (non-deleted only)
+    // Get tasks as issues
     const tasksResult = await dbConnection.execute(sql`
       SELECT id, title, description, status, priority, created_at as "createdAt"
       FROM tasks
       WHERE project_id = ${activeProjectId}
-        AND deleted_at IS NULL
       ORDER BY created_at DESC
     `);
     const tasks = Array.isArray(tasksResult) ? tasksResult : (tasksResult.rows || []);
@@ -4518,27 +4294,14 @@ app.get('/api/dashboard/media', requireAuth, async (req, res) => {
       });
     }
 
-    // SECURITY: Verify project ownership before returning images for it.
-    const mediaOwnerCheck = await dbConnection.execute(sql`
-      SELECT 1 FROM projects
-      WHERE id = ${activeProjectId} AND (user_id = ${userId} OR manager_id = ${userId})
-      LIMIT 1
-    `);
-    const mediaOwnerRow = Array.isArray(mediaOwnerCheck)
-      ? mediaOwnerCheck[0]
-      : (mediaOwnerCheck.rows ? mediaOwnerCheck.rows[0] : mediaOwnerCheck);
-    if (!mediaOwnerRow) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
-    }
-
-    // Get recent photos (non-deleted only)
+    // Get recent photos
+    // Note: images table may not have caption column, use filename as description
     let photosResult;
     try {
       photosResult = await dbConnection.execute(sql`
         SELECT id, storage_path as "storagePath", filename, created_at as "createdAt"
         FROM images
         WHERE project_id = ${activeProjectId}
-          AND deleted_at IS NULL
         ORDER BY created_at DESC
         LIMIT 10
       `);
@@ -4654,9 +4417,6 @@ app.get('/api/images', requireAuth, async (req, res) => {
 
 // Test Project Creation Setup
 app.get('/api/test/project-creation', async (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-    return res.status(404).json({ success: false, error: 'Not found' });
-  }
   try {
     // Try to extract token if present (optional auth for test endpoint)
     const token = extractToken(req);
@@ -4783,9 +4543,6 @@ app.get('/api/test/project-creation', async (req, res) => {
 
 // Test Supabase and Database connection (admin/dev only — requires auth)
 app.get('/api/test/supabase', requireAuth, async (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-    return res.status(404).json({ success: false, error: 'Not found' });
-  }
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -4892,9 +4649,6 @@ app.get('/api/test/supabase', requireAuth, async (req, res) => {
 // ============================================================================
 
   app.get('/api/debug/db', async (req, res) => {
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_DEBUG_ENDPOINTS !== '1') {
-      return res.status(404).json({ success: false, error: 'Not found' });
-    }
     res.json({
       status: 'ok',
       message: 'Debug endpoint (fallback mode)',
@@ -4957,4 +4711,3 @@ app.use((err, req, res, next) => {
 
 // Export for Vercel
 export default app;
-
