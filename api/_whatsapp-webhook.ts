@@ -2672,27 +2672,46 @@ interface AgentToolResult {
   data?: Record<string, unknown>;
 }
 
-/** Extract a {"tool":..., "params":...} JSON block from AI response text */
-function parseToolCall(text: string): { tool: string; params: any } | null {
+/** Extract one or more {"tool":..., "params":...} objects from AI response (array or repeated JSON objects). */
+function parseToolCalls(text: string): { tool: string; params: any }[] {
   const stripped = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
   try {
     const parsed = JSON.parse(stripped);
-    if (parsed.tool && parsed.params !== undefined) return parsed;
-  } catch { /* continue to brace-matching */ }
-  const start = stripped.indexOf('{"tool"');
-  if (start === -1) return null;
-  let depth = 0;
-  let end = -1;
-  for (let i = start; i < stripped.length; i++) {
-    if (stripped[i] === '{') depth++;
-    else if (stripped[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+    if (Array.isArray(parsed)) {
+      return parsed.filter((p) => p && typeof p.tool === 'string' && p.params !== undefined);
+    }
+    if (parsed && typeof parsed.tool === 'string' && parsed.params !== undefined) return [parsed];
+  } catch {
+    /* fall through to scan */
   }
-  if (end === -1) return null;
-  try {
-    const parsed = JSON.parse(stripped.substring(start, end));
-    if (parsed.tool && parsed.params !== undefined) return parsed;
-  } catch { /* not valid */ }
-  return null;
+
+  const out: { tool: string; params: any }[] = [];
+  let search = stripped;
+  for (let guard = 0; guard < 24; guard++) {
+    const start = search.indexOf('{"tool"');
+    if (start === -1) break;
+    let depth = 0;
+    let end = -1;
+    for (let i = start; i < search.length; i++) {
+      if (search[i] === '{') depth++;
+      else if (search[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (end === -1) break;
+    try {
+      const one = JSON.parse(search.substring(start, end));
+      if (one && typeof one.tool === 'string' && one.params !== undefined) out.push(one);
+    } catch {
+      /* skip bad segment */
+    }
+    search = search.substring(end);
+  }
+  return out;
 }
 
 // ─── Tool: update_profile ─────────────────────────────────────────────────────
@@ -3110,15 +3129,20 @@ async function toolLogLabor(userId: string, projectId: string, params: any): Pro
 }
 
 async function toolUpdateInventory(userId: string, projectId: string, params: any): Promise<AgentToolResult> {
-  const { material_name, action, quantity, unit } = params;
+  const { material_name, action, quantity, unit, purchase_amount_ugx, unit_price_ugx, date } = params;
   if (!material_name) return { success: false, reply: 'Please specify the material name.' };
   if (!quantity || parseFloat(String(quantity)) <= 0) return { success: false, reply: 'Please specify the quantity.' };
   const name = normalizeMaterialName(material_name);
   const qty = parseFloat(String(quantity));
   const now = new Date().toISOString();
+  const expenseDate = date || new Date().toISOString().split('T')[0];
+  const purchaseFromTotal = parseFloat(String(purchase_amount_ugx || 0));
+  const unitPriceIn = parseFloat(String(unit_price_ugx || 0));
+  const purchaseTotal =
+    purchaseFromTotal > 0 ? purchaseFromTotal : unitPriceIn > 0 && qty > 0 ? unitPriceIn * qty : 0;
   const { data: existing } = await supabase
     .from('materials_inventory')
-    .select('id, quantity, unit')
+    .select('id, quantity, unit, total_cost, unit_cost')
     .eq('project_id', projectId)
     .eq('name', name)
     .maybeSingle();
@@ -3153,14 +3177,59 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
     }
     return { success: true, reply: `✅ Stock set! ${material_name}: ${qty} ${unit || 'units'}.`, data: { newQty: qty } };
   }
-  // Default: add
+  // Default: add (optional purchase cost → also record expense for Budgets & Costs)
+  const uc = purchaseTotal > 0 && qty > 0 ? purchaseTotal / qty : 0;
+  if (purchaseTotal > 0) {
+    const desc = `${qty} ${unit || 'bags'} of ${material_name}`;
+    const { error: expErr } = await supabase.from('expenses').insert({
+      user_id: userId,
+      project_id: projectId,
+      description: desc,
+      amount: String(purchaseTotal),
+      quantity_logged: String(qty),
+      currency: 'UGX',
+      expense_date: expenseDate,
+      source: 'whatsapp',
+    });
+    if (expErr) {
+      console.error('[update_inventory] expense insert failed:', expErr.message);
+      return { success: false, reply: 'Could not record the purchase as an expense. Inventory was not changed — try again or log the expense separately.' };
+    }
+  }
+
   if (existing) {
     const newQty = parseFloat(String(existing.quantity || 0)) + qty;
-    await supabase.from('materials_inventory').update({ quantity: newQty, last_purchased_at: now, updated_at: now }).eq('id', existing.id);
-    return { success: true, reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.`, data: { newQty } };
+    const updates: Record<string, unknown> = { quantity: newQty, last_purchased_at: now, updated_at: now };
+    if (purchaseTotal > 0) {
+      const oldTotal = parseFloat(String(existing.total_cost || 0));
+      updates.total_cost = oldTotal + purchaseTotal;
+      updates.unit_cost = uc || parseFloat(String(existing.unit_cost || 0));
+    }
+    await supabase.from('materials_inventory').update(updates).eq('id', existing.id);
+    const costLine = purchaseTotal > 0 ? ` Budgets & Costs: UGX ${fmt(purchaseTotal)} logged.` : '';
+    return {
+      success: true,
+      reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.${costLine}`,
+      data: { newQty },
+    };
   }
-  await supabase.from('materials_inventory').insert({ project_id: projectId, name, quantity: qty, unit: unit || 'units', source: 'whatsapp', last_purchased_at: now, updated_at: now });
-  return { success: true, reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.`, data: { newQty: qty } };
+  await supabase.from('materials_inventory').insert({
+    project_id: projectId,
+    name,
+    quantity: qty,
+    unit: unit || 'units',
+    unit_cost: uc || 0,
+    total_cost: purchaseTotal || 0,
+    source: 'whatsapp',
+    last_purchased_at: now,
+    updated_at: now,
+  });
+  const costLine = purchaseTotal > 0 ? ` Budgets & Costs: UGX ${fmt(purchaseTotal)} logged.` : '';
+  return {
+    success: true,
+    reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.${costLine}`,
+    data: { newQty: qty },
+  };
 }
 
 async function toolLogIssue(projectId: string, params: any): Promise<AgentToolResult> {
@@ -3539,11 +3608,18 @@ Today is ${todayStr}. For "X days ago" questions, count backward from this date.
 
 Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on [date]?" use get_daily_summary with that date, or search logs by date. If no log, say nothing was logged that day.
 
-━━━ TOOLS — return ONLY a JSON object (no other text) to take an action ━━━
+━━━ TOOLS — return a JSON object for ONE action, OR a JSON ARRAY for several actions in order (no other text) ━━━
+Multi-step example (user said "log fuel, then labor, then show total spend"):
+[{"tool":"log_expense","params":{"description":"Fuel for excavator","amount":12500}},{"tool":"log_labor","params":{"worker_count":4,"amount":18000,"description":"4 masons labour"}},{"tool":"query_data","params":{"answer":"Total project spend is … UGX (use analytics.spentUgx and list the last two expenses you just logged)."}}]
+
+When the user buys inventory at a stated price, include cost on update_inventory so it appears under Budgets & Costs:
+{"tool":"update_inventory","params":{"material_name":"cement","action":"add","quantity":100,"unit":"bags","unit_price_ugx":50000}}
+(or "purchase_amount_ugx":5000000 instead of unit_price × quantity). Do NOT duplicate the same purchase with both log_expense and purchase_amount in one message.
+
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
 {"tool":"log_expense","params":{"description":"...","amount":total,"items":[{"item":"name","quantity":n,"unit":"bags","unit_price":n,"total":n}]}}
 {"tool":"log_labor","params":{"worker_count":number,"amount":number,"description":"...","date":"YYYY-MM-DD"}}
-{"tool":"update_inventory","params":{"material_name":"...","action":"add|use|set","quantity":number,"unit":"..."}}
+{"tool":"update_inventory","params":{"material_name":"...","action":"add|use|set","quantity":number,"unit":"...","unit_price_ugx":number,"purchase_amount_ugx":number,"date":"YYYY-MM-DD optional"}}
 {"tool":"log_issue","params":{"title":"...","description":"...","severity":"low|medium|high|critical"}}
 {"tool":"acknowledge_issue","params":{"title_keyword":"part of issue title"}}
 {"tool":"resolve_issue","params":{"title_keyword":"part of issue title","resolution_note":"optional"}}
@@ -3568,7 +3644,8 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 {"tool":"compare_periods","params":{}}
 
 ━━━ DECISION GUIDE ━━━
-- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return the JSON tool call only
+- User wants to LOG/RECORD/ADD/BUY/PAY/UPDATE/RESOLVE/CREATE/DELETE/EDIT → return tool JSON only (one object OR an ordered array for multiple steps)
+- If one message contains multiple commands joined by THEN, AND, or NOW (e.g. log X, then log Y, then show total), you MUST return a JSON ARRAY of tool calls in the correct order — never execute only the first action.
 - User asks a QUESTION about their data → use query_data with the full answer (or get_daily_summary / compare_periods when fitting)
 - "any alerts/issues/problems?" → list from issues.open as plain text. NEVER call log_issue.
 - "switch to X project" → call switch_project immediately
@@ -3592,7 +3669,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 7. Currency: always UGX with commas: 1,500,000 UGX.
 8. If unsure what user wants, ask ONE short clarifying question.
 9. NEVER say "check your dashboard" for data that IS in the context above. Answer directly.
-10. For multi-part questions, answer ALL parts in one reply.
+10. For multi-part questions, answer ALL parts in one reply. For multi-part COMMANDS, use a JSON array of tools in order.
 11. update_project: ONLY include params the user explicitly asked to change. NEVER auto-generate or infer a project name. If user says "expand budget to 200M", params must be ONLY {"budget":200000000}. No name, no description, no status unless user asked for those.
 
 ━━━ FORMATTING ━━━
@@ -3631,7 +3708,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.3,
-        max_tokens: 800,
+        max_tokens: 1600,
       });
       rawResponse = completion.choices[0]?.message?.content?.trim() || null;
       if (rawResponse) console.log('[Agent] OpenAI:', rawResponse.substring(0, 120));
@@ -3644,9 +3721,9 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     return "I'm having trouble connecting right now. Try again in a moment, or check your dashboard directly.";
   }
 
-  // ── Parse tool call or return plain text ───────────────────────────────────
-  const toolCall = parseToolCall(rawResponse);
-  if (!toolCall) {
+  // ── Parse tool call(s) or return plain text ────────────────────────────────
+  const toolCalls = parseToolCalls(rawResponse);
+  if (toolCalls.length === 0) {
     const reply = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || rawResponse;
     if (looksLikeIssueReport(rawMessage) && responseAsksIssueSeverity(reply)) {
       try {
@@ -3665,135 +3742,145 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
     return reply;
   }
 
-  console.log('[Agent] Tool:', toolCall.tool, JSON.stringify(toolCall.params).substring(0, 100));
+  const replyParts: string[] = [];
+  for (let ti = 0; ti < toolCalls.length; ti++) {
+    const toolCall = toolCalls[ti];
+    console.log(
+      `[Agent] Tool ${ti + 1}/${toolCalls.length}:`,
+      toolCall.tool,
+      JSON.stringify(toolCall.params).substring(0, 120)
+    );
 
-  let result: AgentToolResult;
-  switch (toolCall.tool) {
-    case 'log_expense':
-      result = await toolLogExpense(userId, projectId, toolCall.params);
-      break;
-    case 'log_labor':
-      result = await toolLogLabor(userId, projectId, toolCall.params);
-      break;
-    case 'update_inventory':
-      result = await toolUpdateInventory(userId, projectId, toolCall.params);
-      break;
-    case 'log_issue':
-      result = await toolLogIssue(projectId, toolCall.params);
-      if (result.success) {
-        try {
-          await clearIssueDraft(userId);
-        } catch (e: any) {
-          console.warn('[Agent] clearIssueDraft failed:', e?.message);
+    let result: AgentToolResult;
+    switch (toolCall.tool) {
+      case 'log_expense':
+        result = await toolLogExpense(userId, projectId, toolCall.params);
+        break;
+      case 'log_labor':
+        result = await toolLogLabor(userId, projectId, toolCall.params);
+        break;
+      case 'update_inventory':
+        result = await toolUpdateInventory(userId, projectId, toolCall.params);
+        break;
+      case 'log_issue':
+        result = await toolLogIssue(projectId, toolCall.params);
+        if (result.success) {
+          try {
+            await clearIssueDraft(userId);
+          } catch (e: any) {
+            console.warn('[Agent] clearIssueDraft failed:', e?.message);
+          }
         }
-      }
-      break;
-    case 'acknowledge_issue':
-      result = await toolAcknowledgeIssue(projectId, toolCall.params);
-      break;
-    case 'resolve_issue':
-      result = await toolResolveIssue(projectId, toolCall.params);
-      break;
-    case 'edit_expense':
-      result = await toolEditExpense(projectId, toolCall.params);
-      break;
-    case 'delete_expense':
-      result = await toolDeleteExpense(projectId, toolCall.params);
-      break;
-    case 'log_progress':
-      result = await toolLogProgress(projectId, toolCall.params);
-      break;
-    case 'update_daily_log':
-      result = await toolUpdateDailyLog(projectId, toolCall.params);
-      break;
-    case 'update_project':
-      result = await toolUpdateProject(projectId, toolCall.params);
-      break;
-    case 'create_project':
-      result = await toolCreateProject(userId, toolCall.params);
-      break;
-    case 'update_profile':
-      result = await toolUpdateProfile(userId, toolCall.params);
-      break;
-    case 'log_weather_delay':
-      result = await toolLogWeatherDelay(projectId, toolCall.params);
-      break;
-    case 'create_task':
-      result = await toolCreateTask(userId, projectId, toolCall.params);
-      break;
-    case 'update_task':
-      result = await toolUpdateTask(projectId, toolCall.params);
-      break;
-    case 'delete_task':
-      result = await toolDeleteTask(projectId, toolCall.params);
-      break;
-    case 'update_issue':
-      result = await toolUpdateIssue(projectId, toolCall.params);
-      break;
-    case 'delete_issue':
-      result = await toolDeleteIssue(projectId, toolCall.params);
-      break;
-    case 'switch_project':
-      result = await toolSwitchProject(userId, toolCall.params, allProjects);
-      break;
-    case 'query_data':
-      result = {
-        success: true,
-        reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
-      };
-      break;
-    case 'get_daily_summary': {
-      const queryDate = String(toolCall.params.date || todayStr);
-      const log = dailyLogs.find((l: any) => l.date === queryDate);
-      if (!log) {
-        const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
-        result = { success: true, reply: `No daily log found for ${dateLabel}. Nothing was logged that day.` };
-      } else {
-        const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
-        const parts: string[] = [];
-        if (log.workers) parts.push(`${log.workers} workers on site`);
-        if (log.notes) parts.push(String(log.notes));
-        if (log.milestones) parts.push(`Milestone: ${log.milestones}`);
-        if (log.weatherCondition) parts.push(`Weather: ${log.weatherCondition}`);
+        break;
+      case 'acknowledge_issue':
+        result = await toolAcknowledgeIssue(projectId, toolCall.params);
+        break;
+      case 'resolve_issue':
+        result = await toolResolveIssue(projectId, toolCall.params);
+        break;
+      case 'edit_expense':
+        result = await toolEditExpense(projectId, toolCall.params);
+        break;
+      case 'delete_expense':
+        result = await toolDeleteExpense(projectId, toolCall.params);
+        break;
+      case 'log_progress':
+        result = await toolLogProgress(projectId, toolCall.params);
+        break;
+      case 'update_daily_log':
+        result = await toolUpdateDailyLog(projectId, toolCall.params);
+        break;
+      case 'update_project':
+        result = await toolUpdateProject(projectId, toolCall.params);
+        break;
+      case 'create_project':
+        result = await toolCreateProject(userId, toolCall.params);
+        break;
+      case 'update_profile':
+        result = await toolUpdateProfile(userId, toolCall.params);
+        break;
+      case 'log_weather_delay':
+        result = await toolLogWeatherDelay(projectId, toolCall.params);
+        break;
+      case 'create_task':
+        result = await toolCreateTask(userId, projectId, toolCall.params);
+        break;
+      case 'update_task':
+        result = await toolUpdateTask(projectId, toolCall.params);
+        break;
+      case 'delete_task':
+        result = await toolDeleteTask(projectId, toolCall.params);
+        break;
+      case 'update_issue':
+        result = await toolUpdateIssue(projectId, toolCall.params);
+        break;
+      case 'delete_issue':
+        result = await toolDeleteIssue(projectId, toolCall.params);
+        break;
+      case 'switch_project':
+        result = await toolSwitchProject(userId, toolCall.params, allProjects);
+        break;
+      case 'query_data':
         result = {
           success: true,
-          reply: `${dateLabel}: ${parts.length > 0 ? parts.join('. ') : 'Log exists but no details recorded.'}`,
+          reply: String(toolCall.params.answer || '').trim() || 'Here is what I found from your project data.',
         };
+        break;
+      case 'get_daily_summary': {
+        const queryDate = String(toolCall.params.date || todayStr);
+        const log = dailyLogs.find((l: any) => l.date === queryDate);
+        if (!log) {
+          const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+          result = { success: true, reply: `No daily log found for ${dateLabel}. Nothing was logged that day.` };
+        } else {
+          const dateLabel = new Date(queryDate + 'T12:00:00').toLocaleDateString('en-UG', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+          const parts: string[] = [];
+          if (log.workers) parts.push(`${log.workers} workers on site`);
+          if (log.notes) parts.push(String(log.notes));
+          if (log.milestones) parts.push(`Milestone: ${log.milestones}`);
+          if (log.weatherCondition) parts.push(`Weather: ${log.weatherCondition}`);
+          result = {
+            success: true,
+            reply: `${dateLabel}: ${parts.length > 0 ? parts.join('. ') : 'Log exists but no details recorded.'}`,
+          };
+        }
+        break;
       }
-      break;
+      case 'compare_periods': {
+        const momLine =
+          momChange !== null
+            ? `Month vs prior month: ${momChange > 0 ? '+' : ''}${momChange}% change in spending`
+            : 'Month vs prior month: N/A (no spend last month to compare)';
+        result = {
+          success: true,
+          reply: [
+            `Spending comparison (UGX):`,
+            `- This week: ${fmt(spendThisWeek)} | Last week: ${fmt(spendLastWeek)}`,
+            `- This month: ${fmt(spendThisMonth)} | Last month: ${fmt(spendLastMonth)}`,
+            `- Last 7 days: ${fmt(spendLast7Days)} | Last 30 days: ${fmt(spendLast30Days)}`,
+            momLine,
+          ].join('\n'),
+        };
+        break;
+      }
+      default:
+        console.log('[Agent] Unknown tool:', toolCall.tool);
+        replyParts.push(`(Skipped unknown step: ${toolCall.tool})`);
+        continue;
     }
-    case 'compare_periods': {
-      const momLine =
-        momChange !== null
-          ? `Month vs prior month: ${momChange > 0 ? '+' : ''}${momChange}% change in spending`
-          : 'Month vs prior month: N/A (no spend last month to compare)';
-      result = {
-        success: true,
-        reply: [
-          `Spending comparison (UGX):`,
-          `- This week: ${fmt(spendThisWeek)} | Last week: ${fmt(spendLastWeek)}`,
-          `- This month: ${fmt(spendThisMonth)} | Last month: ${fmt(spendLastMonth)}`,
-          `- Last 7 days: ${fmt(spendLast7Days)} | Last 30 days: ${fmt(spendLast30Days)}`,
-          momLine,
-        ].join('\n'),
-      };
-      break;
-    }
-    default:
-      console.log('[Agent] Unknown tool:', toolCall.tool);
-      return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim() || "Got it! What else can I help with?";
+    replyParts.push(result.reply);
   }
 
-  return result.reply;
+  return replyParts.filter(Boolean).join('\n\n');
 }
 
 // ─── Daily Heartbeat (called by a scheduled job at /api/daily-heartbeat) ──────
