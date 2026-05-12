@@ -3117,6 +3117,12 @@ ${DASHBOARD_URL}`
     await sendMessage(`whatsapp:${owner.whatsapp_number}`, heartbeatMsg);
   }
 }
+function imageCaptionLooksLikeAgentRequest(text) {
+  const t = text.trim();
+  if (t.length < 8) return false;
+  if (/^(ok|thanks|thank you|thx|yes|no|got it|nice)\.?$/i.test(t)) return false;
+  return /\d/.test(t) || /\b(bought|paid|spent|log|add|record|bags|cement|workers|mason|labou?r|inventory|expense|issue|stock|used|received|fuel|sand|gravel)\b/i.test(t);
+}
 async function handler(req, res) {
   const twimlOk = `<?xml version="1.0" encoding="UTF-8"?>
 <Response></Response>`;
@@ -3521,6 +3527,18 @@ Photo: ${inlineCaption}` : `Photo: ${inlineCaption}`;
               console.log("[Photo Caption] site_photos insert skipped:", err?.message);
             }
             await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`);
+          } else if (imageCaptionLooksLikeAgentRequest(rawMessage)) {
+            const agentReply2 = await runAgent(
+              userId,
+              project.id,
+              `User attached a site photo (already saved to their project timeline and photos). Their message with the photo:
+${rawMessage.trim()}`,
+              profile,
+              projects || []
+            );
+            await sendMessage(From, `Photo saved to your timeline.
+
+${agentReply2}`);
           } else {
             await sendMessage(From, await ai(
               "Tell the user their photo was saved. Ask them to add a caption by replying with a description.",

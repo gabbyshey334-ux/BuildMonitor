@@ -3951,6 +3951,20 @@ export async function sendDailyHeartbeat(): Promise<void> {
   }
 }
 
+/**
+ * Image messages often include a WhatsApp caption. If it looks like logging
+ * (amounts, materials, labour, etc.), forward to the agent after the photo is saved.
+ */
+function imageCaptionLooksLikeAgentRequest(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 8) return false;
+  if (/^(ok|thanks|thank you|thx|yes|no|got it|nice)\.?$/i.test(t)) return false;
+  return (
+    /\d/.test(t) ||
+    /\b(bought|paid|spent|log|add|record|bags|cement|workers|mason|labou?r|inventory|expense|issue|stock|used|received|fuel|sand|gravel)\b/i.test(t)
+  );
+}
+
 // ─── Main Webhook Handler ─────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -4449,6 +4463,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               console.log('[Photo Caption] site_photos insert skipped:', err?.message);
             }
             await sendMessage(From, `Photo saved with caption: '${inlineCaption}'`);
+          } else if (imageCaptionLooksLikeAgentRequest(rawMessage)) {
+            const agentReply = await runAgent(
+              userId,
+              project.id,
+              `User attached a site photo (already saved to their project timeline and photos). Their message with the photo:\n${rawMessage.trim()}`,
+              profile,
+              projects || [],
+            );
+            await sendMessage(From, `Photo saved to your timeline.\n\n${agentReply}`);
           } else {
             await sendMessage(From, await ai(
               'Tell the user their photo was saved. Ask them to add a caption by replying with a description.',
