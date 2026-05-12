@@ -1,4 +1,4 @@
-import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { QueryClient, QueryFunction, type QueryKey } from "@tanstack/react-query";
 import { getToken } from "./authToken";
 
 /**
@@ -17,7 +17,18 @@ export const PROJECT_QUERY_KEYS = [
   "project-daily",              // useProjectDaily
   "project-trends",             // useProjectTrends
   "tasks",                      // useProjectTasks
+  "issues",                     // GET /api/projects/:id/issues (dashboard, etc.)
+  "daily-stats",                // DailyPage aggregate stats
+  "daily-log",                  // DailyPage per-date entries (prefix match)
 ] as const;
+
+/** Layout-wide queries not keyed by project id (invalidate when any project data may have changed). */
+const GLOBAL_DASHBOARD_QUERY_KEYS: QueryKey[] = [
+  ["/api/dashboard/issues"],
+  ["/api/dashboard/summary"],
+  ["/api/expenses"],
+  ["api", "projects"],
+];
 
 /**
  * Invalidate every project-scoped query for the given project. Pass no id to
@@ -31,10 +42,16 @@ export function invalidateProjectQueries(
     for (const key of PROJECT_QUERY_KEYS) {
       client.invalidateQueries({ queryKey: [key] });
     }
+    for (const gk of GLOBAL_DASHBOARD_QUERY_KEYS) {
+      client.invalidateQueries({ queryKey: gk });
+    }
     return;
   }
   for (const key of PROJECT_QUERY_KEYS) {
     client.invalidateQueries({ queryKey: [key, projectId] });
+  }
+  for (const gk of GLOBAL_DASHBOARD_QUERY_KEYS) {
+    client.invalidateQueries({ queryKey: gk });
   }
 }
 

@@ -6,6 +6,7 @@ import { Sidebar, useSidebarState } from "./Sidebar";
 import { BottomNav } from "./BottomNav";
 import { useProjects } from "@/hooks/useProjects";
 import { useProject } from "@/contexts/ProjectContext";
+import { useProjectLiveRefresh } from "@/hooks/useProjectLiveRefresh";
 import { cn } from "@/lib/utils";
 
 interface AppLayoutProps {
@@ -28,7 +29,9 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const { open, toggle } = useSidebarState();
   const { data: projectsData } = useProjects();
-  const { setProjects } = useProject();
+  const { setProjects, currentProject } = useProject();
+
+  useProjectLiveRefresh(currentProject?.id);
 
   const projectsJson = JSON.stringify(projectsData);
   useEffect(() => {
