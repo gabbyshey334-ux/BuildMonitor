@@ -1,41 +1,68 @@
-# JengaTrack 🏗️
+# JengaTrack (BuildMonitor)
 
-> Manage construction projects via WhatsApp
+Construction project tracking through **WhatsApp** and a **web dashboard**: expenses, materials, daily logs, budgets, and AI-assisted updates.
 
 ## Features
 
-- **WhatsApp-based expense logging** — “Bought 50 bags cement for 1,900,000”
-- **Receipt OCR scanning** — Send a photo, get extracted totals and items
-- **Voice note transcription** — Speak updates, we log them
-- **Real-time dashboard** — Budget, expenses, materials, progress
-- **Budget tracking** — Spent vs budget, alerts
-- **Materials inventory** — Stock levels and usage
-- **Daily accountability** — Workers on site, notes, photos
-- **Trends & insights** — Burn rate, summaries
-- **Multi-project support** — Switch projects via WhatsApp or dashboard
-- **Group mode** — Owner + manager (when configured)
-- **Dark/light theme** — UI theme toggle
-- **3 languages** — English, Luganda, Portuguese
+- WhatsApp updates via Twilio (text, media, voice)
+- Supabase (PostgreSQL) for data
+- Vite + React dashboard
+- Serverless API on Vercel (`api/`)
 
-## Tech Stack
+## Tech stack
 
-- **Frontend:** React + TypeScript + Tailwind + Vite
-- **API:** Node.js + Express (Vercel serverless)
-- **Database:** Supabase (PostgreSQL)
-- **WhatsApp:** Twilio
-- **AI:** OpenAI GPT-4o-mini (text), GPT-4o (receipt images)
-- **Hosting:** Vercel
+| Area        | Technology                          |
+|------------|--------------------------------------|
+| Frontend   | React, TypeScript, Vite, Tailwind    |
+| API        | Node, Express-style handlers, Vercel  |
+| Database   | Supabase                            |
+| WhatsApp   | Twilio                              |
+| AI         | Google Gemini, OpenAI (configurable) |
 
-## Quick Start
+## Prerequisites
 
-1. Clone the repo: `git clone https://github.com/gabbyshey334-ux/BuildMonitor.git && cd BuildMonitor`
-2. `npm install`
-3. Copy `.env.example` to `.env` and fill in environment variables
-4. `npm run build` (builds client + compiles API)
-5. Run locally (see HANDOVER.md for full local setup) or deploy to Vercel
+- Node 18+
+- npm
+- Supabase project and service role key
+- Twilio account (WhatsApp sender)
+- Vercel (or another host) for production
 
-## Deployment
+## Setup
 
-Push to the `main` branch → Vercel auto-deploys. Set all environment variables in the Vercel project settings.
+```bash
+git clone https://github.com/gabbyshey334-ux/BuildMonitor.git
+cd BuildMonitor
+npm install
+```
 
-See **HANDOVER.md** for full handover, env vars, database tables, and admin tasks.
+Copy `.env.example` to `.env` (or use your host’s env UI) and set at least:
+
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_NUMBER`
+- `GEMINI_API_KEY` and/or `OPENAI_API_KEY` (for the assistant)
+- `DASHBOARD_URL` (public app URL, used in messages)
+
+## Build
+
+```bash
+npm run build
+```
+
+This runs the Vite client build and `node build-api.js`, which compiles `api/_whatsapp-webhook.ts` → `api/whatsapp-webhook.js` and the daily heartbeat handler. **Commit the generated `api/*.js` files** so Vercel can match `vercel.json` `functions` patterns (see troubleshooting guide).
+
+## Deploy (Vercel)
+
+- Connect the GitHub repo and use the `main` branch.
+- Set the same environment variables in the Vercel project.
+- Build command: `npm run build` (default in `vercel.json`).
+- Point your Twilio WhatsApp sandbox/production webhook to:  
+  `https://<your-domain>/api/whatsapp-webhook`  
+  (or the path you use in `vercel.json` rewrites).
+
+## Documentation
+
+- **[TROUBLESHOOTING GUIDE.md](./TROUBLESHOOTING_GUIDE.md)** — WhatsApp bot, Vercel deploy, and dashboard issues.
+
+## License
+
+MIT (see `package.json`).

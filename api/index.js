@@ -1001,13 +1001,27 @@ app.get('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, tasks: [], error: 'Project not found' });
-    const { data, error } = await supabase
+    const allowed = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowed) return res.status(404).json({ success: false, tasks: [], error: 'Project not found' });
+    let { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('project_id', projectId)
+      .is('deleted_at', null)
       .order('created_at', { ascending: false });
+    if (error && /deleted_at/i.test(error.message || '')) {
+      const retry = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false });
+      if (retry.error) {
+        console.error('[GET tasks]', retry.error.message);
+        return res.status(500).json({ success: false, tasks: [], error: retry.error.message });
+      }
+      data = retry.data;
+      error = null;
+    }
     if (error) {
       console.error('[GET tasks]', error.message);
       return res.status(500).json({ success: false, tasks: [], error: error.message });
@@ -1016,6 +1030,63 @@ app.get('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[GET tasks] Unexpected error:', err?.message, err?.stack);
     return res.status(500).json({ success: false, tasks: [], error: err?.message || 'Server error' });
+  }
+});
+
+// PATCH /api/projects/:projectId/tasks/:taskId — Update task status (dashboard checklist)
+app.patch('/api/projects/:projectId/tasks/:taskId', requireAuth, async (req, res) => {
+  try {
+    const { projectId, taskId } = req.params;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const allowed = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowed) return res.status(404).json({ success: false, error: 'Project not found' });
+    const { data: taskRow, error: fetchErr } = await supabase
+      .from('tasks')
+      .select('id, project_id, status')
+      .eq('id', taskId)
+      .eq('project_id', projectId)
+      .maybeSingle();
+    if (fetchErr || !taskRow) {
+      return res.status(404).json({ success: false, error: 'Task not found' });
+    }
+    const body = req.body || {};
+    let nextStatus = typeof body.status === 'string' ? body.status.trim().toLowerCase() : null;
+    if (!nextStatus && typeof body.completed === 'boolean') {
+      nextStatus = body.completed ? 'completed' : 'pending';
+    }
+    if (!nextStatus || !['pending', 'in_progress', 'completed', 'todo', 'done'].includes(nextStatus)) {
+      return res.status(400).json({ success: false, error: 'Provide status (pending|in_progress|completed) or completed boolean' });
+    }
+    if (nextStatus === 'todo') nextStatus = 'pending';
+    if (nextStatus === 'done') nextStatus = 'completed';
+    const now = new Date().toISOString();
+    const updates = {
+      status: nextStatus,
+      completed_at: nextStatus === 'completed' ? now : null,
+    };
+    const { data: updated, error: upErr } = await supabase
+      .from('tasks')
+      .update(updates)
+      .eq('id', taskId)
+      .eq('project_id', projectId)
+      .select('*')
+      .maybeSingle();
+    if (upErr) {
+      console.error('[PATCH task]', upErr.message);
+      return res.status(500).json({ success: false, error: upErr.message || 'Update failed' });
+    }
+    return res.json({ success: true, task: updated });
+  } catch (err) {
+    console.error('[PATCH task] Unexpected:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, error: err?.message || 'Server error' });
   }
 });
 

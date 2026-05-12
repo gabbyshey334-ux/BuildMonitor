@@ -110,7 +110,14 @@ interface OnboardingData {
   budget?: number;
 }
 
-type ExpenseState = null | 'awaiting_price' | 'awaiting_confirmation' | 'awaiting_project_selection' | 'awaiting_photo_caption';
+type ExpenseState =
+  | null
+  | 'awaiting_price'
+  | 'awaiting_confirmation'
+  | 'awaiting_project_selection'
+  | 'awaiting_photo_caption'
+  | 'awaiting_inventory_receipt'
+  | 'awaiting_material_unit_price';
 
 interface ExpensePendingData {
   quantity?: number;
@@ -126,6 +133,30 @@ interface ExpensePendingData {
   items?: Array<{ item: string; quantity: number; unit?: string; amount: number }>;
   /** Photo caption flow */
   photo_url?: string;
+  /** After a material purchase expense: confirm adding to inventory + immediate usage */
+  inventory_receipt?: InventoryReceiptPending;
+  /** After stock added without price: ask unit cost */
+  material_price_prompt?: MaterialPricePromptPending;
+}
+
+interface InventoryReceiptPending {
+  phase: 'confirm_add' | 'ask_used';
+  project_id: string;
+  material_display: string;
+  material_name_norm: string;
+  quantity: number;
+  unit: string;
+  unit_price_ugx: number;
+  total_ugx: number;
+}
+
+interface MaterialPricePromptPending {
+  project_id: string;
+  material_id: string;
+  material_name_norm: string;
+  material_display: string;
+  quantity: number;
+  unit: string;
 }
 
 interface PendingMaterialUpdate {
@@ -186,6 +217,188 @@ async function clearIssueDraft(userId: string): Promise<void> {
   await supabase
     .from('profiles')
     .update({ expense_pending_data: cur, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+}
+
+function isMaterialReceiptEligible(nameNorm: string): boolean {
+  if (!nameNorm || nameNorm.length < 2 || GARBAGE_MATERIAL_NAMES.includes(nameNorm)) return false;
+  if (SKIP_KEYWORDS.some((k) => nameNorm.includes(k))) return false;
+  return MATERIAL_KEYWORDS.some((k) => nameNorm.includes(k));
+}
+
+async function setInventoryReceiptPending(userId: string, payload: InventoryReceiptPending): Promise<void> {
+  const { data } = await supabase.from('profiles').select('expense_pending_data').eq('id', userId).single();
+  const cur = { ...((data?.expense_pending_data as Record<string, unknown>) || {}) };
+  cur.inventory_receipt = payload;
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: 'awaiting_inventory_receipt',
+      expense_pending_data: cur,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+}
+
+async function clearInventoryReceiptPending(userId: string): Promise<void> {
+  const { data } = await supabase.from('profiles').select('expense_pending_data').eq('id', userId).single();
+  const cur = { ...((data?.expense_pending_data as Record<string, unknown>) || {}) };
+  delete cur.inventory_receipt;
+  const hasPhoto = !!(cur as ExpensePendingData).photo_url;
+  const nextState: ExpenseState = hasPhoto ? 'awaiting_photo_caption' : null;
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: nextState,
+      expense_pending_data: cur,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+}
+
+async function mergeInventoryReceiptPhase(userId: string, patch: Partial<InventoryReceiptPending>): Promise<void> {
+  const { data } = await supabase.from('profiles').select('expense_pending_data').eq('id', userId).single();
+  const cur = { ...((data?.expense_pending_data as Record<string, unknown>) || {}) };
+  const prev = cur.inventory_receipt as InventoryReceiptPending | undefined;
+  if (!prev) return;
+  cur.inventory_receipt = { ...prev, ...patch };
+  await supabase
+    .from('profiles')
+    .update({ expense_pending_data: cur, updated_at: new Date().toISOString() })
+    .eq('id', userId);
+}
+
+/** Apply net stock = purchased − used_immediately (expense already logged). */
+async function applyInventoryNetAdd(
+  userId: string,
+  projectId: string,
+  inv: InventoryReceiptPending,
+  usedImmediate: number
+): Promise<number> {
+  const net = Math.max(0, inv.quantity - Math.max(0, Math.min(usedImmediate, inv.quantity)));
+  const name = inv.material_name_norm;
+  const uc = inv.unit_price_ugx;
+  const now = new Date().toISOString();
+  if (net <= 0) return 0;
+  const addVal = net * uc;
+  const { data: existing } = await supabase
+    .from('materials_inventory')
+    .select('id, quantity, total_cost, unit, unit_cost')
+    .eq('project_id', projectId)
+    .eq('name', name)
+    .maybeSingle();
+  if (existing) {
+    const newQty = parseFloat(String(existing.quantity || 0)) + net;
+    const oldTot = parseFloat(String(existing.total_cost || 0));
+    await supabase
+      .from('materials_inventory')
+      .update({
+        quantity: newQty,
+        unit_cost: uc || parseFloat(String(existing.unit_cost || 0)),
+        total_cost: oldTot + addVal,
+        last_purchased_at: now,
+        updated_at: now,
+      })
+      .eq('id', existing.id);
+    await supabase.from('material_transactions').insert({
+      material_id: existing.id,
+      project_id: projectId,
+      user_id: userId,
+      transaction_type: 'purchase',
+      quantity: net,
+      unit_cost: uc,
+      total_cost: addVal,
+      description: `Added ${net} ${inv.unit} of ${inv.material_display} (after same-day use ${usedImmediate})`,
+      source: 'whatsapp',
+    });
+    return newQty;
+  }
+  const { data: ins } = await supabase
+    .from('materials_inventory')
+    .insert({
+      project_id: projectId,
+      name,
+      quantity: net,
+      unit: inv.unit || 'units',
+      unit_cost: uc,
+      total_cost: addVal,
+      source: 'whatsapp',
+      last_purchased_at: now,
+      updated_at: now,
+    })
+    .select('id, quantity')
+    .single();
+  if (ins?.id) {
+    await supabase.from('material_transactions').insert({
+      material_id: ins.id,
+      project_id: projectId,
+      user_id: userId,
+      transaction_type: 'purchase',
+      quantity: net,
+      unit_cost: uc,
+      total_cost: addVal,
+      description: `Added ${net} ${inv.unit} of ${inv.material_display}`,
+      source: 'whatsapp',
+    });
+  }
+  return parseFloat(String(ins?.quantity || net));
+}
+
+function parseInventoryReceiptReply(
+  raw: string,
+  phase: 'confirm_add' | 'ask_used',
+  totalQty: number
+): { kind: 'no' } | { kind: 'yes_used'; used: number } | { kind: 'need_used' } | { kind: 'unclear' } {
+  const low = raw.trim().toLowerCase();
+  if (phase === 'ask_used') {
+    const fromParseAmount = parseAmount(raw.replace(/,/g, ''));
+    let used = Number.isFinite(fromParseAmount) && fromParseAmount >= 0 ? Math.floor(fromParseAmount) : NaN;
+    if (Number.isNaN(used)) {
+      const m = low.match(/(\d+)/);
+      used = m ? parseInt(m[1], 10) : NaN;
+    }
+    if (Number.isNaN(used) || used < 0) return { kind: 'unclear' };
+    return { kind: 'yes_used', used: Math.min(used, totalQty) };
+  }
+  if (/^(no|n|skip)\b/i.test(low)) return { kind: 'no' };
+  if (/^(yes|y)\b/i.test(low) || /^add\b/i.test(low)) {
+    const afterYes = low.replace(/^(yes|y)\b[,!\s]*/i, '').trim();
+    const headNum = afterYes.match(/^(\d+)/);
+    if (headNum) return { kind: 'yes_used', used: Math.min(parseInt(headNum[1], 10), totalQty) };
+    const usedM = low.match(/(?:used|usage|took|immediately|right away|same day)\D*(\d+)/i);
+    if (usedM) return { kind: 'yes_used', used: Math.min(parseInt(usedM[1], 10), totalQty) };
+    return { kind: 'need_used' };
+  }
+  return { kind: 'unclear' };
+}
+
+async function setMaterialPricePrompt(userId: string, payload: MaterialPricePromptPending): Promise<void> {
+  const { data } = await supabase.from('profiles').select('expense_pending_data').eq('id', userId).single();
+  const cur = { ...((data?.expense_pending_data as Record<string, unknown>) || {}) };
+  cur.material_price_prompt = payload;
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: 'awaiting_material_unit_price',
+      expense_pending_data: cur,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+}
+
+async function clearMaterialPricePrompt(userId: string): Promise<void> {
+  const { data } = await supabase.from('profiles').select('expense_pending_data').eq('id', userId).single();
+  const cur = { ...((data?.expense_pending_data as Record<string, unknown>) || {}) };
+  delete cur.material_price_prompt;
+  const hasPhoto = !!(cur as ExpensePendingData).photo_url;
+  const nextState: ExpenseState = hasPhoto ? 'awaiting_photo_caption' : null;
+  await supabase
+    .from('profiles')
+    .update({
+      expense_state: nextState,
+      expense_pending_data: cur,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', userId);
 }
 
@@ -3039,6 +3252,51 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
   const expenseDate = date || new Date().toISOString().split('T')[0];
 
   if (items && Array.isArray(items) && items.length > 0) {
+    if (items.length === 1) {
+      const it0 = items[0];
+      const amt0 = parseFloat(String(it0.total || it0.amount || 0));
+      const itemName0 = normalizeMaterialName(String(it0.item || ''));
+      if (
+        amt0 > 0 &&
+        (it0.quantity || 0) > 0 &&
+        isMaterialReceiptEligible(itemName0)
+      ) {
+        const desc0 = it0.item
+          ? `${it0.quantity || 1} ${it0.unit || 'units'} of ${it0.item}`
+          : description || 'Expense';
+        await supabase.from('expenses').insert({
+          user_id: userId,
+          project_id: projectId,
+          description: desc0,
+          amount: String(amt0),
+          quantity_logged: it0.quantity ? String(it0.quantity) : null,
+          currency: 'UGX',
+          expense_date: expenseDate,
+          source: 'whatsapp',
+        });
+        await setInventoryReceiptPending(userId, {
+          phase: 'confirm_add',
+          project_id: projectId,
+          material_display: String(it0.item).trim(),
+          material_name_norm: itemName0,
+          quantity: typeof it0.quantity === 'number' ? it0.quantity : parseFloat(String(it0.quantity || 0)),
+          unit: String(it0.unit || 'units').trim(),
+          unit_price_ugx: amt0 / (it0.quantity || 1),
+          total_ugx: amt0,
+        });
+        const u = it0.unit || 'units';
+        const q = it0.quantity || 1;
+        return {
+          success: true,
+          reply:
+            `✅ Expense logged — UGX ${fmt(amt0)} for ${q} ${u} of ${it0.item}.\n\n` +
+            `Should I add the remaining stock to Materials & Supplies (after any you used the same day)?\n` +
+            `Reply YES with how many were used immediately (e.g. YES 0 or YES 5), or NO to skip inventory.`,
+          data: { total: amt0 },
+        };
+      }
+    }
+
     for (const item of items) {
       const amt = parseFloat(String(item.total || item.amount || 0));
       const desc = item.item
@@ -3081,6 +3339,34 @@ async function toolLogExpense(userId: string, projectId: string, params: any): P
 
   if (params.item && params.quantity > 0) {
     const itemName = normalizeMaterialName(params.item);
+    if (isMaterialReceiptEligible(itemName)) {
+      await setInventoryReceiptPending(userId, {
+        phase: 'confirm_add',
+        project_id: projectId,
+        material_display: String(params.item).trim(),
+        material_name_norm: itemName,
+        quantity: params.quantity,
+        unit: params.unit || 'units',
+        unit_price_ugx: amt / params.quantity,
+        total_ugx: amt,
+      });
+      const { data: allEx2 } = await supabase.from('expenses').select('amount').eq('project_id', projectId).is('deleted_at', null);
+      const { data: proj2 } = await supabase.from('projects').select('budget').eq('id', projectId).single();
+      const totalSpentNow2 = (allEx2 || []).reduce((s: number, e: any) => s + parseFloat(String(e.amount || 0)), 0);
+      const budgetVal2 = parseFloat(String(proj2?.budget || 0));
+      const pct2 = budgetVal2 > 0 ? Math.min(100, Math.round((totalSpentNow2 / budgetVal2) * 100)) : 0;
+      let budgetNote2 = '';
+      if (totalSpentNow2 >= budgetVal2 && budgetVal2 > 0) budgetNote2 = '\n🚨 Budget exceeded!';
+      else if (pct2 >= 80) budgetNote2 = `\n⚠️ Budget at ${pct2}% — running low.`;
+      return {
+        success: true,
+        reply:
+          `✅ Expense logged — UGX ${fmt(amt)} for ${params.quantity} ${params.unit || 'units'} of ${params.item}.${budgetNote2}\n\n` +
+          `Should I add this purchase to Materials & Supplies inventory?\n` +
+          `Reply YES with how many were used immediately (e.g. YES 0 or YES 5), or NO to skip inventory.`,
+        data: { amount: amt, description },
+      };
+    }
     const isMat = MATERIAL_KEYWORDS.some((k) => itemName.includes(k)) && !SKIP_KEYWORDS.some((k) => itemName.includes(k));
     if (isMat && !GARBAGE_MATERIAL_NAMES.includes(itemName)) {
       const now = new Date().toISOString();
@@ -3177,7 +3463,7 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
     }
     return { success: true, reply: `✅ Stock set! ${material_name}: ${qty} ${unit || 'units'}.`, data: { newQty: qty } };
   }
-  // Default: add (optional purchase cost → also record expense for Budgets & Costs)
+  // Default: add — priced purchases defer inventory until user confirms; zero-cost asks unit price
   const uc = purchaseTotal > 0 && qty > 0 ? purchaseTotal / qty : 0;
   if (purchaseTotal > 0) {
     const desc = `${qty} ${unit || 'bags'} of ${material_name}`;
@@ -3193,41 +3479,68 @@ async function toolUpdateInventory(userId: string, projectId: string, params: an
     });
     if (expErr) {
       console.error('[update_inventory] expense insert failed:', expErr.message);
-      return { success: false, reply: 'Could not record the purchase as an expense. Inventory was not changed — try again or log the expense separately.' };
+      return { success: false, reply: 'Could not record the purchase as an expense. Try again or log from the dashboard.' };
     }
+    await setInventoryReceiptPending(userId, {
+      phase: 'confirm_add',
+      project_id: projectId,
+      material_display: String(material_name).trim(),
+      material_name_norm: name,
+      quantity: qty,
+      unit: unit || 'bags',
+      unit_price_ugx: uc,
+      total_ugx: purchaseTotal,
+    });
+    return {
+      success: true,
+      reply:
+        `✅ Expense logged — UGX ${fmt(purchaseTotal)} for ${qty} ${unit || 'units'} of ${material_name}.\n\n` +
+        `Should I add this to Materials & Supplies inventory?\n` +
+        `Reply YES with how many were used immediately (e.g. YES 0 or YES 5), or NO to skip inventory.`,
+      data: { deferred: true },
+    };
   }
 
   if (existing) {
     const newQty = parseFloat(String(existing.quantity || 0)) + qty;
-    const updates: Record<string, unknown> = { quantity: newQty, last_purchased_at: now, updated_at: now };
-    if (purchaseTotal > 0) {
-      const oldTotal = parseFloat(String(existing.total_cost || 0));
-      updates.total_cost = oldTotal + purchaseTotal;
-      updates.unit_cost = uc || parseFloat(String(existing.unit_cost || 0));
-    }
-    await supabase.from('materials_inventory').update(updates).eq('id', existing.id);
-    const costLine = purchaseTotal > 0 ? ` Budgets & Costs: UGX ${fmt(purchaseTotal)} logged.` : '';
+    await supabase.from('materials_inventory').update({ quantity: newQty, last_purchased_at: now, updated_at: now }).eq('id', existing.id);
     return {
       success: true,
-      reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.${costLine}`,
+      reply: `✅ Added! ${material_name} stock is now ${newQty} ${unit || existing.unit || 'units'}.`,
       data: { newQty },
     };
   }
-  await supabase.from('materials_inventory').insert({
+  const { data: insertedRow, error: insErr } = await supabase
+    .from('materials_inventory')
+    .insert({
+      project_id: projectId,
+      name,
+      quantity: qty,
+      unit: unit || 'units',
+      unit_cost: 0,
+      total_cost: 0,
+      source: 'whatsapp',
+      last_purchased_at: now,
+      updated_at: now,
+    })
+    .select('id')
+    .single();
+  if (insErr || !insertedRow?.id) {
+    return { success: false, reply: 'Could not add that material to inventory. Try again.' };
+  }
+  await setMaterialPricePrompt(userId, {
     project_id: projectId,
-    name,
+    material_id: insertedRow.id,
+    material_name_norm: name,
+    material_display: String(material_name).trim(),
     quantity: qty,
     unit: unit || 'units',
-    unit_cost: uc || 0,
-    total_cost: purchaseTotal || 0,
-    source: 'whatsapp',
-    last_purchased_at: now,
-    updated_at: now,
   });
-  const costLine = purchaseTotal > 0 ? ` Budgets & Costs: UGX ${fmt(purchaseTotal)} logged.` : '';
   return {
     success: true,
-    reply: `✅ Logged! ${qty} ${unit || 'units'} of ${material_name} added to inventory.${costLine}`,
+    reply:
+      `✅ Added ${qty} ${unit || 'units'} of ${material_name} to inventory.\n\n` +
+      `What did you pay per ${unit || 'unit'} in UGX? (e.g. 49000 or 49k)`,
     data: { newQty: qty },
   };
 }
@@ -3615,6 +3928,10 @@ Multi-step example (user said "log fuel, then labor, then show total spend"):
 When the user buys inventory at a stated price, include cost on update_inventory so it appears under Budgets & Costs:
 {"tool":"update_inventory","params":{"material_name":"cement","action":"add","quantity":100,"unit":"bags","unit_price_ugx":50000}}
 (or "purchase_amount_ugx":5000000 instead of unit_price × quantity). Do NOT duplicate the same purchase with both log_expense and purchase_amount in one message.
+
+When the user logs a MATERIAL purchase with price via log_expense (single line or single item with quantity), the system may record the expense first and then ask them on WhatsApp whether to add stock to Materials and how many units were used immediately — tell them to answer that prompt; do not assume stock was already updated until they confirm.
+
+If stock is added without a unit price (zero-cost add), the bot will ask a follow-up for UGX per unit so cost data is captured.
 
 {"tool":"log_expense","params":{"description":"...","amount":number,"date":"YYYY-MM-DD","vendor":"optional","item":"material name if material","quantity":number,"unit":"bags/kg/etc"}}
 {"tool":"log_expense","params":{"description":"...","amount":total,"items":[{"item":"name","quantity":n,"unit":"bags","unit_price":n,"total":n}]}}
@@ -4079,6 +4396,137 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ── STEP 3: Expense state & project ───────────────────────────────────────
     const expenseState = (profile.expense_state as ExpenseState) ?? null;
     const pendingData = (profile.expense_pending_data as ExpensePendingData) || {};
+
+    // ── STEP 3.4: Deferred inventory after priced material purchase ────────────
+    if (expenseState === 'awaiting_inventory_receipt' && pendingData.inventory_receipt?.project_id) {
+      const inv = pendingData.inventory_receipt as InventoryReceiptPending;
+      const phase = inv.phase || 'confirm_add';
+      const parsed = parseInventoryReceiptReply(rawMessage, phase, inv.quantity);
+
+      if (parsed.kind === 'unclear') {
+        if (phase === 'ask_used') {
+          await sendMessage(
+            From,
+            `Reply with how many ${inv.unit} were used or issued immediately (0 to ${inv.quantity}). A single number is fine.`
+          );
+        } else {
+          await sendMessage(
+            From,
+            await ai(
+              'User is stuck on YES/NO for adding bought materials to inventory. Briefly say: reply YES to add stock (we will ask same-day use), or NO to keep expense only.',
+              `Reply YES to add this purchase to Materials & Supplies (I will ask how many were used right away), or NO to leave inventory unchanged. The expense stays either way.`
+            )
+          );
+        }
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+
+      if (parsed.kind === 'no') {
+        await clearInventoryReceiptPending(userId);
+        await sendMessage(
+          From,
+          await ai(
+            'User skipped adding materials to inventory. Confirm expense is still recorded.',
+            `Got it — I did not change Materials & Supplies. Your purchase is still logged as an expense.`
+          )
+        );
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+
+      if (parsed.kind === 'need_used') {
+        await mergeInventoryReceiptPhase(userId, { phase: 'ask_used' });
+        await sendMessage(
+          From,
+          `How many ${inv.unit} of ${inv.material_display} were used or issued immediately? (0–${inv.quantity}). Reply with a number — the rest will be added to inventory.`
+        );
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+
+      if (parsed.kind === 'yes_used') {
+        const used = parsed.used;
+        try {
+          const netAdd = Math.max(0, inv.quantity - Math.max(0, Math.min(used, inv.quantity)));
+          const newQty = await applyInventoryNetAdd(userId, inv.project_id, inv, used);
+          await clearInventoryReceiptPending(userId);
+          if (netAdd <= 0) {
+            await sendMessage(
+              From,
+              await ai(
+                'All units were used immediately; inventory quantity unchanged.',
+                `Noted — all ${inv.quantity} ${inv.unit} were used immediately, so on-hand stock was not increased. The expense is saved.`
+              )
+            );
+          } else {
+            await sendMessage(
+              From,
+              await ai(
+                `Tell user we added ${netAdd} ${inv.unit} to inventory after ${used} used immediately; on-hand is now ${newQty} for ${inv.material_display}.`,
+                `Inventory updated: ${netAdd} ${inv.unit} added after ${used} used immediately — ${inv.material_display} on hand is now ${fmt(Math.round(newQty))} ${inv.unit}.`
+              )
+            );
+          }
+        } catch (err: any) {
+          console.error('[inventory_receipt]', err?.message);
+          await clearInventoryReceiptPending(userId);
+          await sendMessage(From, 'Could not update inventory. Please try again from the dashboard.');
+        }
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+    }
+
+    // ── STEP 3.4b: Unit price follow-up after zero-cost stock add ──────────────
+    if (expenseState === 'awaiting_material_unit_price' && pendingData.material_price_prompt?.material_id) {
+      const mpp = pendingData.material_price_prompt;
+      const unitPrice = parseAmount(rawMessage.replace(/,/g, ''));
+      if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+        await sendMessage(
+          From,
+          await ai(
+            'Ask again for one positive UGX amount per unit.',
+            `Please send the price per ${mpp.unit} in UGX (e.g. 49000 or 49k).`
+          )
+        );
+        res.setHeader('Content-Type', 'text/xml');
+        return res.status(200).send(twimlOk);
+      }
+      const roundedUnit = Math.round(unitPrice);
+      try {
+        const { data: row } = await supabase
+          .from('materials_inventory')
+          .select('quantity')
+          .eq('id', mpp.material_id)
+          .eq('project_id', mpp.project_id)
+          .maybeSingle();
+        const q = parseFloat(String(row?.quantity ?? mpp.quantity));
+        const totalCost = Math.round(roundedUnit * q);
+        await supabase
+          .from('materials_inventory')
+          .update({
+            unit_cost: roundedUnit,
+            total_cost: totalCost,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', mpp.material_id)
+          .eq('project_id', mpp.project_id);
+        await clearMaterialPricePrompt(userId);
+        await sendMessage(
+          From,
+          await ai(
+            `Confirm saved unit cost ${roundedUnit} UGX for ${mpp.material_display}, book value ${totalCost} for current qty ${q}.`,
+            `Saved ${fmt(roundedUnit)} UGX per ${mpp.unit} for ${mpp.material_display}. Current line value is about ${fmt(totalCost)} UGX.`
+          )
+        );
+      } catch (e: any) {
+        console.error('[material_price_prompt]', e?.message);
+        await sendMessage(From, 'Could not save that price. Please try again or use the dashboard.');
+      }
+      res.setHeader('Content-Type', 'text/xml');
+      return res.status(200).send(twimlOk);
+    }
 
     // ── STEP 3.5: Handle pending material confirmation (YES/NO) ─────────────────
     const pendingMaterial = profile.pending_material_update as PendingMaterialUpdate | null;

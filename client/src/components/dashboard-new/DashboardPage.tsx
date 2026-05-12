@@ -21,6 +21,7 @@ import {
   Calendar,
   Flame,
   Users,
+  ListTodo,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -117,7 +118,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     dataUpdatedAt,
   } = useProjectSummary(effectiveProjectId);
 
-  const { data: tasksData } = useProjectTasks(effectiveProjectId);
+  const { data: tasksData, refetch: refetchTasks } = useProjectTasks(effectiveProjectId);
   const { data: expensesData, refetch: refetchExpenses } = useProjectExpenses(
     effectiveProjectId,
   );
@@ -227,6 +228,25 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     return { pct, completed, total };
   }, [tasks, summaryData]);
 
+  const sortedTasks = useMemo(() => {
+    const list = tasks as Array<{
+      id: string;
+      title: string;
+      status?: string;
+      created_at?: string;
+    }>;
+    const isDone = (s?: string) =>
+      ["completed", "done"].includes(String(s || "").toLowerCase());
+    return [...list].sort((a, b) => {
+      const ad = isDone(a.status) ? 1 : 0;
+      const bd = isDone(b.status) ? 1 : 0;
+      if (ad !== bd) return ad - bd;
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta;
+    });
+  }, [tasks]);
+
   const progressPct = progressInfo.pct;
 
   const scheduleStatus: {
@@ -312,6 +332,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const [acknowledgingIssueId, setAcknowledgingIssueId] = useState<string | null>(
     null,
   );
+  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [photoCaption, setPhotoCaption] = useState("");
@@ -418,6 +439,36 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       toast({ title: "Failed to acknowledge issue", variant: "destructive" });
     } finally {
       setAcknowledgingIssueId(null);
+    }
+  };
+
+  const handleToggleTask = async (task: { id: string; status?: string }) => {
+    if (!effectiveProjectId || togglingTaskId) return;
+    const st = String(task.status || "").toLowerCase();
+    const isDone = st === "completed" || st === "done";
+    setTogglingTaskId(task.id);
+    try {
+      const res = await fetch(
+        `/api/projects/${effectiveProjectId}/tasks/${task.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({ status: isDone ? "pending" : "completed" }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to update task");
+      await refetchTasks();
+      queryClient.invalidateQueries({
+        queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId],
+      });
+    } catch {
+      toast({ title: "Could not update task", variant: "destructive" });
+    } finally {
+      setTogglingTaskId(null);
     }
   };
 
@@ -756,17 +807,20 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   />
                 </span>
                 <span className="text-[11px] shrink-0">
-                  {progressInfo.completed}/{progressInfo.total} tasks
+                  {progressInfo.completed}/{progressInfo.total} tasks · tap for checklist
                 </span>
               </span>
             ) : (
               <span className="text-[11px]">
-                Add tasks to track progress
+                Add tasks to track progress · tap to open list
               </span>
             )
           }
           icon={TrendingUp}
           accent="primary"
+          onClick={() =>
+            document.getElementById("tasks-section")?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
         />
 
         <KPICard
@@ -867,6 +921,75 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             document.getElementById("issues-section")?.scrollIntoView({ behavior: "smooth" })
           }
         />
+      </section>
+
+      {/* Project tasks — matches Progress KPI; checklist from WhatsApp + dashboard */}
+      <section id="tasks-section" className="jt-card mb-8 w-full min-w-0 overflow-hidden">
+        <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 bg-muted/40 text-jenga-primary ring-jenga-primary/20">
+              <ListTodo className="h-4 w-4" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <h2 className="jt-h2 truncate">Project tasks</h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                Same list as your Progress count — tick items when done
+              </p>
+            </div>
+          </div>
+          {progressInfo.total > 0 && (
+            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+              {progressInfo.completed}/{progressInfo.total}
+            </span>
+          )}
+        </div>
+        {sortedTasks.length === 0 ? (
+          <EmptyState
+            title="No tasks yet"
+            description="Ask the bot to add tasks, or create them from your project tools. Completed items will show here and in Progress."
+            compact
+            watermark={false}
+          />
+        ) : (
+          <ul className="space-y-2 max-h-[min(420px,55vh)] overflow-y-auto pr-1">
+            {sortedTasks.map((task) => {
+              const st = String(task.status || "").toLowerCase();
+              const done = st === "completed" || st === "done";
+              return (
+                <li key={task.id}>
+                  <div className="flex items-start gap-3 rounded-btn border border-border/40 bg-muted/15 px-3 py-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleTask(task)}
+                      disabled={togglingTaskId === task.id}
+                      className={cn(
+                        "mt-0.5 h-5 w-5 shrink-0 rounded border border-border flex items-center justify-center transition-colors",
+                        done ? "bg-jenga-success/20 border-jenga-success/50" : "bg-card hover:bg-muted",
+                        togglingTaskId === task.id && "opacity-60",
+                      )}
+                      aria-label={done ? "Mark not done" : "Mark done"}
+                    >
+                      {done && <Check className="h-3 w-3 text-jenga-success" />}
+                    </button>
+                    <div className="flex-1 min-w-0 pt-0.5">
+                      <p
+                        className={cn(
+                          "text-sm font-medium text-foreground break-words",
+                          done && "line-through text-muted-foreground",
+                        )}
+                      >
+                        {task.title || "Untitled task"}
+                      </p>
+                      {!done && st === "in_progress" && (
+                        <p className="text-[11px] text-jenga-info mt-0.5">In progress</p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </section>
 
       {/* Middle row: ring + spend chart */}
