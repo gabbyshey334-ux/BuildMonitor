@@ -54,6 +54,36 @@ function checkRateLimit(phoneNumber) {
   rateLimitMap.set(key, record);
   return record.count <= maxCalls;
 }
+const ISSUE_DRAFT_MAX_AGE_MS = 45 * 60 * 1e3;
+function looksLikeIssueReport(text) {
+  const t = text.toLowerCase();
+  if (t.length < 8) return false;
+  return /\b(injur|injuries|hurt|hospital|ambulance|accident|incident|casualt|unsafe|hazard|near\s*miss|first\s*aid|medical\s*emergency|unconscious|fracture|sprain|blood|fell\s+from|fall\s+from|worker\s+(hurt|injured)|staff\s+injured)\b/i.test(t) || /\b(raise|report|log)\b.*\b(issue|problem|concern)\b/i.test(t) && /\b(injur|accident|safety|hazard|incident|hurt|hospital)\b/i.test(t) || /\b(safety|site)\b.*\b(issue|incident|accident|injur)\b/i.test(t) && !/\bany\s+(issues|problems)\b/i.test(t);
+}
+function responseAsksIssueSeverity(text) {
+  const t = text.toLowerCase();
+  const mentionsLevels = /\b(low|medium|high|critical)\b/i.test(t);
+  if (/\bhow\s+severe\b/i.test(t) || /\bwhich\s+severity\b/i.test(t)) return true;
+  if (/\bseverity\b/i.test(t) && mentionsLevels) return true;
+  return false;
+}
+function parseStandaloneSeverity(text) {
+  const t = text.trim().toLowerCase().replace(/^['"]+|['"]+$/g, "").replace(/[.!?,]+$/g, "").trim();
+  if (/^(low|medium|high|critical)$/.test(t)) return t;
+  return null;
+}
+async function mergeExpensePendingPatch(userId, patch) {
+  const { data } = await supabase.from("profiles").select("expense_pending_data").eq("id", userId).single();
+  const cur = { ...data?.expense_pending_data || {} };
+  Object.assign(cur, patch);
+  await supabase.from("profiles").update({ expense_pending_data: cur, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", userId);
+}
+async function clearIssueDraft(userId) {
+  const { data } = await supabase.from("profiles").select("expense_pending_data").eq("id", userId).single();
+  const cur = { ...data?.expense_pending_data || {} };
+  delete cur.issue_draft;
+  await supabase.from("profiles").update({ expense_pending_data: cur, updated_at: (/* @__PURE__ */ new Date()).toISOString() }).eq("id", userId);
+}
 const MATERIAL_KEYWORDS = [
   "cement",
   "sand",
@@ -249,9 +279,26 @@ async function updateOnboardingState(userId, state, data) {
   }
 }
 async function updateExpenseState(userId, state, data) {
+  const { data: row } = await supabase.from("profiles").select("expense_pending_data").eq("id", userId).single();
+  const existing = row?.expense_pending_data || {};
+  const preservedDraft = existing.issue_draft;
+  let pending;
+  if (data === void 0) {
+    pending = { ...existing };
+  } else {
+    const incoming = { ...data };
+    if (Object.keys(incoming).length === 0 && state === null) {
+      pending = preservedDraft ? { issue_draft: preservedDraft } : {};
+    } else {
+      pending = incoming;
+      if (preservedDraft && incoming.issue_draft === void 0) {
+        pending.issue_draft = preservedDraft;
+      }
+    }
+  }
   const { error } = await supabase.from("profiles").update({
     expense_state: state,
-    expense_pending_data: data || {},
+    expense_pending_data: pending,
     updated_at: (/* @__PURE__ */ new Date()).toISOString()
   }).eq("id", userId);
   if (error) {
@@ -2759,6 +2806,7 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
 - "what happened on March 20?" \u2192 call get_daily_summary with date YYYY-MM-DD
 - "compare this week to last" / "this month vs last month" \u2192 call compare_periods
 - General construction question \u2192 answer from your expertise. No tool call needed.
+- Injury, accident, safety incident, or "raise an issue" about harm on site \u2192 call log_issue with a clear title and severity (default medium if unsure). Do NOT send a generic project summary instead of logging. Only ask for severity in plain text if the report has almost no usable description; if you ask, the user may reply with just "low", "medium", "high", or "critical".
 
 \u2501\u2501\u2501 CRITICAL RULES \u2501\u2501\u2501
 1. Workers/masons/labourers/staff = PEOPLE. log_labor for payments. update_daily_log for counting. NEVER update_inventory for people.
@@ -2817,7 +2865,22 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
   }
   const toolCall = parseToolCall(rawResponse);
   if (!toolCall) {
-    return rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, "").trim() || rawResponse;
+    const reply = rawResponse.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, "").trim() || rawResponse;
+    if (looksLikeIssueReport(rawMessage) && responseAsksIssueSeverity(reply)) {
+      try {
+        await mergeExpensePendingPatch(userId, {
+          issue_draft: {
+            description: rawMessage.trim(),
+            project_id: projectId,
+            set_at: (/* @__PURE__ */ new Date()).toISOString()
+          }
+        });
+        console.log("[Agent] Saved issue_draft for severity follow-up");
+      } catch (e) {
+        console.warn("[Agent] issue_draft persist failed:", e?.message);
+      }
+    }
+    return reply;
   }
   console.log("[Agent] Tool:", toolCall.tool, JSON.stringify(toolCall.params).substring(0, 100));
   let result;
@@ -2833,6 +2896,13 @@ Daily logs span 90 days in recentDailyLogs/olderDailyLogs. For "what happened on
       break;
     case "log_issue":
       result = await toolLogIssue(projectId, toolCall.params);
+      if (result.success) {
+        try {
+          await clearIssueDraft(userId);
+        } catch (e) {
+          console.warn("[Agent] clearIssueDraft failed:", e?.message);
+        }
+      }
       break;
     case "acknowledge_issue":
       result = await toolAcknowledgeIssue(projectId, toolCall.params);
@@ -3680,6 +3750,26 @@ ${confirmMsg}` : confirmMsg;
       await sendMessage(From, "You've been very busy! You've reached the message limit for this hour. Please wait a few minutes and try again.");
       res.setHeader("Content-Type", "text/xml");
       return res.status(200).send(twimlOk);
+    }
+    const severityOnly = parseStandaloneSeverity(rawMessage);
+    if (severityOnly && project?.id) {
+      const { data: profSev } = await supabase.from("profiles").select("expense_pending_data").eq("id", userId).single();
+      const draft = profSev?.expense_pending_data?.issue_draft;
+      if (draft?.description && draft.project_id === project.id && draft.set_at) {
+        const age = Date.now() - new Date(draft.set_at).getTime();
+        if (age >= 0 && age <= ISSUE_DRAFT_MAX_AGE_MS) {
+          const title = draft.description.length > 120 ? `${draft.description.substring(0, 117)}...` : draft.description;
+          const issueResult = await toolLogIssue(project.id, {
+            title,
+            description: draft.description,
+            severity: severityOnly
+          });
+          await clearIssueDraft(userId);
+          await sendMessage(From, issueResult.reply);
+          res.setHeader("Content-Type", "text/xml");
+          return res.status(200).send(twimlOk);
+        }
+      }
     }
     const agentReply = await runAgent(userId, project.id, rawMessage, profile, projects || []);
     await sendMessage(From, agentReply);
