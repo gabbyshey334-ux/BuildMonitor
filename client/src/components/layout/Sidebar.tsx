@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Plus,
   MessageCircle,
+  ListTodo,
 } from "lucide-react";
 import {
   Tooltip,
@@ -39,6 +40,12 @@ const SIDEBAR_OPEN_KEY = "jengatrack-sidebar-open-v2";
 
 const MAIN_NAV = [
   { labelKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+  {
+    labelKey: "nav.tasks",
+    href: "/dashboard",
+    icon: ListTodo,
+    hash: "#tasks-section" as const,
+  },
   { labelKey: "nav.budgets", href: "/budget", icon: Wallet },
   { labelKey: "nav.materials", href: "/materials", icon: Package },
   { labelKey: "nav.daily", href: "/daily", icon: Calendar },
@@ -174,9 +181,11 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
       >
         {MAIN_NAV.map((item) => {
           const active = isActive(item.href);
-          const href = hrefWithProject(item.href);
+          const base = hrefWithProject(item.href);
+          const href =
+            "hash" in item && item.hash ? `${base}${item.hash}` : base;
           const content = (
-            <Link key={item.href} href={href}>
+            <Link key={`${item.href}${"hash" in item ? item.hash || "" : ""}`} href={href}>
               <div className={linkClass(active)}>
                 {active && (
                   <span

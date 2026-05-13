@@ -240,6 +240,8 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
       let materialsRows = [];
       let openIssuesCount = 0;
       let criticalIssuesCount = 0;
+      let summaryTotalTasks = 0;
+      let summaryCompletedTasks = 0;
 
       // Prefer Supabase client so we read the SAME database the WhatsApp webhook writes to
       const supabaseUrl = process.env.SUPABASE_URL;
@@ -304,6 +306,27 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
           console.warn('[Summary] Issues count failed:', issueErr?.message);
           openIssuesCount = 0;
           criticalIssuesCount = 0;
+        }
+
+        /** Task counts for Progress KPI (same table WhatsApp / dashboard PATCH use) */
+        try {
+          let tr = await supabase
+            .from('tasks')
+            .select('status')
+            .eq('project_id', projectId)
+            .is('deleted_at', null);
+          if (tr.error && /deleted_at/i.test(tr.error.message || '')) {
+            tr = await supabase.from('tasks').select('status').eq('project_id', projectId);
+          }
+          if (!tr.error && Array.isArray(tr.data)) {
+            const rows = tr.data;
+            summaryTotalTasks = rows.length;
+            summaryCompletedTasks = rows.filter((row) =>
+              ['completed', 'done'].includes(String(row.status || '').toLowerCase()),
+            ).length;
+          }
+        } catch (taskCountErr) {
+          console.warn('[Summary] Tasks count failed:', taskCountErr?.message);
         }
 
         console.log('[Summary Debug]', {
@@ -457,7 +480,12 @@ app.get('/api/projects/:projectId/summary', (req, res, next) => {
             : null,
         },
         progress: {
-          overallPercentage: 0,
+          overallPercentage:
+            summaryTotalTasks > 0
+              ? Math.min(100, Math.round((summaryCompletedTasks / summaryTotalTasks) * 100))
+              : 0,
+          completedTasks: summaryCompletedTasks,
+          totalTasks: summaryTotalTasks,
           phases: [],
           milestones: [],
         },

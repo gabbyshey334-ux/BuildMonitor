@@ -22,8 +22,9 @@ import {
   Flame,
   Users,
   ListTodo,
+  ChevronDown,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -208,20 +209,38 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       (tk) => tk.status === "completed" || tk.status === "done",
     ).length;
 
-    const total =
+    const summaryTotal =
       typeof summaryProgress?.totalTasks === "number"
         ? summaryProgress.totalTasks
-        : fallbackTotal;
-    const completed =
+        : null;
+    const summaryCompleted =
       typeof summaryProgress?.completedTasks === "number"
         ? summaryProgress.completedTasks
-        : fallbackDone;
+        : null;
+
+    const total =
+      fallbackTotal > 0
+        ? fallbackTotal
+        : summaryTotal != null && summaryTotal > 0
+          ? summaryTotal
+          : 0;
+    const completed =
+      fallbackTotal > 0
+        ? fallbackDone
+        : summaryTotal != null &&
+            summaryTotal > 0 &&
+            summaryCompleted != null
+          ? summaryCompleted
+          : 0;
 
     let pct = 0;
-    if (typeof summaryProgress?.overallPercentage === "number") {
-      pct = Math.round(summaryProgress.overallPercentage);
-    } else if (total > 0) {
+    if (total > 0) {
       pct = Math.round((completed / total) * 100);
+    } else if (
+      typeof summaryProgress?.overallPercentage === "number" &&
+      summaryProgress.overallPercentage > 0
+    ) {
+      pct = Math.round(summaryProgress.overallPercentage);
     }
     pct = Math.min(100, Math.max(0, pct));
 
@@ -340,6 +359,26 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = getToken();
+
+  /** WhatsApp + dashboard tasks — panel expands/collapses from Progress KPI or #tasks-section */
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(true);
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash;
+      if (h === "#tasks-section" || h === "#tasks") {
+        setTasksPanelOpen(true);
+        requestAnimationFrame(() => {
+          document
+            .getElementById("tasks-section")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    };
+    onHash();
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [effectiveProjectId]);
 
   // ─── Handlers (preserved) ────────────────────────────────────────────
   const handleLogExpense = async () => {
@@ -807,20 +846,30 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
                   />
                 </span>
                 <span className="text-[11px] shrink-0">
-                  {progressInfo.completed}/{progressInfo.total} tasks · tap for checklist
+                  {progressInfo.completed}/{progressInfo.total} tasks · tap to expand list
                 </span>
               </span>
             ) : (
               <span className="text-[11px]">
-                Add tasks to track progress · tap to open list
+                Add tasks via Jenga or here · tap to open list
               </span>
             )
           }
           icon={TrendingUp}
           accent="primary"
-          onClick={() =>
-            document.getElementById("tasks-section")?.scrollIntoView({ behavior: "smooth", block: "start" })
-          }
+          onClick={() => {
+            setTasksPanelOpen((prev) => {
+              const next = !prev;
+              if (next) {
+                requestAnimationFrame(() => {
+                  document
+                    .getElementById("tasks-section")
+                    ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                });
+              }
+              return next;
+            });
+          }}
         />
 
         <KPICard
@@ -923,9 +972,18 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
         />
       </section>
 
-      {/* Project tasks — matches Progress KPI; checklist from WhatsApp + dashboard */}
-      <section id="tasks-section" className="jt-card mb-8 w-full min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between gap-3 mb-4 w-full min-w-0">
+      {/* Project tasks — expandable; same data as Progress % (incl. WhatsApp-created tasks) */}
+      <section
+        id="tasks-section"
+        className="jt-card mb-8 w-full min-w-0 overflow-hidden scroll-mt-24"
+        aria-label="Project tasks"
+      >
+        <button
+          type="button"
+          onClick={() => setTasksPanelOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-3 text-left rounded-btn px-1 py-0.5 -mx-1 hover:bg-muted/30 transition-colors min-w-0"
+          aria-expanded={tasksPanelOpen}
+        >
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1 bg-muted/40 text-jenga-primary ring-jenga-primary/20">
               <ListTodo className="h-4 w-4" aria-hidden />
@@ -933,63 +991,88 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             <div className="min-w-0">
               <h2 className="jt-h2 truncate">Project tasks</h2>
               <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                Same list as your Progress count — tick items when done
+                From WhatsApp or the app — tick when done. Tap Progress above to show or hide.
               </p>
             </div>
           </div>
-          {progressInfo.total > 0 && (
-            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-              {progressInfo.completed}/{progressInfo.total}
-            </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {progressInfo.total > 0 && (
+              <span className="text-[11px] font-mono text-muted-foreground">
+                {progressInfo.completed}/{progressInfo.total}
+              </span>
+            )}
+            <ChevronDown
+              className={cn(
+                "h-5 w-5 text-muted-foreground transition-transform shrink-0",
+                tasksPanelOpen && "rotate-180",
+              )}
+              aria-hidden
+            />
+          </div>
+        </button>
+
+        <AnimatePresence initial={false}>
+          {tasksPanelOpen && (
+            <motion.div
+              key="tasks-body"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="pt-4 border-t border-border/40 mt-3">
+                {sortedTasks.length === 0 ? (
+                  <EmptyState
+                    title="No tasks yet"
+                    description="Tell Jenga on WhatsApp to add a task, or use your project tools. Your checklist will appear here."
+                    compact
+                    watermark={false}
+                  />
+                ) : (
+                  <ul className="space-y-2 max-h-[min(420px,55vh)] overflow-y-auto pr-1">
+                    {sortedTasks.map((task) => {
+                      const st = String(task.status || "").toLowerCase();
+                      const done = st === "completed" || st === "done";
+                      return (
+                        <li key={task.id}>
+                          <div className="flex items-start gap-3 rounded-btn border border-border/40 bg-muted/15 px-3 py-2.5">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTask(task)}
+                              disabled={togglingTaskId === task.id}
+                              className={cn(
+                                "mt-0.5 h-5 w-5 shrink-0 rounded border border-border flex items-center justify-center transition-colors",
+                                done ? "bg-jenga-success/20 border-jenga-success/50" : "bg-card hover:bg-muted",
+                                togglingTaskId === task.id && "opacity-60",
+                              )}
+                              aria-label={done ? "Mark not done" : "Mark done"}
+                            >
+                              {done && <Check className="h-3 w-3 text-jenga-success" />}
+                            </button>
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <p
+                                className={cn(
+                                  "text-sm font-medium text-foreground break-words",
+                                  done && "line-through text-muted-foreground",
+                                )}
+                              >
+                                {task.title || "Untitled task"}
+                              </p>
+                              {!done && st === "in_progress" && (
+                                <p className="text-[11px] text-jenga-info mt-0.5">In progress</p>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </motion.div>
           )}
-        </div>
-        {sortedTasks.length === 0 ? (
-          <EmptyState
-            title="No tasks yet"
-            description="Ask the bot to add tasks, or create them from your project tools. Completed items will show here and in Progress."
-            compact
-            watermark={false}
-          />
-        ) : (
-          <ul className="space-y-2 max-h-[min(420px,55vh)] overflow-y-auto pr-1">
-            {sortedTasks.map((task) => {
-              const st = String(task.status || "").toLowerCase();
-              const done = st === "completed" || st === "done";
-              return (
-                <li key={task.id}>
-                  <div className="flex items-start gap-3 rounded-btn border border-border/40 bg-muted/15 px-3 py-2.5">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleTask(task)}
-                      disabled={togglingTaskId === task.id}
-                      className={cn(
-                        "mt-0.5 h-5 w-5 shrink-0 rounded border border-border flex items-center justify-center transition-colors",
-                        done ? "bg-jenga-success/20 border-jenga-success/50" : "bg-card hover:bg-muted",
-                        togglingTaskId === task.id && "opacity-60",
-                      )}
-                      aria-label={done ? "Mark not done" : "Mark done"}
-                    >
-                      {done && <Check className="h-3 w-3 text-jenga-success" />}
-                    </button>
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <p
-                        className={cn(
-                          "text-sm font-medium text-foreground break-words",
-                          done && "line-through text-muted-foreground",
-                        )}
-                      >
-                        {task.title || "Untitled task"}
-                      </p>
-                      {!done && st === "in_progress" && (
-                        <p className="text-[11px] text-jenga-info mt-0.5">In progress</p>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        </AnimatePresence>
       </section>
 
       {/* Middle row: ring + spend chart */}

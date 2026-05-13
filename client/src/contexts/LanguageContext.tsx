@@ -24,6 +24,7 @@ const LanguageContext = createContext<LanguageContextType>({
 const translations: Record<Language, Record<string, string>> = {
   en: {
     "nav.dashboard": "Dashboard",
+    "nav.tasks": "Tasks",
     "nav.budgets": "Budgets & Costs",
     "nav.materials": "Materials & Supplies",
     "nav.daily": "Daily Accountability",
@@ -460,6 +461,7 @@ const translations: Record<Language, Record<string, string>> = {
   },
   lg: {
     "nav.dashboard": "Pulezidenti",
+    "nav.tasks": "Emirimu",
     "nav.budgets": "Ensimbi n'Empaliro",
     "nav.materials": "Ebintu n'Eby'okuzimba",
     "nav.daily": "Ebikolwa bya Buli Lunaku",
@@ -896,6 +898,7 @@ const translations: Record<Language, Record<string, string>> = {
   },
   pt: {
     "nav.dashboard": "Painel",
+    "nav.tasks": "Tarefas",
     "nav.budgets": "Orçamentos e Custos",
     "nav.materials": "Materiais e Suprimentos",
     "nav.daily": "Prestação de Contas Diária",

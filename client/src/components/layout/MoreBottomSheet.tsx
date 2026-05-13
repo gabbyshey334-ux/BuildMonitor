@@ -13,6 +13,7 @@ import {
   ChevronRight,
   MessageCircle,
   X,
+  ListTodo,
 } from "lucide-react";
 import {
   Sheet,
@@ -26,6 +27,12 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { JengaTrackLogo } from "@/components/ui/Logo";
 
 const MORE_ITEMS = [
+  {
+    labelKey: "nav.tasks",
+    href: "/dashboard",
+    icon: ListTodo,
+    hash: "#tasks-section" as const,
+  },
   { labelKey: "nav.trends", href: "/trends", icon: TrendingUp },
   { labelKey: "nav.projects", href: "/projects", icon: FolderOpen },
   { labelKey: "nav.settings", href: "/settings", icon: Settings },
@@ -137,8 +144,12 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
 
               {/* Nav items */}
               <nav className="px-3 pt-3 pb-2">
-                {MORE_ITEMS.map((item) => (
-                  <Link key={item.href} href={hrefWithProject(item.href)}>
+                {MORE_ITEMS.map((item) => {
+                  const base = hrefWithProject(item.href);
+                  const href =
+                    "hash" in item && item.hash ? `${base}${item.hash}` : base;
+                  return (
+                  <Link key={`${item.href}${"hash" in item ? item.hash || "" : ""}`} href={href}>
                     <div
                       onClick={() => onOpenChange(false)}
                       className={cn(
@@ -155,7 +166,8 @@ export function MoreBottomSheet({ open, onOpenChange }: MoreBottomSheetProps) {
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
                   </Link>
-                ))}
+                  );
+                })}
               </nav>
 
               {/* WhatsApp status */}
