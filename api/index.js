@@ -1061,6 +1061,95 @@ app.get('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/projects/:projectId/tasks — Create task (dashboard / web app)
+app.post('/api/projects/:projectId/tasks', requireAuth, async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    const userId = req.userId || req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, error: 'Not authenticated' });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ success: false, error: 'Server not configured' });
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+    const allowed = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowed) return res.status(404).json({ success: false, error: 'Project not found' });
+
+    const { data: proj, error: projErr } = await supabase
+      .from('projects')
+      .select('user_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projErr || !proj?.user_id) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
+    const body = req.body || {};
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!title) return res.status(400).json({ success: false, error: 'Title is required' });
+
+    let status = typeof body.status === 'string' ? body.status.trim().toLowerCase() : 'pending';
+    if (!['pending', 'in_progress', 'completed', 'todo', 'done'].includes(status)) status = 'pending';
+    if (status === 'todo') status = 'pending';
+    if (status === 'done') status = 'completed';
+
+    let priority = typeof body.priority === 'string' ? body.priority.trim().toLowerCase() : 'medium';
+    if (priority === 'critical') priority = 'high';
+    if (!['low', 'medium', 'high'].includes(priority)) priority = 'medium';
+
+    let description = null;
+    if (body.description != null && String(body.description).trim()) {
+      description = String(body.description).trim();
+    }
+
+    let dueDate = body.due_date ?? body.dueDate;
+    if (dueDate === '' || dueDate === undefined || dueDate === null) dueDate = null;
+    else dueDate = String(dueDate).split('T')[0];
+
+    const now = new Date().toISOString();
+    const row = {
+      user_id: proj.user_id,
+      project_id: projectId,
+      title: title.slice(0, 255),
+      status,
+      priority,
+      source: 'dashboard',
+      created_at: now,
+      updated_at: now,
+    };
+    if (description) row.description = description;
+    if (dueDate) row.due_date = dueDate;
+    if (status === 'completed') row.completed_at = now;
+
+    let { data: created, error: insErr } = await supabase.from('tasks').insert(row).select('*').single();
+    if (insErr) {
+      const msg = insErr.message || '';
+      if (/description|priority|due_date|source|updated_at/i.test(msg)) {
+        const minimal = {
+          user_id: proj.user_id,
+          project_id: projectId,
+          title: title.slice(0, 255),
+          status: status === 'completed' ? 'pending' : status,
+          created_at: now,
+        };
+        const retry = await supabase.from('tasks').insert(minimal).select('*').single();
+        created = retry.data;
+        insErr = retry.error;
+      }
+    }
+    if (insErr) {
+      console.error('[POST task]', insErr.message);
+      return res.status(500).json({ success: false, error: insErr.message || 'Failed to create task' });
+    }
+    return res.status(201).json({ success: true, task: created });
+  } catch (err) {
+    console.error('[POST task] Unexpected:', err?.message, err?.stack);
+    return res.status(500).json({ success: false, error: err?.message || 'Server error' });
+  }
+});
+
 // PATCH /api/projects/:projectId/tasks/:taskId — Update task status (dashboard checklist)
 app.patch('/api/projects/:projectId/tasks/:taskId', requireAuth, async (req, res) => {
   try {
