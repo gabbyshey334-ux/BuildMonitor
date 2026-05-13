@@ -23,6 +23,19 @@ interface TaskManagementProps {
   userRole?: 'owner' | 'manager';
 }
 
+function isTaskDone(task: Task): boolean {
+  if (typeof task.completed === "boolean") return task.completed;
+  const s = String((task as { status?: string }).status ?? "").toLowerCase();
+  return s === "completed" || s === "done";
+}
+
+function mapFormPriorityToApi(p: string | undefined): "low" | "medium" | "high" {
+  const x = (p || "medium").toLowerCase();
+  if (x === "low") return "low";
+  if (x === "high" || x === "critical") return "high";
+  return "medium";
+}
+
 const taskFormSchema = insertTaskSchema.omit({ projectId: true }).extend({
   dueDate: z.string().optional(),
 });
@@ -33,10 +46,16 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: tasks = [], isLoading } = useQuery<Task[]>({
-    queryKey: ['/api/projects', projectId, 'tasks'],
+  const { data: tasksRaw, isLoading } = useQuery<
+    Task[] | { success?: boolean; tasks?: Task[] }
+  >({
+    queryKey: ["/api/projects", projectId, "tasks"],
     enabled: !!projectId,
   });
+
+  const tasks: Task[] = Array.isArray(tasksRaw)
+    ? tasksRaw
+    : (tasksRaw as { tasks?: Task[] } | undefined)?.tasks ?? [];
 
   const createTaskMutation = useMutation({
     mutationFn: async (taskData: {
@@ -44,13 +63,25 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
       description?: string | null;
       priority?: string;
       location?: string | null;
-      dueDate?: Date;
+      dueDate?: Date | string;
       projectId: string;
     }) => {
-      await apiRequest('POST', '/api/tasks', taskData);
+      const due =
+        taskData.dueDate === undefined || taskData.dueDate === ""
+          ? undefined
+          : typeof taskData.dueDate === "string"
+            ? taskData.dueDate.split("T")[0]
+            : (taskData.dueDate as Date).toISOString().split("T")[0];
+      await apiRequest("POST", `/api/projects/${taskData.projectId}/tasks`, {
+        title: taskData.title,
+        description: taskData.description || undefined,
+        priority: mapFormPriorityToApi(taskData.priority),
+        due_date: due,
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'tasks'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
       form.reset({
         title: '',
         description: '',
@@ -76,10 +107,17 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
 
   const updateTaskMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Task> }) => {
-      await apiRequest('PUT', `/api/tasks/${id}`, updates);
+      if (typeof updates.completed === "boolean") {
+        await apiRequest("PATCH", `/api/projects/${projectId}/tasks/${id}`, {
+          completed: updates.completed,
+        });
+        return;
+      }
+      await apiRequest("PATCH", `/api/projects/${projectId}/tasks/${id}`, updates);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId, 'tasks'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
       toast({
         title: "Success",
         description: "Task updated successfully",
@@ -116,18 +154,18 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
   const toggleTaskComplete = (task: Task) => {
     updateTaskMutation.mutate({
       id: task.id,
-      updates: { completed: !task.completed }
+      updates: { completed: !isTaskDone(task) },
     });
   };
 
   const getFilteredTasks = () => {
     switch (filter) {
       case 'active':
-        return tasks.filter(task => !task.completed);
+        return tasks.filter((task) => !isTaskDone(task));
       case 'overdue':
-        return tasks.filter(task => 
-          !task.completed && 
-          task.dueDate && 
+        return tasks.filter((task) =>
+          !isTaskDone(task) &&
+          task.dueDate &&
           new Date(task.dueDate) < new Date()
         );
       default:
@@ -136,9 +174,9 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
   };
 
   const filteredTasks = getFilteredTasks();
-  const activeTasks = tasks.filter(t => !t.completed);
-  const overdueTasks = tasks.filter(t => 
-    !t.completed && t.dueDate && new Date(t.dueDate) < new Date()
+  const activeTasks = tasks.filter((t) => !isTaskDone(t));
+  const overdueTasks = tasks.filter((t) =>
+    !isTaskDone(t) && t.dueDate && new Date(t.dueDate) < new Date()
   );
 
   const getPriorityColor = (priority: Priority) => {
@@ -375,7 +413,7 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
           </Card>
         ) : (
           filteredTasks.map((task) => {
-            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !task.completed;
+            const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !isTaskDone(task);
             
             return (
               <Card key={task.id} className="card-glass">
@@ -392,7 +430,7 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
                             Overdue
                           </span>
                         )}
-                        {task.completed && (
+                        {isTaskDone(task) && (
                           <span className="status-pill status-complete">
                             Completed
                           </span>
@@ -431,20 +469,20 @@ export default function TaskManagement({ projectId, userRole = 'owner' }: TaskMa
                             onClick={() => toggleTaskComplete(task)}
                             variant="outline"
                             size="sm"
-                            className={task.completed 
+                            className={isTaskDone(task)
                               ? "bg-green-600/20 hover:bg-green-600/30 border-green-600/40 text-green-300"
                               : "bg-ocean-pine/15 hover:bg-ocean-pine/20 border-ocean-pine/30 text-ocean-pine"
                             }
                             disabled={updateTaskMutation.isPending}
                           >
                             <Check className="w-4 h-4" />
-                            {task.completed ? 'Completed' : 'Mark Complete'}
+                            {isTaskDone(task) ? 'Completed' : 'Mark Complete'}
                           </Button>
                         </>
                       )}
                       {userRole === 'owner' && (
                         <div className="flex items-center gap-2 text-sm">
-                          {task.completed ? (
+                          {isTaskDone(task) ? (
                             <span className="text-green-300 flex items-center gap-2">
                               <CheckCircle className="w-4 h-4" />
                               Completed by Manager

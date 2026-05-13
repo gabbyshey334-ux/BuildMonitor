@@ -352,6 +352,8 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
     null,
   );
   const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [savingNewTask, setSavingNewTask] = useState(false);
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
   const [photoCaption, setPhotoCaption] = useState("");
@@ -508,6 +510,41 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
       toast({ title: "Could not update task", variant: "destructive" });
     } finally {
       setTogglingTaskId(null);
+    }
+  };
+
+  const handleAddTask = async () => {
+    const title = newTaskTitle.trim();
+    if (!effectiveProjectId || !title || savingNewTask) return;
+    setSavingNewTask(true);
+    try {
+      const res = await fetch(`/api/projects/${effectiveProjectId}/tasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ title, status: "pending" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to create task");
+      }
+      setNewTaskTitle("");
+      setTasksPanelOpen(true);
+      await refetchTasks();
+      queryClient.invalidateQueries({
+        queryKey: [DASHBOARD_SUMMARY_QUERY_KEY, effectiveProjectId],
+      });
+      toast({ title: "Task added" });
+    } catch (e) {
+      toast({
+        title: e instanceof Error ? e.message : "Could not add task",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingNewTask(false);
     }
   };
 
@@ -991,7 +1028,7 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
             <div className="min-w-0">
               <h2 className="jt-h2 truncate">Project tasks</h2>
               <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                From WhatsApp or the app — tick when done. Tap Progress above to show or hide.
+                Add below, via WhatsApp, or tick when done. Tap Progress above to show or hide.
               </p>
             </div>
           </div>
@@ -1022,10 +1059,35 @@ export default function DashboardPage({ projectId: projectIdProp }: DashboardPag
               className="overflow-hidden"
             >
               <div className="pt-4 border-t border-border/40 mt-3">
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                  <input
+                    type="text"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    placeholder="What needs to be done?"
+                    className="jt-input flex-1 min-w-0 h-10 text-sm"
+                    disabled={savingNewTask}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleAddTask();
+                      }
+                    }}
+                    aria-label="New task title"
+                  />
+                  <Button
+                    type="button"
+                    className="h-10 shrink-0 bg-jenga-primary hover:bg-jenga-primary-hover text-[#0D0F0E] font-semibold"
+                    disabled={savingNewTask || !newTaskTitle.trim()}
+                    onClick={() => void handleAddTask()}
+                  >
+                    {savingNewTask ? "Adding…" : "Add task"}
+                  </Button>
+                </div>
                 {sortedTasks.length === 0 ? (
                   <EmptyState
                     title="No tasks yet"
-                    description="Tell Jenga on WhatsApp to add a task, or use your project tools. Your checklist will appear here."
+                    description="Use the field above, ask Jenga on WhatsApp, or open Tasks in the sidebar. Your checklist appears here."
                     compact
                     watermark={false}
                   />
