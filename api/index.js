@@ -15,6 +15,13 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql } from 'drizzle-orm';
 import { generateToken, verifyToken, extractToken } from './utils/jwt.js';
+import { corsMiddleware } from './utils/cors.js';
+import { apiRateLimit, authRateLimit } from './utils/rateLimit.js';
+import { sanitizeBodyMiddleware } from './utils/sanitize.js';
+import { requestLogger, logger } from './utils/logger.js';
+import { verifyRecoveryToken } from './utils/authz.js';
+import { roleFromProjectRow, canWriteProject } from './utils/rbac.js';
+import { validatePassword } from '../shared/passwordPolicy.js';
 
 /** Linked WhatsApp profile IDs + auth user id — mirrors GET /api/projects. */
 async function getLinkedUserIdsForAuth(supabase, userId) {
@@ -83,6 +90,20 @@ async function userHasProjectAccess(supabase, projectId, userId) {
   return false;
 }
 
+/** Project row + RBAC role if user may access (read). */
+async function getProjectAccess(supabase, projectId, userId) {
+  const linkedIds = await getLinkedUserIdsForAuth(supabase, userId);
+  const { data: projectRow } = await supabase
+    .from('projects')
+    .select('id, user_id, manager_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (!projectRow) return null;
+  const role = roleFromProjectRow(projectRow, userId, linkedIds);
+  if (role === 'none') return null;
+  return { projectRow, role, linkedIds };
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -125,33 +146,14 @@ const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(sanitizeBodyMiddleware);
 
-// CORS - allow credentials for same-origin; JWT sent via Authorization header
-app.use((req, res, next) => {
-  const origin = req.headers.origin || 'https://build-monitor-lac.vercel.app';
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Trust proxy for Vercel
+// CORS allowlist + rate limits + structured logging
+app.use(corsMiddleware);
 app.set('trust proxy', 1);
-
-// Request logging (no session — we use JWT only)
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  }
-  if (req.path.startsWith('/webhook')) {
-    console.log(`[Request] ${req.method} ${req.path} - ${req.url}`);
-  }
-  next();
-});
+app.use(requestLogger);
+app.use('/api/auth', authRateLimit);
+app.use('/api', apiRateLimit);
 
 // ============================================================================
 // DATABASE CONNECTION (Direct connection for serverless)
@@ -741,10 +743,9 @@ app.post('/api/projects/:projectId/expenses', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) {
-      console.error('[POST expenses] Project not found:', projectId);
-      return res.status(404).json({ success: false, error: 'Project not found' });
+    const access = await getProjectAccess(supabase, projectId, userId);
+    if (!access || !canWriteProject(access.role)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
     const body = req.body || {};
     const { description, category, vendor, expense_date } = body;
@@ -896,14 +897,9 @@ app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    const { data: projectRow } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('id', expenseRow.project_id)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (!projectRow) {
-      return res.status(404).json({ success: false, error: 'Expense not found' });
+    const allowedDel = await userHasProjectAccess(supabase, expenseRow.project_id, userId);
+    if (!allowedDel) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
     const { error: deleteErr } = await supabase
       .from('expenses')
@@ -944,14 +940,9 @@ app.patch('/api/expenses/:id', requireAuth, async (req, res) => {
     if (fetchErr || !expenseRow) {
       return res.status(404).json({ success: false, error: 'Expense not found' });
     }
-    const { data: projectRow } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('id', expenseRow.project_id)
-      .eq('user_id', userId)
-      .maybeSingle();
-    if (!projectRow) {
-      return res.status(404).json({ success: false, error: 'Expense not found' });
+    const allowedPatch = await userHasProjectAccess(supabase, expenseRow.project_id, userId);
+    if (!allowedPatch) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
     const body = req.body || {};
     const description = body.description != null ? String(body.description).trim() || 'Expense' : undefined;
@@ -994,8 +985,10 @@ app.post('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const accessIssues = await getProjectAccess(supabase, projectId, userId);
+    if (!accessIssues || !canWriteProject(accessIssues.role)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
     const { title, description, severity, type, status, priority } = req.body || {};
     const { error } = await supabase.from('issues').insert({
       project_id: projectId,
@@ -1220,8 +1213,8 @@ app.get('/api/projects/:projectId/issues', requireAuth, async (req, res) => {
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, issues: [], error: 'Project not found' });
+    const allowedIssuesGet = await userHasProjectAccess(supabase, projectId, userId);
+    if (!allowedIssuesGet) return res.status(404).json({ success: false, issues: [], error: 'Project not found' });
     const { data, error } = await supabase
       .from('issues')
       .select('*')
@@ -1469,8 +1462,10 @@ app.post('/api/projects/:projectId/daily/log', requireAuth, async (req, res) => 
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) return res.status(404).json({ success: false, error: 'Project not found' });
+    const accessDailyLog = await getProjectAccess(supabase, projectId, userId);
+    if (!accessDailyLog || !canWriteProject(accessDailyLog.role)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
     const { worker_count, notes, log_date, entries } = req.body;
     const today = (log_date || new Date().toISOString().split('T')[0]).toString().substring(0, 10);
     const activityEntries = Array.isArray(entries) ? entries.map(e => ({
@@ -1522,10 +1517,9 @@ app.post('/api/projects/:projectId/daily/photo', requireAuth, async (req, res) =
     }
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
-    const { data: projectRow } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
-    if (!projectRow) {
-      console.error('[POST daily/photo] Project not found:', projectId);
-      return res.status(404).json({ success: false, error: 'Project not found' });
+    const accessDailyPhoto = await getProjectAccess(supabase, projectId, userId);
+    if (!accessDailyPhoto || !canWriteProject(accessDailyPhoto.role)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
     const { photoUrl, caption, tag } = req.body || {};
     if (!photoUrl || typeof photoUrl !== 'string' || !photoUrl.startsWith('http')) {
@@ -2277,13 +2271,8 @@ app.get('/api/projects/:projectId/daily', (req, res, next) => {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
 
-      const { data: projectRow, error: projectError } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('id', projectId)
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (projectError || !projectRow) {
+      const allowedDailyGet = await userHasProjectAccess(supabase, projectId, userId);
+      if (!allowedDailyGet) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
 
@@ -2867,6 +2856,15 @@ app.post('/api/auth/register', async (req, res) => {
       });
     }
 
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation error',
+        message: passwordCheck.message,
+      });
+    }
+
     // Initialize Supabase client
     const { createClient } = await import('@supabase/supabase-js');
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -3115,11 +3113,12 @@ app.post('/api/auth/reset-password', async (req, res) => {
   try {
     const password = req.body?.password;
     const token = req.body?.token;
-    if (!password || typeof password !== 'string' || password.length < 6) {
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.valid) {
       return res.status(400).json({
         success: false,
         error: 'Validation error',
-        message: 'Password must be at least 6 characters.',
+        message: passwordCheck.message,
       });
     }
     if (!token || typeof token !== 'string') {
@@ -3131,43 +3130,28 @@ app.post('/api/auth/reset-password', async (req, res) => {
       });
     }
     const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!supabaseUrl || !serviceKey) {
+    if (!supabaseUrl || !supabaseAnonKey || !serviceKey) {
       return res.status(500).json({
         success: false,
         error: 'Server configuration error',
         message: 'Password reset is not configured.',
       });
     }
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid reset link',
-        message: 'Invalid or expired reset link. Please request a new password reset.',
-      });
-    }
-    let userId;
-    try {
-      const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-      const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-      userId = payload.sub;
-    } catch {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid reset link',
-        message: 'Invalid or expired reset link. Please request a new password reset.',
-      });
-    }
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid reset link',
-        message: 'Invalid or expired reset link. Please request a new password reset.',
-      });
-    }
     const { createClient } = await import('@supabase/supabase-js');
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const verified = await verifyRecoveryToken(supabaseAuth, token);
+    if (!verified.ok || !verified.userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset link',
+        message: verified.reason || 'Invalid or expired reset link. Links expire after 30 minutes.',
+      });
+    }
+    const userId = verified.userId;
     const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -3208,8 +3192,9 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Both passwords required' });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: 'Password must be 8+ characters' });
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.valid) {
+      return res.status(400).json({ error: passwordCheck.message });
     }
 
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -3252,7 +3237,9 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 
     if (updateError) {
       console.error('[Change Password] Update error:', updateError);
-      return res.status(500).json({ error: 'Failed to change password' });
+      return res.status(400).json({
+        error: updateError.message || 'Failed to change password',
+      });
     }
 
     return res.status(200).json({ success: true, message: 'Password changed successfully' });
@@ -3807,11 +3794,15 @@ app.get('/api/projects/:projectId/settings', requireAuth, async (req, res) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    const settingsAccess = await userHasProjectAccess(supabase, projectId, userId);
+    if (!settingsAccess) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+
     const { data: project, error: projectError } = await supabase
       .from('projects')
       .select('id, name, description, budget, status, channel_type, created_at')
       .eq('id', projectId)
-      .eq('user_id', userId)
       .single();
 
     if (projectError || !project) {
@@ -3873,15 +3864,9 @@ app.patch('/api/projects/:projectId/settings', requireAuth, async (req, res) => 
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { data: existing } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('user_id', userId)
-      .single();
-
-    if (!existing) {
-      return res.status(404).json({ success: false, error: 'Project not found' });
+    const patchAccess = await getProjectAccess(supabase, projectId, userId);
+    if (!patchAccess || !canWriteProject(patchAccess.role)) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
     const projectUpdates = {};
@@ -3903,7 +3888,6 @@ app.patch('/api/projects/:projectId/settings', requireAuth, async (req, res) => 
         .from('projects')
         .update({ ...projectUpdates, updated_at: new Date().toISOString() })
         .eq('id', projectId)
-        .eq('user_id', userId)
         .select()
         .single();
 
@@ -3931,7 +3915,6 @@ app.patch('/api/projects/:projectId/settings', requireAuth, async (req, res) => 
       .from('projects')
       .select('id, name, description, budget, status, channel_type, created_at, updated_at')
       .eq('id', projectId)
-      .eq('user_id', userId)
       .single();
 
     res.json({
@@ -4886,14 +4869,17 @@ app.get('*', (req, res) => {
 // ============================================================================
 
 app.use((err, req, res, next) => {
-  console.error('[Error Handler]', err);
+  logger.error('unhandled error', { message: err.message, path: req.path });
   const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
-  
-  res.status(status).json({ 
+  const message =
+    process.env.NODE_ENV === 'production' && status >= 500
+      ? 'Internal server error'
+      : err.message || 'Internal Server Error';
+
+  res.status(status).json({
     success: false,
     error: message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 

@@ -157,7 +157,7 @@ export default function ForgotPassword() {
                 <p className="text-sm text-gray-500 leading-relaxed">
                   We sent a reset link to{" "}
                   <span className="font-medium text-[#0F1A14]">{email}</span>.{" "}
-                  It expires in 15 minutes.
+                  It expires in 30 minutes.
                 </p>
               </div>
 

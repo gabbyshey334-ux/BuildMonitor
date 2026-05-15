@@ -9,6 +9,8 @@ import { useProjects, useInvalidateProjects } from "@/hooks/useProjects";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { getToken } from "@/lib/authToken";
+import { validatePassword } from "@shared/passwordPolicy.js";
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -141,8 +143,9 @@ export default function SettingsPage() {
       setPasswordError("Current password is required");
       return;
     }
-    if (passwordForm.newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters");
+    const passwordResult = validatePassword(passwordForm.newPassword);
+    if (!passwordResult.valid) {
+      setPasswordError(passwordResult.message ?? "Password does not meet requirements");
       return;
     }
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
@@ -528,6 +531,7 @@ export default function SettingsPage() {
                 <Lock className="w-4 h-4 text-muted-foreground" />
                 {t("settings.changePassword")}
               </h3>
+              <p className="text-xs text-muted-foreground">{t("settings.passwordHint")}</p>
               <div className="space-y-3">
                 <input
                   type="text"
@@ -554,6 +558,9 @@ export default function SettingsPage() {
                   onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
                   className="bg-muted border-border text-foreground focus:ring-red-500 focus:border-red-500"
                 />
+                {passwordForm.newPassword.length > 0 && (
+                  <PasswordRequirements password={passwordForm.newPassword} />
+                )}
                 <Input
                   type="password"
                   placeholder={t("settings.confirmNewPassword")}

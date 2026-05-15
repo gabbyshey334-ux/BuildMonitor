@@ -19,7 +19,8 @@
     "seed": "tsx scripts/seed.ts",
     "backfill:materials": "tsx scripts/backfill-materials-from-expenses.ts",
     "seed:test": "tsx server/scripts/seedTestUser.ts",
-    "test:all": "npm run test:env && npm run test:db && npm run test:health"
+    "test:all": "npm run test:env && npm run test:db && npm run test:health",
+    "test:unit": "node --test api/tests/*.test.js"
   },
   "dependencies": {
     "@google-cloud/storage": "^7.16.0",

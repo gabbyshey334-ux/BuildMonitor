@@ -5,6 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Link, useLocation } from "wouter";
 import { Eye, EyeOff, Lock, CheckCircle, XCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { getPasswordStrength, validatePassword } from "@shared/passwordPolicy.js";
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements";
 
 // Inline SVG grid — graph-paper texture at 4% opacity
 function GridPattern({ id }: { id: string }) {
@@ -37,22 +40,8 @@ function parseHashParams(): { access_token?: string; refresh_token?: string; typ
   };
 }
 
-// 0-4 segment strength score mapped from password heuristics
-function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  if (!pw) return { score: 0, label: "", color: "" };
-  let raw = 0;
-  if (pw.length >= 8) raw++;
-  if (pw.length >= 12) raw++;
-  if (/[A-Z]/.test(pw)) raw++;
-  if (/[0-9]/.test(pw)) raw++;
-  if (/[^A-Za-z0-9]/.test(pw)) raw++;
-  if (raw <= 1) return { score: 1, label: "Weak", color: "#DC2626" };
-  if (raw <= 2) return { score: 2, label: "Fair", color: "#F59E0B" };
-  if (raw <= 3) return { score: 3, label: "Good", color: "#EAB308" };
-  return { score: 4, label: "Strong", color: "#1E7A3E" };
-}
-
 export default function ResetPassword() {
+  const { t } = useLanguage();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -82,8 +71,9 @@ export default function ResetPassword() {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+    const passwordResult = validatePassword(password);
+    if (!passwordResult.valid) {
+      setError(passwordResult.message ?? "Password does not meet requirements");
       return;
     }
     if (password !== confirmPassword) {
@@ -191,7 +181,7 @@ export default function ResetPassword() {
               <div className="space-y-1.5">
                 <h2 className="text-2xl font-bold tracking-tight text-[#0F1A14]">Link expired or invalid</h2>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  Reset links expire after 15 minutes. Request a new one.
+                  Reset links expire after 30 minutes. Request a new one.
                 </p>
               </div>
               <Button
@@ -276,9 +266,9 @@ export default function ResetPassword() {
                         ))}
                       </div>
                       <p className="text-xs font-medium" style={{ color: strength.color }}>
-                        {strength.label}
-                        {strength.label === "Weak" && " — try adding numbers or symbols"}
+                        {strength.labelKey ? t(strength.labelKey) : ""}
                       </p>
+                      <PasswordRequirements password={password} className="pt-1" />
                     </div>
                   )}
                 </div>

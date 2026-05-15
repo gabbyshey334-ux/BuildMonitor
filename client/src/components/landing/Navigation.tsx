@@ -5,6 +5,7 @@ import { Menu, X, ChevronDown, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
+import { cn } from "@/lib/utils";
 
 export default function Navigation() {
   const { t } = useLanguage();
@@ -20,6 +21,13 @@ export default function Navigation() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    document.body.style.overflow = isMobileMenuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileMenuOpen]);
+
   const navLinks = [
     { nameKey: "landing.nav.features", href: "#features", hasDropdown: true },
     { nameKey: "landing.nav.pricing", href: "#pricing" },
@@ -27,13 +35,18 @@ export default function Navigation() {
     { nameKey: "landing.nav.contact", href: "#contact" },
   ];
 
+  const navSolid = isScrolled || isMobileMenuOpen;
+
   return (
     <nav
-      className={`fixed top-0 w-full z-50 transition-all duration-300 ${
-        isScrolled 
-          ? "dark:bg-[#0a0a0a]/95 dark:border-zinc-800/50 bg-white/95 border-slate-200 backdrop-blur-md border-b py-3" 
-          : "bg-transparent py-4"
-      }`}
+      className={cn(
+        "fixed top-0 w-full z-50 transition-all duration-300",
+        navSolid
+          ? isDark
+            ? "bg-[#0a0a0a]/98 border-b border-zinc-800/60 backdrop-blur-md py-3"
+            : "bg-white/98 border-b border-slate-200 backdrop-blur-md py-3"
+          : "bg-transparent py-4",
+      )}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
@@ -96,7 +109,10 @@ export default function Navigation() {
           <div className="md:hidden flex items-center gap-2">
             <button
               onClick={toggleTheme}
-              className="p-2 dark:text-zinc-400 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors"
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                isDark ? "text-zinc-300 hover:text-white hover:bg-zinc-800/50" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100",
+              )}
               aria-label="Toggle Theme"
             >
               {isDark ? (
@@ -107,7 +123,10 @@ export default function Navigation() {
             </button>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 dark:text-zinc-300 dark:hover:text-white text-slate-600 hover:text-slate-800 transition-colors"
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                isDark ? "text-zinc-100 hover:text-white hover:bg-zinc-800/50" : "text-slate-700 hover:text-slate-900 hover:bg-slate-100",
+              )}
               aria-label="Toggle Menu"
             >
               {isMobileMenuOpen ? (
@@ -121,32 +140,44 @@ export default function Navigation() {
       </div>
 
       {/* Mobile Menu */}
-      <div 
-        className={`md:hidden absolute top-full left-0 right-0 dark:bg-[#0a0a0a]/98 dark:border-zinc-800/50 bg-white border-slate-200 backdrop-blur-lg border-b overflow-hidden transition-all duration-300 ${
-          isMobileMenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-        }`}
+      <div
+        className={cn(
+          "md:hidden absolute top-full left-0 right-0 border-b overflow-hidden transition-all duration-300",
+          isDark ? "bg-[#0a0a0a] border-zinc-800/60" : "bg-white border-slate-200",
+          isMobileMenuOpen ? "max-h-[min(85vh,520px)] opacity-100" : "max-h-0 opacity-0 pointer-events-none",
+        )}
       >
-        <div className="px-4 py-4 space-y-1">
+        <div className="px-4 py-3 space-y-0.5">
           {navLinks.map((link) => (
-            <a 
-              key={link.nameKey} 
-              href={link.href} 
-              onClick={() => setIsMobileMenuOpen(false)} 
-              className="flex items-center justify-between px-4 py-3 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-zinc-800/50 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+            <a
+              key={link.nameKey}
+              href={link.href}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={cn(
+                "flex items-center justify-between px-3 py-3 rounded-lg text-base font-medium transition-colors",
+                isDark
+                  ? "text-zinc-100 hover:text-white hover:bg-zinc-800/60"
+                  : "text-slate-900 hover:text-slate-950 hover:bg-slate-100",
+              )}
             >
-              <span className="font-medium">{t(link.nameKey)}</span>
-              {link.hasDropdown && <ChevronDown className="w-4 h-4 opacity-50" />}
+              <span>{t(link.nameKey)}</span>
+              {link.hasDropdown && (
+                <ChevronDown
+                  className={cn("w-4 h-4 shrink-0", isDark ? "text-zinc-400" : "text-slate-500")}
+                />
+              )}
             </a>
           ))}
-          
-          <div className="pt-4 mt-4 border-t dark:border-zinc-800/50 border-slate-200 space-y-3">
-            <div className="flex justify-center">
-              <LanguageSwitcher variant="compact" />
-            </div>
-            <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-              <Button 
-                className="w-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white py-3 rounded-lg font-semibold"
-              >
+
+          <div
+            className={cn(
+              "pt-3 mt-2 border-t space-y-3",
+              isDark ? "border-zinc-800/60" : "border-slate-200",
+            )}
+          >
+            <LanguageSwitcher variant="compact" />
+            <Link href="/login" onClick={() => setIsMobileMenuOpen(false)} className="block">
+              <Button className="w-full bg-gradient-to-r from-[#22c55e] to-[#14b8a6] hover:opacity-90 text-white py-3 rounded-lg font-semibold border-0">
                 {t("landing.nav.loginSignUp")}
               </Button>
             </Link>

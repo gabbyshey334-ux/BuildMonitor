@@ -6,6 +6,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { User, Mail, Lock, Phone, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { getPasswordStrength, validatePassword } from "@shared/passwordPolicy.js";
+import { PasswordRequirements } from "@/components/auth/PasswordRequirements";
 
 // Inline SVG grid — graph-paper texture at 4% opacity
 function GridPattern({ id }: { id: string }) {
@@ -25,21 +27,6 @@ function GridPattern({ id }: { id: string }) {
       <rect width="100%" height="100%" fill={`url(#${id})`} />
     </svg>
   );
-}
-
-// 0-4 segment strength score mapped from password heuristics
-function getPasswordStrength(pw: string): { score: number; label: string; color: string } {
-  if (!pw) return { score: 0, label: "", color: "" };
-  let raw = 0;
-  if (pw.length >= 8) raw++;
-  if (pw.length >= 12) raw++;
-  if (/[A-Z]/.test(pw)) raw++;
-  if (/[0-9]/.test(pw)) raw++;
-  if (/[^A-Za-z0-9]/.test(pw)) raw++;
-  if (raw <= 1) return { score: 1, label: "auth.register.strength.weak", color: "#DC2626" };
-  if (raw <= 2) return { score: 2, label: "auth.register.strength.fair", color: "#F59E0B" };
-  if (raw <= 3) return { score: 3, label: "auth.register.strength.good", color: "#EAB308" };
-  return { score: 4, label: "auth.register.strength.strong", color: "#1E7A3E" };
 }
 
 export default function Signup() {
@@ -95,8 +82,11 @@ export default function Signup() {
 
     if (!formData.password) {
       next.password = "Password is required";
-    } else if (formData.password.length < 8) {
-      next.password = "Password must be at least 8 characters";
+    } else {
+      const passwordResult = validatePassword(formData.password);
+      if (!passwordResult.valid) {
+        next.password = passwordResult.message ?? "Password does not meet requirements";
+      }
     }
 
     if (formData.password && formData.password !== confirmPassword) {
@@ -278,8 +268,9 @@ export default function Signup() {
                     ))}
                   </div>
                   <p className="text-xs font-medium" style={{ color: strength.color }}>
-                    {strength.label ? t(strength.label) : ""}
+                    {strength.labelKey ? t(strength.labelKey) : ""}
                   </p>
+                  <PasswordRequirements password={formData.password} className="pt-1" />
                 </div>
               )}
             </div>

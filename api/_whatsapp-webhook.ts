@@ -24,6 +24,7 @@ import twilio from 'twilio';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fetch from 'node-fetch';
+import { validateTwilioWebhook, parseTwilioParams } from './utils/twilioSignature.js';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
@@ -4287,12 +4288,26 @@ function imageCaptionLooksLikeAgentRequest(text: string): boolean {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const twimlOk = `<?xml version="1.0" encoding="UTF-8"?>\n<Response></Response>`;
 
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   try {
-    // Parse body
-    let body: any = {};
-    if (req.body && typeof req.body === 'object') body = req.body;
-    else if (req.body && typeof req.body === 'string') body = Object.fromEntries(new URLSearchParams(req.body));
-    else body = req.query || {};
+    // Parse body (must match params Twilio signed)
+    let body: Record<string, string> = {};
+    if (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) {
+      body = parseTwilioParams(req.body) as Record<string, string>;
+    } else if (req.body && typeof req.body === 'string') {
+      body = Object.fromEntries(new URLSearchParams(req.body)) as Record<string, string>;
+    } else if (req.query && typeof req.query === 'object') {
+      body = parseTwilioParams(req.query) as Record<string, string>;
+    }
+
+    const signatureCheck = validateTwilioWebhook(req, body);
+    if (!signatureCheck.ok) {
+      console.error('[webhook] Twilio signature rejected:', signatureCheck.reason);
+      return res.status(403).send('Forbidden');
+    }
 
     const { From = '', Body = '', MessageSid, NumMedia = '0', MediaUrl0 = '', MediaContentType0 = '' } = body;
     const phoneNumber = (From || '').replace('whatsapp:', '').trim();

@@ -17,6 +17,8 @@ import ResetPassword from "@/pages/reset-password";
 import Home from "@/pages/home";
 import DemoPage from "@/pages/demo";
 import NotFound from "@/pages/not-found";
+import ErrorPage from "@/pages/error";
+import MaintenancePage from "@/pages/maintenance";
 import Privacy from "@/pages/privacy";
 import Terms from "@/pages/terms";
 import ProjectsPage from "@/pages/ProjectsPage";
@@ -145,6 +147,8 @@ function Router() {
       </Route>
       <Route path="/privacy" component={Privacy} />
       <Route path="/terms" component={Terms} />
+      <Route path="/error" component={ErrorPage} />
+      <Route path="/maintenance" component={MaintenancePage} />
       <Route component={NotFound} />
     </Switch>
   );
